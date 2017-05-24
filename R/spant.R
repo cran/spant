@@ -24,7 +24,7 @@
     spant.def_N   = 1024,
     spant.def_ref = 4.65,
     spant.tqn_cmd = "tarquin",
-    spant.lcm_cmd = "lcmodel" 
+    spant.lcm_cmd = file.path(Sys.getenv("HOME"), ".lcmodel", "bin", "lcmodel") 
   )
   toset <- !(names(op.spant) %in% names(op))
   if (any(toset)) options(op.spant[toset])
@@ -32,35 +32,98 @@
   invisible()
 }
 
-#' Set the path to the TARQUIN command-line program.
-#' @param path Path to binary.
+#' Check the TARQUIN binary can be run
 #' @export
-set_tqn_path <- function(path) {
-  options(spant.tqn_cmd = path)
+check_tqn <- function() {
+  result <- tryCatch({
+    sys_res <- suppressWarnings(system(getOption("spant.tqn_cmd"),
+                                       intern = TRUE, ignore.stderr = TRUE))
+  }, error = function(e) {
+    return(NA)
+  })
+  
+  if (!is.na(result[1])) {
+    sys_res <- suppressWarnings(system(getOption("spant.tqn_cmd"),
+                                       intern = TRUE, ignore.stderr = TRUE))
+    
+    tqn_ver <- strsplit(sys_res[2],"\\s+")[[1]][6]
+    cat(paste("TARQUIN version",tqn_ver ,"was found successfully."))
+  } else {
+    stop("TARQUIN software is not functioning with the following command setting:\n", 
+          getOption("spant.tqn_cmd"), "\nTry changing the path with the 'set_tqn_cmd' function.")
+  }
 }
 
-#' Set the path to the LCModel command-line program.
-#' @param path Path to binary.
+#' Check LCModel can be run
 #' @export
-set_lcm_path <- function(path) {
-  options(spant.lcm_cmd = path)
+check_lcm <- function() {
+  if (file.exists(getOption("spant.lcm_cmd"))) {
+    cat("LCModel program sucessfully found.") 
+  } else {
+    stop("LCModel program not found in the following location:\n", 
+          getOption("spant.lcm_cmd"),
+         "\nif in a non-standard location try changing with the 'set_lcm_cmd' function.")
+  }
+}
+
+
+#' Set the command to run the TARQUIN command-line program.
+#' @param cmd Path to binary.
+#' @export
+set_tqn_cmd <- function(cmd) {
+  options(spant.tqn_cmd = cmd)
+}
+
+#' Set the command to run the LCModel command-line program.
+#' @param cmd Path to binary.
+#' @export
+set_lcm_cmd <- function(cmd) {
+  options(spant.lcm_cmd = cmd)
 }
 
 #' Return a list of the default acquisition parameters.
 #' @return A list containing the following elements:
-#' * ft Trasmitter frequency in Hz.
+#' * ft Transmitter frequency in Hz.
 #' * fs Sampling frequency in Hz.
 #' * N Number of data points in the spectral dimension.
 #' * ref Reference value for ppm scale.
 #' @export
-get_def_acq_paras <- function() {
+def_acq_paras <- function() {
   op <- options()
   list(ft = op$spant.def_ft, fs = op$spant.def_fs, N = op$spant.def_N,
       ref = op$spant.def_ref)
 }
 
+#' Return the default reference value for ppm scale.
+#' @return Reference value for ppm scale.
+#' @export
+def_ref <- function() {
+  options()$spant.def_ref
+}
+
+#' Return the default sampling frequency in Hz.
+#' @return Sampling frequency in Hz.
+#' @export
+def_fs <- function() {
+  options()$spant.def_fs
+}
+
+#' Return the default transmitter frequency in Hz.
+#' @return Transmitter frequency in Hz.
+#' @export
+def_ft <- function() {
+  options()$spant.def_ft
+}
+
+#' Return the default number of data points in the spectral dimension.
+#' @return Number of data points in the spectral dimension.
+#' @export
+def_N <- function() {
+  options()$spant.def_N
+}
+
 #' Set the default acquisition parameters.
-#' @param ft Trasmitter frequency in Hz.
+#' @param ft Transmitter frequency in Hz.
 #' @param fs Sampling frequency in Hz.
 #' @param N Number of data points in the spectral dimension.
 #' @param ref Reference value for ppm scale.

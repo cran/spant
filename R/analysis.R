@@ -1,10 +1,10 @@
 #' Perform a fit based analysis of MRS data.
 #' 
 #' Note that TARQUIN and LCModel require these packages to be installed, and 
-#' the functions set_tqn_path and set_lcm_path (respectivly) need to be used 
+#' the functions set_tqn_path and set_lcm_path (respectively) need to be used 
 #' to specify the location of these software packages.
 #'
-#' Fitting approaches decribed in the following references:
+#' Fitting approaches described in the following references:
 #' VARPRO
 #' van der Veen JW, de Beer R, Luyten PR, van Ormondt D. Accurate quantification
 #' of in vivo 31P NMR signals using the variable projection method and prior 
@@ -19,10 +19,11 @@
 #' Provencher SW. Estimation of metabolite concentrations from localized in vivo
 #' proton NMR spectra. Magn Reson Med 1993;30:672-679.
 #' 
-#' @param mrs_data An MRS data object.
+#' @param metab Metabolite data.
 #' @param basis A basis class object or character vector to basis file in 
 #' LCModel .basis format.
 #' @param method 'VARPRO', 'TARQUIN' or 'LCMODEL'
+#' @param w_ref Water reference data for concentration scaling (optional).
 #' @param opts Options to pass to the analysis method.
 #' @param parallel Perform analysis in parallel (TRUE or FALSE)
 #' @param cores Number of cores to use for parallel analysis.
@@ -31,10 +32,11 @@
 #' fname <- system.file("extdata","philips_spar_sdat_WS.SDAT",package="spant")
 #' svs <- read_mrs(fname, format="spar_sdat")
 #' \dontrun{
-#' fit_result <- fit_mrs(svs, basis)
+#' basis <- sim_basis_1h_brain_press(svs)
+#' fit_result <- fit_mrs(metab, basis)
 #' }
 #' @export
-fit_mrs <- function(mrs_data, basis, method = 'VARPRO', opts = NULL, 
+fit_mrs <- function(metab, basis, method = 'VARPRO', w_ref = NULL, opts = NULL, 
                     parallel = FALSE, cores = 4) {
   
   if (class(basis) == "basis_set") {
@@ -47,6 +49,16 @@ fit_mrs <- function(mrs_data, basis, method = 'VARPRO', opts = NULL,
     stop("Error, specified basis is not the correct data type.")
   }
   
+  # put data into TD
+  if (is_fd(metab)) {
+    metab <- fd2td(metab)
+  }
+  if (!is.null(w_ref)) {
+    if (is_fd(w_ref)) {
+      w_ref <- fd2td(w_ref)
+    }
+  }
+  
   #if (parallel) { registerDoSNOW(makeCluster(cores, type="SOCK")) }
   #if (parallel) { doMC::registerDoMC(cores=cores) }
   
@@ -54,11 +66,6 @@ fit_mrs <- function(mrs_data, basis, method = 'VARPRO', opts = NULL,
   method <- toupper(method)
   
   if (method == "VARPRO") {
-    # put data into TD
-    if (is_fd(mrs_data)) {
-      mrs_data <- fd2td(mrs_data)
-    }
-    
     # read basis into memory if a file
     if (is.character(basis)) {
       basis <- read_basis(basis)
@@ -68,33 +75,72 @@ fit_mrs <- function(mrs_data, basis, method = 'VARPRO', opts = NULL,
       opts <- varpro_opts()
     }
     
-    temp_mrs <- mrs_data
+    temp_mrs <- metab
     temp_mrs$data = temp_mrs$data[1, 1, 1, 1, 1, 1,]
     dim(temp_mrs$data) <- c(1, 1, 1, 1, 1, 1, length(temp_mrs$data))
   
-    #result_list <- apply(mrs_data$data, c(2,3,4,5,6), varpro_fit, temp_mrs, 
+    #result_list <- apply(metab$data, c(2,3,4,5,6), varpro_fit, temp_mrs, 
     #                     basis, opts)
     
-    result_list <- plyr::alply(mrs_data$data, c(2, 3, 4, 5, 6), varpro_fit, 
+    result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), varpro_fit, 
                                temp_mrs, basis, opts, 
+                               .parallel = parallel, 
+                               .paropts = list(.inorder = TRUE),
+                               .progress = "text", .inform = FALSE)
+    
+  } else if (method == "VARPRO_3P") {
+    # read basis into memory if a file
+    if (is.character(basis)) {
+      basis <- read_basis(basis)
+    }
+    
+    if (is.null(opts)) {
+      opts <- varpro_3_para_opts()
+    }
+    
+    temp_mrs <- metab
+    temp_mrs$data = temp_mrs$data[1, 1, 1, 1, 1, 1,]
+    dim(temp_mrs$data) <- c(1, 1, 1, 1, 1, 1, length(temp_mrs$data))
+  
+    #result_list <- apply(metab$data, c(2,3,4,5,6), varpro_fit, temp_mrs, 
+    #                     basis, opts)
+    
+    result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6),
+                               varpro_3_para_fit, temp_mrs, basis, opts, 
                                .parallel = parallel, 
                                .paropts = list(.inorder = TRUE),
                                .progress = "text", .inform = FALSE)
     
     
   } else if (method == "TARQUIN") {
+    
+    if (dyns(w_ref) > 1) {
+      w_ref <- mean_dyns(w_ref)
+      warning("Using the mean reference signal for water scaling.")
+    }
+    
+    # repeat the refernce signal to match the number of dynamics
+    if (dyns(metab) > 1) {
+      w_ref <- rep_dyn(w_ref, dyns(metab))
+    }
+    
+    # combine metab and w_ref data together
+    if (!is.null(w_ref)) {
+      metab <- combine_metab_ref(metab, w_ref)
+    }
+    
     # write basis object (if specified) to file
     basis_file <- tempfile(fileext = ".basis")
     write_basis(basis, basis_file)
     
-    temp_mrs <- mrs_data
+    temp_mrs <- metab
     temp_mrs$data = temp_mrs$data[1, 1, 1, 1, 1, 1,]
     dim(temp_mrs$data) <- c(1, 1, 1, 1, 1, 1, length(temp_mrs$data))
   
-    #result_list <- apply(mrs_data$data, c(2,3,4,5,6), tarquin_fit, temp_mrs, 
+    #result_list <- apply(metab$data, c(2,3,4,5,6), tarquin_fit, temp_mrs, 
     #                     basis_file, opts)
     
-    result_list <- plyr::alply(mrs_data$data, c(2, 3, 4, 5, 6), tarquin_fit, 
+    result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), tarquin_fit, 
                                temp_mrs, basis_file, opts, 
                                .parallel = parallel, 
                                .paropts = list(.inorder = TRUE),
@@ -103,15 +149,30 @@ fit_mrs <- function(mrs_data, basis, method = 'VARPRO', opts = NULL,
                          #.paropts = list(.options.snow=snowopts),
                          #.paropts = list(.export="N",.packages="spant"),
   } else if (method == "LCMODEL") {
+    if (dyns(w_ref) > 1) {
+      w_ref <- mean_dyns(w_ref)
+      warning("Using the mean reference signal for water scaling.")
+    }
+    
+    # repeat the reference signal to match the number of dynamics
+    if (dyns(metab) > 1) {
+      w_ref <- rep_dyn(w_ref, dyns(metab))
+    }
+    
+    # combine metab and w_ref data together
+    if (!is.null(w_ref)) {
+      metab <- combine_metab_ref(metab, w_ref)
+    }
+    
     # write basis object (if specified) to file
     basis_file <- tempfile(fileext = ".basis")
     write_basis(basis, basis_file)
     
-    temp_mrs <- mrs_data
+    temp_mrs <- metab
     temp_mrs$data = temp_mrs$data[1, 1, 1, 1, 1, 1,]
     dim(temp_mrs$data) <- c(1, 1, 1, 1, 1, 1, length(temp_mrs$data))
     
-    result_list <- plyr::alply(mrs_data$data, c(2,3,4,5,6), lcmodel_fit, 
+    result_list <- plyr::alply(metab$data, c(2,3,4,5,6), lcmodel_fit, 
                                temp_mrs, basis_file, opts,
                                .parallel = parallel, 
                                .paropts = list(.inorder = TRUE),
@@ -157,7 +218,7 @@ fit_mrs <- function(mrs_data, basis, method = 'VARPRO', opts = NULL,
   fits <- result_list[seq(from = 4, by = res_n, length.out = fit_num)]
   
   out <- list(results = cbind(labs, amps, crlbs, diags), fits = fits, 
-              data = mrs_data, amp_cols = ncol(amps))
+              data = metab, amp_cols = ncol(amps))
   
   class(out) <- "analysis_results"
   return(out)
@@ -167,6 +228,12 @@ varpro_fit <- function(element, temp_mrs, basis, opts) {
   metab <- temp_mrs
   metab$data[1, 1, 1, 1, 1, 1,] <- element
   varpro(metab, basis, opts)
+}
+
+varpro_3_para_fit <- function(element, temp_mrs, basis, opts) {
+  metab <- temp_mrs
+  metab$data[1, 1, 1, 1, 1, 1,] <- element
+  varpro_3_para(metab, basis, opts)
 }
 
 tarquin_fit <- function(element, temp_mrs, basis_file, opts) {
@@ -202,7 +269,11 @@ tarquin_fit <- function(element, temp_mrs, basis_file, opts) {
               "--basis_lcm", basis_file, "--output_csv", result_csv_f,
               "--output_fit", result_fit_f, paste(opts, collapse = " "))
   
-  res = system(cmd, intern = TRUE, ignore.stderr = TRUE, ignore.stdout = TRUE)
+  
+  # This one doesn't work on windows for some reason.
+  #res = system(cmd, intern = TRUE, ignore.stderr = TRUE, ignore.stdout = TRUE)
+  
+  res = system(cmd, intern = TRUE, ignore.stderr = TRUE)
   
   if (!file.exists(result_csv_f)) {
     print(res)
@@ -263,7 +334,7 @@ lcmodel_fit <- function(element, temp_mrs, basis_file, opts) {
   #lcm_control.write("lps=7\n")            # output a ps plot
   #lcm_control.write("filps='"+ps_f+"'\n") # ps plot filename
   cat("neach=999\n")                       # plot all metabs
-  cat("nsimul=11\n")                       # default is 13 which includes Gua 
+  #cat("nsimul=11\n")                       # default is 13 which includes Gua 
                                            # and the -CrCH2 signal
   for (opt in opts) { # append any extra options
     cat(paste0(opt, "\n"))
@@ -295,7 +366,7 @@ lcmodel_fit <- function(element, temp_mrs, basis_file, opts) {
 #' Reader for csv results generated by TARQUIN.
 #' @param result_f TARQIUN result file.
 #' @param remove_rcs Omit row, column and slice ids from output.
-#' @return A list of amplitudies, crlbs and diagnostics.
+#' @return A list of amplitudes, crlbs and diagnostics.
 #' @examples
 #' \dontrun{
 #' result <- read_tqn_result(system.file("extdata","result.csv",package="spant"))
@@ -327,9 +398,9 @@ read_tqn_fit <- function(fit_f) {
   return(fit)
 }
 
-#' Read an LCModel formatted coord file contaning fit information.
+#' Read an LCModel formatted coord file containing fit information.
 #' @param coord_f Path to the coord file.
-#' @return A list containg a table of fit point and results structure contaning
+#' @return A list containing a table of fit point and results structure containing
 #' signal amplitudes, errors and fitting diagnostics.
 #' @export
 read_lcm_coord <- function(coord_f) {
@@ -468,6 +539,13 @@ get_corr_factor <- function(te, tr, B0, gm_vol, wm_vol, csf_vol) {
   return(corr_factor)
 }
 
+#' Integrate a spectral region.
+#' @param mrs_data MRS data.
+#' @param xlim Spectral range to be integrated.
+#' @param scale Units of xlim, can be : "ppm", "Hz" or "points".
+#' @param mode Spectral mode, can be : "real", "imag" or "abs".
+#' @return An array of integral values.
+#' @export
 int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "real") {
   
   if (!is_fd(mrs_data)) {
@@ -519,10 +597,110 @@ test_varpro <- function() {
   mrs_data <- read_mrs(fname,format = "spar_sdat")
   mrs_data <- hsvd_filt(mrs_data)
   mrs_data <- align(mrs_data, 2.01)
-  basis <- sim_basis_1h_brain_press(xlim = c(4,0))
-  res <- varpro(mrs_data, basis)
-  stackplot(res$fit,xlim = c(6,0))
-  system.time(replicate(10, varpro(mrs_data, basis)))
+  acq_paras <- get_acq_paras(mrs_data)
+  basis <- sim_basis_1h_brain_press(acq_paras, xlim = c(4.0,0))
+  fit_opts <- varpro_opts()
+  fit <- fit_mrs(mrs_data, basis, opts = fit_opts)
+  plot(fit, xlim = c(4,0.5))
+  system.time(replicate(10, fit_mrs(mrs_data, basis)))
+}
+
+varpro_3_para <- function(mrs_data, basis, opts = NULL) {
+  # use default fitting opts if not specified 
+  if (is.null(opts)) {
+      opts <- varpro_opts()
+  }
+  
+  # convert basis from FD to TD
+  basis_td <- apply(basis$data, 2, ift_shift)
+  
+  y <- drop(mrs_data$data)
+  Npts <- length(y)
+  Nbasis <- dim(basis$data)[2]
+  
+  # phase, global damping, global shift
+  par <- c(0, opts$init_damping, 0)
+           
+  t <- seconds(mrs_data)  
+  # lm control options
+  ctrl <- minpack.lm::nls.lm.control()
+  ctrl$maxiter = opts$maxiters
+  # do the fit
+  lower <- c(-pi, 0, -opts$max_shift)
+  upper <- c(pi, opts$max_damping, opts$max_shift)
+  
+  if (opts$anal_jac) {
+    res <- minpack.lm::nls.lm(par, lower, upper, varpro_3_para_fn,
+                              varpro_3_para_anal_jac, ctrl, y, basis_td, t,
+                              opts$nstart)
+  } else {
+    res <- minpack.lm::nls.lm(par, lower, upper, varpro_3_para_fn, NULL, ctrl, y,
+                              basis_td, t, opts$nstart)
+  }
+  
+  # apply phase to y
+  y <- y * exp(1i * (res$par[1]))
+  
+  # apply global broadening term to basis
+  basis_mod <- basis_td * matrix(exp(-t * t * lw2beta(res$par[2])),
+                                 ncol = ncol(basis_td), nrow = nrow(basis_td),
+                                 byrow = FALSE)
+  
+  # apply shift terms to basis
+  t_mat <- matrix(t, nrow = Npts, ncol = Nbasis)
+  freq_vec <- 2i * pi * rep(res$par[3], Nbasis)
+  freq_mat <- matrix(freq_vec, nrow = Npts, ncol = Nbasis, byrow = TRUE)
+ 
+  basis_mod <- basis_mod * exp(t_mat * freq_mat)
+  
+  # get ahat
+  y_real <- c(Re(y[opts$nstart:Npts]), Im(y[opts$nstart:Npts]))
+  basis_real <- rbind(Re(basis_mod[opts$nstart:Npts,]),
+                      Im(basis_mod[opts$nstart:Npts,]))
+  
+  ahat <- nnls::nnls(basis_real, y_real)$x
+  
+  yhat <- basis_mod %*% ahat
+  amat <- matrix(ahat, nrow = Npts, ncol = Nbasis, byrow = TRUE)
+  basis_sc <- basis_mod * amat
+  zero_mat <- matrix(0, nrow = Npts, ncol = Nbasis)
+  basis_sc <- rbind(basis_sc, zero_mat)
+  BASIS_SC <- apply(basis_sc, 2, ft_shift)
+  basis_frame <- as.data.frame(Re(BASIS_SC), row.names = NA)
+  colnames(basis_frame) <- basis$names
+  
+  # zero pad
+  yhat <- c(yhat, rep(0, Npts))
+  YHAT <- ft_shift(as.vector(yhat))
+  
+  # zero pad
+  y <- c(y, rep(0, Npts))
+  Y <- ft_shift(y)
+  resid <- Y - YHAT
+  
+  BL <- smoother::smth.gaussian(Re(resid), opts$bl_smth_pts, tails = TRUE) + 
+        1i * smoother::smth.gaussian(Im(resid), opts$bl_smth_pts, tails = TRUE)
+  
+  RESID <- Y - YHAT
+  
+  offset <- max(Re(Y)) - min(Re(RESID))
+  resid <- vec2mrs_data(RESID + offset, fd = TRUE)
+  
+  amps <- data.frame(t(ahat))
+  colnames(amps) <- basis$names
+  
+  fit <- data.frame(PPMScale = ppm(mrs_data, N = Npts * 2), Data = Re(Y),
+                    Fit = Re(YHAT), Baseline = Re(BL))
+  
+  fit <- cbind(fit, basis_frame)
+  
+  class(fit) <- "fit_table"
+  
+  diags <- data.frame(phase = res$par[1] * 180 / pi, damping = res$par[2],
+                      shift = res$par[3], res$deviance, res$niter, res$info, 
+                      res$message)
+  
+  list(amps = amps, crlbs = t(rep(NA, length(amps))), diags = diags, fit = fit)
 }
 
 varpro <- function(mrs_data, basis, opts = NULL) {
@@ -534,7 +712,6 @@ varpro <- function(mrs_data, basis, opts = NULL) {
   # convert basis from FD to TD
   basis_td <- apply(basis$data, 2, ift_shift)
   
-  # TODO force mrs_data to be in TD
   y <- drop(mrs_data$data)
   Npts <- length(y)
   Nbasis <- dim(basis$data)[2]
@@ -547,8 +724,8 @@ varpro <- function(mrs_data, basis, opts = NULL) {
   ctrl <- minpack.lm::nls.lm.control()
   ctrl$maxiter = opts$maxiters
   # do the fit
-  lower <- c(-180, 0, rep(-opts$max_shift, Nbasis), rep(0, Nbasis))
-  upper <- c(180, opts$max_g_damping, rep(opts$max_shift, Nbasis),
+  lower <- c(-pi, 0, rep(-opts$max_shift, Nbasis), rep(0, Nbasis))
+  upper <- c(pi, opts$max_g_damping, rep(opts$max_shift, Nbasis),
              rep(opts$max_ind_damping, Nbasis))
   
   if (opts$anal_jac) {
@@ -567,7 +744,7 @@ varpro <- function(mrs_data, basis, opts = NULL) {
                                  ncol = ncol(basis_td), nrow = nrow(basis_td),
                                  byrow = FALSE)
   
-  # apply shift terms to basis
+  # apply shift and lb terms to basis
   t_mat <- matrix(t, nrow = Npts, ncol = Nbasis)
   freq_vec <- 2i * pi * res$par[3:(2 + Nbasis)]
   lb_vec <- lw2alpha(res$par[(3 + Nbasis):(2 + 2 * Nbasis)])
@@ -585,6 +762,14 @@ varpro <- function(mrs_data, basis, opts = NULL) {
   
   yhat <- basis_mod %*% ahat
   
+  amat <- matrix(ahat, nrow = Npts, ncol = Nbasis, byrow = TRUE)
+  basis_sc <- basis_mod * amat
+  zero_mat <- matrix(0, nrow = Npts, ncol = Nbasis)
+  basis_sc <- rbind(basis_sc, zero_mat)
+  BASIS_SC <- apply(basis_sc, 2, ft_shift)
+  basis_frame <- as.data.frame(Re(BASIS_SC), row.names = NA)
+  colnames(basis_frame) <- basis$names
+  
   # zero pad
   yhat <- c(yhat, rep(0, Npts))
   YHAT <- ft_shift(as.vector(yhat))
@@ -599,15 +784,16 @@ varpro <- function(mrs_data, basis, opts = NULL) {
   
   RESID <- Y - YHAT
   
-  data <- vec2mrs_data(Y, fd = TRUE)
   offset <- max(Re(Y)) - min(Re(RESID))
   resid <- vec2mrs_data(RESID + offset, fd = TRUE)
   
   amps <- data.frame(t(ahat))
   colnames(amps) <- basis$names
   
-  fit <- data.frame(PPMScale = ppm(data, N = Npts * 2), Data = Re(Y),
+  fit <- data.frame(PPMScale = ppm(mrs_data, N = Npts * 2), Data = Re(Y),
                     Fit = Re(YHAT), Baseline = Re(BL))
+
+  fit <- cbind(fit, basis_frame)
   
   class(fit) <- "fit_table"
   
@@ -640,6 +826,7 @@ varpro_anal_jac <- function(par, y, basis, t, nstart) {
   t_cut <- c(t[nstart:Npts], t[nstart:Npts])
   y_real <- c(Re(y[nstart:Npts]), Im(y[nstart:Npts]))
   basis_real <- rbind(Re(basis_mod[nstart:Npts,]), Im(basis_mod[nstart:Npts,]))
+  
   ahat <- nnls::nnls(basis_real, y_real)$x
   
   unmod_basis_real <- basis_real %*% ahat
@@ -658,25 +845,14 @@ varpro_anal_jac <- function(par, y, basis, t, nstart) {
   
   # individual shifts and dampings
   for (n in 1:Nbasis) {
-    #adj_basis <- basis_mod
-    #adj_basis[,n] <- -adj_basis[,n]*2i*pi*t
-    #adj_basis_comb <- adj_basis %*% ahat 
-    #adj_basis_comb <- unmod_basis_cplx - ahat[n]*basis_mod[,n] - ahat[n]*basis_mod[,n]*2i*pi*t
-    
-    adj_basis_comb <- unmod_basis_cplx - ahat[n] * basis_mod[,n] *
-                      (1 + 2i * pi * t)
+    adj_basis_comb <- -basis_mod[,n] * 2i * pi * t * ahat[n]
     
     shift_jac_real_temp <- c(Re(adj_basis_comb[nstart:Npts]),
                              Im(adj_basis_comb[nstart:Npts]))
     
     shift_jac[((n - 1) * res_size + 1):(n * res_size)] <- shift_jac_real_temp
     
-    #adj_basis <- basis_mod
-    #adj_basis[,n] <- -adj_basis[,n]*pi*t
-    #adj_basis_comb <- adj_basis %*% ahat 
-    
-    #adj_basis_comb <- unmod_basis_cplx - ahat[n]*basis_mod[,n] - ahat[n]*basis_mod[,n]*pi*t
-    adj_basis_comb <- unmod_basis_cplx - ahat[n] * basis_mod[,n] * (1 + pi * t)
+    adj_basis_comb <- basis_mod[,n] * pi * t * ahat[n]
     
     lw_jac_real_temp <- c(Re(adj_basis_comb[nstart:Npts]),
                           Im(adj_basis_comb[nstart:Npts]))
@@ -687,36 +863,6 @@ varpro_anal_jac <- function(par, y, basis, t, nstart) {
   c(phase_jac_real, g_lw_jac_real, shift_jac, lw_jac)
 }
     
-# varpro_num_jac <- function(par, y, basis, t, nstart) {
-#   numDeriv::jacobian(varpro_num_jac_eval, par, method="simple", side=NULL, method.args=list(), y, basis, t, nstart)
-# }
-
-# varpro_num_jac_eval <- function(par, y, basis, t, nstart) {
-#   Npts <- length(y)
-#   Nbasis <- dim(basis)[2]
-#   
-#   # apply phase to y
-#   y <- y*exp(1i*(par[1]))
-#   
-#   # apply global broadening term to basis
-#   basis_mod <- basis * matrix(exp(-t*t*lw2beta(par[2])),ncol=ncol(basis),nrow=nrow(basis),byrow=F)
-#   
-#   # apply shift and lb terms to basis
-#   t_mat <- matrix(t, nrow=Npts, ncol=Nbasis)
-#   freq_vec <- 2i*pi*par[3:(2+Nbasis)]
-#   lb_vec <- lw2alpha(par[(3+Nbasis):(2+2*Nbasis)])
-#   freq_lb_mat <- matrix(freq_vec-lb_vec, nrow=Npts, ncol=Nbasis, byrow=TRUE) 
-#   basis_mod <- basis_mod * exp(t_mat * freq_lb_mat)
-#   
-#   y_real <- c(Re(y[nstart:Npts]),Im(y[nstart:Npts]))
-#   basis_real <- rbind(Re(basis_mod[nstart:Npts,]),Im(basis_mod[nstart:Npts,]))
-#   ahat <- nnls::nnls(basis_real, y_real)$x
-#   
-#   res <- y_real - basis_real %*% ahat
-#   
-#   res
-# }
-  
 varpro_fn <- function(par, y, basis, t, nstart, sc_res = FALSE) {
   Npts <- length(y)
   Nbasis <- dim(basis)[2]
@@ -749,12 +895,42 @@ varpro_fn <- function(par, y, basis, t, nstart, sc_res = FALSE) {
   res
 }
 
+varpro_3_para_fn <- function(par, y, basis, t, nstart, sc_res = FALSE) {
+  Npts <- length(y)
+  Nbasis <- dim(basis)[2]
+  
+  # apply phase to y
+  y <- y * exp(1i * (par[1]))
+  
+  # apply global broadening term to basis
+  basis_mod <- basis * matrix(exp(-t * t * lw2beta(par[2])), ncol = ncol(basis),
+                              nrow = nrow(basis), byrow = F)
+  
+  # apply global shift to basis
+  t_mat <- matrix(t, nrow = Npts, ncol = Nbasis)
+  freq_vec <- 2i * pi * rep(par[3], Nbasis)
+  freq_mat <- matrix(freq_vec, nrow = Npts, ncol = Nbasis, byrow = TRUE)
+ 
+  basis_mod <- basis_mod * exp(t_mat * freq_mat)
+  
+  y_real <- c(Re(y[nstart:Npts]), Im(y[nstart:Npts]))
+  basis_real <- rbind(Re(basis_mod[nstart:Npts,]), Im(basis_mod[nstart:Npts,]))
+  
+  ahat <- nnls::nnls(basis_real, y_real)$x
+  res <- y_real - basis_real %*% ahat
+  
+  if ( sc_res ) {
+    res <- sum(res ^ 2)
+  }
+  res
+}
+
 #' Return a list of options for VARPRO based fitting.
 #' @param nstart Position in the time-domain to start fitting, units of data
 #' points.
 #' @param init_g_damping Starting value for the global Gaussian line-broadening
 #' term - measured in Hz.
-#' @param maxiters Maximum number of lemar iterations to perform.
+#' @param maxiters Maximum number of levmar iterations to perform.
 #' @param max_shift Maximum shift allowed to each element in the basis set, 
 #' measured in Hz.
 #' @param max_g_damping Maximum permitted global Gaussian line-broadening.
@@ -777,110 +953,89 @@ varpro_opts <- function(nstart = 10, init_g_damping = 2, maxiters = 200,
        bl_smth_pts = bl_smth_pts)
 }
 
-# varpro_3_para <- function(mrs_data, basis, init_lw=2, nstart=10, maxiters=200, max_shift=10, max_g_damping=10, anal_jac=TRUE) {
-#   # convert basis from FD to TD
-#   basis_td <- apply(basis$data,2,ift_shift)
-#   # TODO force mrs_data to be in TD
-#   y <- drop(mrs_data$data)
-#   Npts <- length(y)
-#   Nbasis <- dim(basis$data)[2]
-#   
-#   # phase, global damping, global shift
-#   par <- c(0, init_lw, 0)
-#            
-#   t <- seconds(mrs_data)  
-#   # lm control options
-#   ctrl <- minpack.lm::nls.lm.control()
-#   ctrl$maxiter = maxiters
-#   # do the fit
-#   lower <- c(-180, 0, -max_shift)
-#   upper <- c(180, max_g_damping, max_shift)
-#   
-#   if (anal_jac) {
-#     res <- minpack.lm::nls.lm(par, lower, upper, varpro_3_para_fn, varpro_3_para_anal_jac, ctrl, y, basis_td, t, nstart)
-#   } else {
-#     res <- minpack.lm::nls.lm(par, lower, upper, varpro_3_para_fn, NULL, ctrl, y, basis_td, t, nstart)
-#   }
-#   
-#   # apply phase to y
-#   y <- y*exp(1i*(res$par[1]))
-#   
-#   # apply global broadening term to basis
-#   basis_mod <- basis_td * matrix(exp(-t*t*lw2beta(res$par[2])),ncol=ncol(basis_td),nrow=nrow(basis_td),byrow=FALSE)
-#   
-#   # apply shift terms to basis
-#   t_mat <- matrix(t, nrow=Npts, ncol=Nbasis)
-#   freq_vec <- 2i*pi*rep(res$par[3], Nbasis)
-#   freq_mat <- matrix(freq_vec, nrow=Npts, ncol=Nbasis, byrow=TRUE) 
-#   
-#   basis_mod <- basis_mod * exp(t_mat * freq_mat)
-#   
-#   # get ahat
-#   y_real <- c(Re(y[nstart:Npts]),Im(y[nstart:Npts]))
-#   basis_real <- rbind(Re(basis_mod[nstart:Npts,]),Im(basis_mod[nstart:Npts,]))
-#   ahat <- nnls::nnls(basis_real, y_real)$x
-#   
-#   yhat <- basis_mod %*% ahat
-#   model <- vec2mrs_data(yhat)
-#   list(amps=ahat, model=model, res=res)
-# }
+#' Return a list of options for VARPRO based fitting with 3 free parameters:
+#' * zero'th order phase correction
+#' * global damping
+#' * global frequency shift.
+#' @param nstart Position in the time-domain to start fitting, units of data
+#' points.
+#' @param init_damping Starting value for the global Gaussian line-broadening
+#' term - measured in Hz.
+#' @param maxiters Maximum number of levmar iterations to perform.
+#' @param max_shift Maximum global shift allowed, measured in Hz.
+#' @param max_damping Maximum damping allowed, FWHM measured in Hz.
+#' @param anal_jac Option to use the analytic or numerical Jacobian (logical).
+#' @param bl_smth_pts Number of data points to use in the baseline smoothing
+#' calculation.
+#' @return List of options.
+#' @examples
+#' varpro_opts(nstart = 20)
+#' @export
+varpro_3_para_opts <- function(nstart = 10, init_damping = 2, maxiters = 200,
+                        max_shift = 5, max_damping = 5, anal_jac = FALSE,
+                        bl_smth_pts = 80) {
+  
+  list(nstart = nstart, init_damping = init_damping, maxiters = maxiters,
+       max_shift = max_shift, max_damping = max_damping, anal_jac = anal_jac,
+       bl_smth_pts = bl_smth_pts)
+}
 
-# varpro_3_para_fn <- function(par, y, basis, t, nstart) {
-#   Npts <- length(y)
-#   Nbasis <- dim(basis)[2]
-#   
-#   # apply phase to y
-#   y <- y*exp(1i*(par[1]))
-#   
-#   # apply global broadening term to basis
-#   basis_mod <- basis * matrix(exp(-t*t*lw2beta(par[2])),ncol=ncol(basis),nrow=nrow(basis),byrow=F)
-#   
-#   # apply global shift to basis
-#   t_mat <- matrix(t, nrow=Npts, ncol=Nbasis)
-#   freq_vec <- 2i*pi*rep(par[3], Nbasis)
-#   freq_mat <- matrix(freq_vec, nrow=Npts, ncol=Nbasis, byrow=TRUE) 
-#   
-#   basis_mod <- basis_mod * exp(t_mat * freq_mat)
-#   
-#   y_real <- c(Re(y[nstart:Npts]),Im(y[nstart:Npts]))
-#   basis_real <- rbind(Re(basis_mod[nstart:Npts,]),Im(basis_mod[nstart:Npts,]))
-#   
-#   ahat <- nnls::nnls(basis_real, y_real)$x
-#   res <- y_real - basis_real %*% ahat
-#   
-#   res
-# }
+varpro_3_para_anal_jac <- function(par, y, basis, t, nstart) {
+  Npts <- length(y)
+  Nbasis <- dim(basis)[2]
 
-# varpro_3_para_anal_jac <- function(par, y, basis, t, nstart) {
-#   Npts <- length(y)
-#   Nbasis <- dim(basis)[2]
-#   
-#   # apply phase to y
-#   y <- y*exp(1i*(par[1]))
-#   
-#   # apply global broadening term to basis
-#   basis_mod <- basis * matrix(exp(-t*t*lw2beta(par[2])),ncol=ncol(basis),nrow=nrow(basis),byrow=F)
-#   
-#   # apply global shift to basis
-#   t_mat <- matrix(t, nrow=Npts, ncol=Nbasis)
-#   freq_vec <- 2i*pi*rep(par[3], Nbasis)
-#   freq_mat <- matrix(freq_vec, nrow=Npts, ncol=Nbasis, byrow=TRUE) 
-#   basis_mod <- basis_mod * exp(t_mat * freq_mat)
-#   
-#   t_cut <- c(t[nstart:Npts],t[nstart:Npts])
-#   y_real <- c(Re(y[nstart:Npts]),Im(y[nstart:Npts]))
-#   basis_real <- rbind(Re(basis_mod[nstart:Npts,]),Im(basis_mod[nstart:Npts,]))
-#   ahat <- nnls::nnls(basis_real, y_real)$x
-#   
-#   unmod_basis_real <- basis_real %*% ahat
-#   unmod_basis_cplx <- basis_mod %*% ahat
-#    
-#   phase_jac <- unmod_basis_cplx*1i
-#   phase_jac_real <- c(Re(phase_jac[nstart:Npts]),Im(phase_jac[nstart:Npts]))
-#   g_lw_jac_real <- unmod_basis_real*t_cut*t_cut*2*par[2]*(pi^2)/4/(-log(0.5))
-#   #g_lw_jac_real <- unmod_basis_real*t_cut*t_cut*2*lw2beta(par[2])
-#   shift_jac <- -unmod_basis_cplx*2i*pi*t
-#   shift_jac_real <- c(Re(shift_jac[nstart:Npts]),Im(shift_jac[nstart:Npts]))
-#   
-#   c(phase_jac_real, g_lw_jac_real, shift_jac_real)
-# }
+  # apply phase to y
+  y <- y*exp(1i * (par[1]))
+
+  # apply global broadening term to basis
+  basis_mod <- basis * matrix(exp(-t * t * lw2beta(par[2])), ncol = ncol(basis),
+                              nrow = nrow(basis), byrow = F)
+
+  # apply global shift to basis
+  t_mat <- matrix(t, nrow = Npts, ncol = Nbasis)
+  freq_vec <- 2i * pi * rep(par[3], Nbasis)
+  freq_mat <- matrix(freq_vec, nrow = Npts, ncol = Nbasis, byrow = TRUE)
+  basis_mod <- basis_mod * exp(t_mat * freq_mat)
+
+  t_cut <- c(t[nstart:Npts], t[nstart:Npts])
+  y_real <- c(Re(y[nstart:Npts]), Im(y[nstart:Npts]))
+  basis_real <- rbind(Re(basis_mod[nstart:Npts,]), Im(basis_mod[nstart:Npts,]))
+  ahat <- nnls::nnls(basis_real, y_real)$x
+
+  unmod_basis_real <- basis_real %*% ahat
+  unmod_basis_cplx <- basis_mod %*% ahat
+
+  phase_jac <- unmod_basis_cplx * 1i
+  phase_jac_real <- c(Re(phase_jac[nstart:Npts]), Im(phase_jac[nstart:Npts]))
+  g_lw_jac_real <- (unmod_basis_real * t_cut * t_cut * 2 * par[2] * (pi ^ 2) / 4
+                    / (-log(0.5)))
+  
+  shift_jac <- -unmod_basis_cplx * 2i * pi * t
+  shift_jac_real <- c(Re(shift_jac[nstart:Npts]), Im(shift_jac[nstart:Npts]))
+
+  c(phase_jac_real, g_lw_jac_real, shift_jac_real)
+}
+
+#' Apply water reference scaling to a fitting results object to yield metabolite 
+#' quantities in units of mM.
+#' @param result A result object generated from fitting.
+#' @param ref_data Water reference MRS data object.
+#' @param w_att Water attenuation factor (default = 0.7).
+#' @param w_conc Assumed water concentration (default = 35880).
+#' @return A result object with a results_ws data table added.
+#' @export
+apply_water_scaling <- function(result, ref_data, w_att = 0.7, w_conc = 35880) {
+  
+  w_amp <- as.numeric(get_td_amp(ref_data))
+  
+  result$results$w_amp = w_amp
+  
+  amp_cols = result$amp_cols
+  ws_cols <- 6:(5 + amp_cols * 2)
+  
+  result$results_ws <- result$results
+  result$results_ws[, ws_cols] <- (result$results_ws[, ws_cols] * w_att * 
+                                   w_conc / w_amp)
+  
+  result
+}

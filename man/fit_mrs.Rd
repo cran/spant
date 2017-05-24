@@ -4,16 +4,18 @@
 \alias{fit_mrs}
 \title{Perform a fit based analysis of MRS data.}
 \usage{
-fit_mrs(mrs_data, basis, method = "VARPRO", opts = NULL, parallel = FALSE,
-  cores = 4)
+fit_mrs(metab, basis, method = "VARPRO", w_ref = NULL, opts = NULL,
+  parallel = FALSE, cores = 4)
 }
 \arguments{
-\item{mrs_data}{An MRS data object.}
+\item{metab}{Metabolite data.}
 
 \item{basis}{A basis class object or character vector to basis file in
 LCModel .basis format.}
 
 \item{method}{'VARPRO', 'TARQUIN' or 'LCMODEL'}
+
+\item{w_ref}{Water reference data for concentration scaling (optional).}
 
 \item{opts}{Options to pass to the analysis method.}
 
@@ -26,11 +28,11 @@ MRS analysis object.
 }
 \description{
 Note that TARQUIN and LCModel require these packages to be installed, and
-the functions set_tqn_path and set_lcm_path (respectivly) need to be used
+the functions set_tqn_path and set_lcm_path (respectively) need to be used
 to specify the location of these software packages.
 }
 \details{
-Fitting approaches decribed in the following references:
+Fitting approaches described in the following references:
 VARPRO
 van der Veen JW, de Beer R, Luyten PR, van Ormondt D. Accurate quantification
 of in vivo 31P NMR signals using the variable projection method and prior
@@ -49,6 +51,7 @@ proton NMR spectra. Magn Reson Med 1993;30:672-679.
 fname <- system.file("extdata","philips_spar_sdat_WS.SDAT",package="spant")
 svs <- read_mrs(fname, format="spar_sdat")
 \dontrun{
-fit_result <- fit_mrs(svs, basis)
+basis <- sim_basis_1h_brain_press(svs)
+fit_result <- fit_mrs(metab, basis)
 }
 }

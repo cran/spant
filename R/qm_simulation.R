@@ -155,8 +155,10 @@ get_spin_num <- function(nucleus) {
   spin_lookup$spin[matches]
 }
 
-get_1h_brain_basis_paras <- function(ft, metab_lw = 2) {
-  m_cr_ch2 <- get_m_cr_ch2_paras(metab_lw)
+get_1h_brain_basis_paras <- function(ft, metab_lw = 2, lcm_compat = FALSE) {
+  if (!lcm_compat) {
+    m_cr_ch2 <- get_m_cr_ch2_paras(metab_lw)
+  }
   ala <- get_ala_paras(metab_lw)
   asp <- get_asp_paras(metab_lw)
   cr <- get_cr_paras(metab_lw)
@@ -168,15 +170,17 @@ get_1h_brain_basis_paras <- function(ft, metab_lw = 2) {
   gpc <- get_gpc_paras(metab_lw)
   ins <- get_ins_paras(metab_lw)
   lac <- get_lac_paras(metab_lw)
-  lip09 <- get_lip09_paras(ft)
-  lip13a <- get_lip13a_paras(ft)
-  lip13b <- get_lip13b_paras(ft)
-  lip20 <- get_lip20_paras(ft)
-  mm09 <- get_mm09_paras(ft)
-  mm12 <- get_mm12_paras(ft)
-  mm14 <- get_mm14_paras(ft)
-  mm17 <- get_mm17_paras(ft)
-  mm20 <- get_mm20_paras(ft)
+  if (!lcm_compat) {
+    lip09 <- get_lip09_paras(ft)
+    lip13a <- get_lip13a_paras(ft)
+    lip13b <- get_lip13b_paras(ft)
+    lip20 <- get_lip20_paras(ft)
+    mm09 <- get_mm09_paras(ft)
+    mm12 <- get_mm12_paras(ft)
+    mm14 <- get_mm14_paras(ft)
+    mm17 <- get_mm17_paras(ft)
+    mm20 <- get_mm20_paras(ft)
+  }
   naa <- get_naa_paras(metab_lw)
   naag <- get_naag_paras(metab_lw)
   pch <- get_pch_paras(metab_lw)
@@ -184,28 +188,42 @@ get_1h_brain_basis_paras <- function(ft, metab_lw = 2) {
   sins <- get_sins_paras(metab_lw)
   tau <- get_tau_paras(metab_lw)
   
-  basis_list <- list(m_cr_ch2, ala, asp, cr, gaba, glc, gln, gsh, glu, gpc, ins,
-                     lac, lip09, lip13a, lip13b, lip20, mm09, mm12, mm14, mm17,
-                     mm20, naa, naag, pch, pcr, sins, tau)
+  if (!lcm_compat) {
+    basis_list <- list(m_cr_ch2, ala, asp, cr, gaba, glc, gln, gsh, glu, gpc,
+                       ins, lac, lip09, lip13a, lip13b, lip20, mm09, mm12, mm14,
+                       mm17, mm20, naa, naag, pch, pcr, sins, tau)
+  } else {
+    basis_list <- list(ala, asp, cr, gaba, glc, gln, gsh, glu, gpc, ins, lac,
+                       naa, naag, pch, pcr, sins, tau)
+  }
+  
   basis_list
 }
 
 #' Simulate a basis-set suitable for 1H brain MRS analysis acquired with a PRESS 
 #' sequence. Note, ideal pulses are assumed.
-#' @param acq_paras List of acquistion parameters. See
-#' \code{\link{get_def_acq_paras}}
+#' @param acq_paras List of acquisition parameters or an mrs_data object. See
+#' \code{\link{def_acq_paras}}
 #' @param xlim Range of frequencies to simulate in ppm.
+#' @param lcm_compat Exclude lipid and MM signals for use with default LCModel
+#' options.
 #' @param TE1 TE1 of PRESS sequence (TE = TE1 + TE2).
 #' @param TE2 TE2 of PRESS sequence.
 #' @return Basis object.
 #' @export
-sim_basis_1h_brain_press <- function(acq_paras = get_def_acq_paras(), 
-                                     xlim = c(0.5, 4.2), TE1 = 0.01,
-                                     TE2 = 0.02) {
+sim_basis_1h_brain_press <- function(acq_paras = def_acq_paras(),
+                                     xlim = c(0.5, 4.2), lcm_compat = FALSE, 
+                                     TE1 = 0.01, TE2 = 0.02) {
   
-  sim_basis(get_1h_brain_basis_paras(ft = acq_paras$ft), press_ideal, 
-            fs = acq_paras$fs, N = acq_paras$N, ref = acq_paras$ref,
-            ft = acq_paras$ft, xlim = xlim, TE1 = TE1, TE2 = TE2)
+  if (class(acq_paras) == "mrs_data") {
+    acq_paras <- get_acq_paras(acq_paras)
+  }
+  
+  sim_basis(get_1h_brain_basis_paras(ft = acq_paras$ft, lcm_compat = lcm_compat), 
+                                     press_ideal, fs = acq_paras$fs, 
+                                     N = acq_paras$N, ref = acq_paras$ref,
+                                     ft = acq_paras$ft, xlim = xlim, TE1 = TE1,
+                                     TE2 = TE2)
 }
 
 get_mol_para_list_names <- function(mol_para_list) {
@@ -216,8 +234,20 @@ get_mol_para_list_names <- function(mol_para_list) {
   names 
 }
 
-sim_basis <- function(mol_list, pul_seq = pulse_acquire, ft = 128e6, ref = 4.65, 
-                      fs = 2000, N = 1024, xlim = NULL, ...) {
+#' Simulate a basis set object.
+#' @param mol_list a list of mol_parameter objects.
+#' @param pul_seq A pulse sequence function to use.
+#' @param ft Transmitter frequency in Hz.
+#' @param ref Reference value for ppm scale.
+#' @param fs Sampling frequency in Hz.
+#' @param N Number of data points in the spectral dimension.
+#' @param xlim A ppm range limiting signals to be simulated.
+#' @param ... Extra parameters to pass to the pulse sequence function.
+#' @return A basis object.
+#' @export
+sim_basis <- function(mol_list, pul_seq = pulse_acquire, ft = def_ft(),
+                      ref = def_ref(), fs = def_fs(), N = def_N(),
+                      xlim = NULL, ...) {
   
   basis_mrs_data <- sim_zeros(ft = ft, ref = ref, fs = fs, N = N,
                               dyns = length(mol_list))
@@ -230,8 +260,9 @@ sim_basis <- function(mol_list, pul_seq = pulse_acquire, ft = 128e6, ref = 4.65,
   mrs_data2basis(basis_mrs_data, names = names)
 }
 
-sim_mol <- function(mol, pul_seq = pulse_acquire, ft = 128e6, ref = 4.65, 
-                    fs = 2000, N = 1024, xlim = NULL, ...) {
+sim_mol <- function(mol, pul_seq = pulse_acquire, ft = def_ft(), 
+                    ref = def_ref(), fs = def_fs(), N = def_N(),
+                    xlim = NULL, ...) {
   # create empty fid
   mrs_data <- sim_zeros(fs = fs, N = N, ft = ft, ref = ref)
   for (group in mol$spin_groups) {

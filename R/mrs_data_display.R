@@ -24,28 +24,86 @@ print.mrs_data <- function(x, ...) {
   cat(paste(c("Reference freq. (PPM)   : ", x$ref, "\n")), sep = "")
 }
 
-# TODO add xlim para, Mod option
 #' @export
-image.mrs_data <- function(x, mode = "real", ...) { 
+image.mrs_data <- function(x, mode = "real", xlim = NULL, col = NULL, 
+                           dim = "dyn", x_pos = NA, y_pos = NA, z_pos = NA,
+                           dyn = 1, coil = 1, ...) { 
   if (!is_fd(x)) {
     x <- td2fd(x)
   }
   
-  xlim = c(4, 0.5)
   x_scale <- ppm(x)
   
-  #xlim=c(100, 400)
-  #x_scale <- hz(mrs_data)
+  if (is.null(xlim)) {
+    xlim <- c(x_scale[1], x_scale[N(x)])
+  }
+  
+  par(mar = c(3.5, 3.5, 1, 1)) # margins
+  par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
   
   x_inds <- get_seg_ind(x_scale, xlim[1], xlim[2])
   subset <- x_inds[1]:x_inds[2]
-  plot_data <- Re(t(x$data[1, 1, 1, 1, , 1, subset]))
-  #plot_data <- Mod(t(mrs_data$data[1, 1, 1, 1, , 1,subset]))
   
-  graphics::image(x_scale[subset][length(subset):1], (1:dyns(x)),
+  data_dim <- dim(x$data)
+  
+  if (is.na(x_pos)) {
+    x_pos <- as.integer(data_dim[2] / 2) + 1
+  }
+  
+  if (is.na(y_pos)) {
+    y_pos <- as.integer(data_dim[3] / 2) + 1
+  }
+  
+  if (is.na(z_pos)) {
+    z_pos <- as.integer(data_dim[4] / 2) + 1
+  }
+  
+  if (dim == "dyn") {
+    plot_data <- t(x$data[1, x_pos, y_pos, y_pos, , coil, subset])
+    yN <- data_dim[5]
+    y_title = "Dynamic"
+  } else if (dim == "x") {
+    plot_data <- t(x$data[1, , y_pos, z_pos, dyn, coil, subset])
+    yN <- data_dim[2]
+    y_title = "x position"
+  } else if (dim == "y") {
+    plot_data <- t(x$data[1, x_pos, , z_pos, dyn, coil, subset])
+    yN <- data_dim[3]
+    y_title = "y position"
+  } else if (dim == "z") {
+    plot_data <- t(x$data[1, x_pos, y_pos, , dyn, coil, subset])
+    yN <- data_dim[4]
+    y_title = "z position"
+  } else if (dim == "coil") {
+    plot_data <- t(x$data[1, x_pos, y_pos, z_pos, dyn, , subset])
+    yN <- data_dim[5]
+    y_title = "Coil"
+  } else {
+    stop("Unrecognised dim value. Should be one of: dyn, x, y, z, coil")
+  } 
+  
+  if (mode == "real") {
+    plot_data <- Re(plot_data)
+  } else if (mode == "imag") {
+    plot_data <- Im(plot_data)
+  } else if (mode == "abs") {
+    plot_data <- Mod(plot_data)
+  }
+  
+  if (is.null(col)) {
+    if (is.installed("viridis")) {
+      col <- viridis::viridis(64)
+    } else if (is.installed("viridisLite")) {
+      col <- viridisLite::viridis(64)
+    } else {
+     col <- grDevices::heat.colors(64)
+    }
+  }
+  
+  graphics::image(x_scale[subset][length(subset):1], (1:yN),
                   plot_data[length(subset):1,], xlim = xlim,
-                  xlab = "Frequency (ppm)", ylab = "Dynamic", 
-                  col = grDevices::gray.colors(64), ...)
+                  xlab = "Frequency (ppm)", ylab = y_title, 
+                  col = col, ...)
 }
 
 #' Produce a plot with multiple traces.
@@ -58,39 +116,104 @@ stackplot <- function(x, ...) {
 
 # TODO make consistant with plot
 #' @export
-stackplot.mrs_data <- function(x, mode = "real", xlim = NULL,
-                               x_offset = 5, ...) {
+stackplot.mrs_data <- function(x, mode = "real", xlim = NULL, x_offset = 0,
+                               y_offset = 5, dim = "dyn", x_pos = NA, 
+                               y_pos = NA, z_pos = NA, dyn = 1, coil = 1, ...) {
+  
   if (!is_fd(x)) {
     x <- td2fd(x)
   }
   
-  par("xaxs" = "i") # tight axes limits
-  par(mgp = c(2.2, 0.7, 0)) # distance between axes and labels
-  par(mar = c(3.7, 1, 1, 1)) # margins
+  #par("xaxs" = "i") # tight axes limits
+  par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
+  par(mar = c(3.5, 1, 1, 1)) # margins
   
   x_scale <- ppm(x)
   
   if (is.null(xlim)) {
     xlim <- c(x_scale[1], x_scale[N(x)])
   }
+  xlim <- sort(xlim)
+  
+  data_dim <- dim(x$data)
+  
+  if (is.na(x_pos)) {
+    x_pos <- as.integer(data_dim[2] / 2) + 1
+  }
+  
+  if (is.na(y_pos)) {
+    y_pos <- as.integer(data_dim[3] / 2) + 1
+  }
+  
+  if (is.na(z_pos)) {
+    z_pos <- as.integer(data_dim[4] / 2) + 1
+  }
   
   x_inds <- get_seg_ind(x_scale, xlim[1], xlim[2])
   subset <- x_inds[1]:x_inds[2]
-  plot_data <- Re(t(x$data[1, 1, 1, 1,, 1, subset]))
+  if (dim == "dyn") {
+    plot_data <- t(x$data[1, x_pos, y_pos, y_pos, , coil, subset])
+    yN <- data_dim[5]
+    y_title = "Dynamic"
+  } else if (dim == "x") {
+    plot_data <- t(x$data[1, , y_pos, z_pos, dyn, coil, subset])
+    yN <- data_dim[2]
+    y_title = "x position"
+  } else if (dim == "y") {
+    plot_data <- t(x$data[1, x_pos, , z_pos, dyn, coil, subset])
+    yN <- data_dim[3]
+    y_title = "y position"
+  } else if (dim == "z") {
+    plot_data <- t(x$data[1, x_pos, y_pos, , dyn, coil, subset])
+    yN <- data_dim[4]
+    y_title = "z position"
+  } else if (dim == "coil") {
+    plot_data <- t(x$data[1, x_pos, y_pos, z_pos, dyn, , subset])
+    yN <- data_dim[5]
+    y_title = "Coil"
+  } else {
+    stop("Unrecognised dim value. Should be one of: dyn, x, y, z, coil")
+  } 
+  
+  if (mode == "real") {
+    plot_data <- Re(plot_data)
+  } else if (mode == "imag") {
+    plot_data <- Im(plot_data)
+  } else if (mode == "abs") {
+    plot_data <- Mod(plot_data)
+  }
   
   max_val <- max(abs(plot_data))
-  x_offset_vec <- 0:(ncol(plot_data) - 1) * max_val * x_offset / 100
-  x_offset_mat <- matrix(x_offset_vec, nrow = nrow(plot_data),
+  y_offset_vec <- 0:(ncol(plot_data) - 1) * max_val * y_offset / 100
+  y_offset_mat <- matrix(y_offset_vec, nrow = nrow(plot_data),
                          ncol = ncol(plot_data), byrow = TRUE)
   
-  plot_data <- plot_data + x_offset_mat
+  plot_data <- plot_data + y_offset_mat
   
-  graphics::matplot(x_scale[subset][length(subset):1],
-                    plot_data[length(subset):1,], type = "l", xlim = xlim,
+  x_scale_mat <- matrix(x_scale[subset], nrow = nrow(plot_data),
+                        ncol = ncol(plot_data), byrow = FALSE)
+  
+  x_offset_mat <- matrix((0:(ncol(plot_data) - 1) * 
+                          (xlim[2] - xlim[1]) * x_offset / 100), 
+                         nrow = nrow(plot_data), ncol = ncol(plot_data),
+                         byrow = TRUE)
+  
+  x_scale_mat <- x_scale_mat + x_offset_mat
+  
+  graphics::matplot(x_scale_mat[length(subset):1,],
+                    plot_data[length(subset):1,], type = "l", 
                     lty = 1, col = 1, xlab = "Frequency (PPM)", ylab = "",
-                    yaxt = "n", ...)
+                    yaxt = "n", xaxt = "n", xlim = rev(range(x_scale_mat)),
+                    bty = "n", ...)
   
-  abline(a = par("usr")[3], b = 0, lw = 2.0) # looks better for bty="n"
+  graphics::axis(1, pretty(xlim))
+  
+  #graphics::matplot(x_scale[subset][length(subset):1],
+  #                  plot_data[length(subset):1,], type = "l", xlim = xlim,
+  #                  lty = 1, col = 1, xlab = "Frequency (PPM)", ylab = "",
+  #                  yaxt = "n", ...)
+  
+  #abline(a = par("usr")[3], b = 0, lw = 2.0) # looks better for bty="n"
   
   #matplot(x_scale[subset][length(subset):1])
           #, (1:dyns(mrs_data)), plot_data[length(subset):1,],
@@ -157,13 +280,13 @@ plot.mrs_data <- function(x, fd = TRUE, scale = NULL, xlim = NULL,
     plot_data <- Mod(plot_data)
   }
   
-  par(mgp = c(2.2, 0.7, 0)) # distance between axes and labels
+  par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
   if (yscale) {
-    par(mar = c(3.7, 3.7, 1, 1))
+    par(mar = c(3.5, 3.5, 1, 1))
     plot(x_scale[subset], plot_data[subset],type = 'l',xlim = xlim, xlab = xlab,
          ylab = "Intensity (au)", ...)
   } else {
-    par(mar = c(3.7, 1, 1, 1))
+    par(mar = c(3.5, 1, 1, 1))
     plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim,
          xlab = xlab, yaxt = "n", ylab = "", ...)
   }

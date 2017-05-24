@@ -1,18 +1,30 @@
 #' Read MRS data from a file.
 #' @param fname The filename of the dpt format MRS data.
 #' @param format A string describing the data format. May be one of the 
-#' following : "spar_sdat", "dpt".
+#' following : "spar_sdat", "rda", "list_data", "paravis", dpt".
+#' @param ft Transmitter frequency in Hz (required for list_data format).
+#' @param fs Sampling frequency in Hz (required for list_data format).
+#' @param ref Reference value for ppm scale (required for list_data format).
 #' @return An MRS data object.
 #' @examples
 #' fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT", package = "spant")
 #' mrs_data <- read_mrs(fname, format = "spar_sdat")
 #' print(mrs_data)
 #' @export
-read_mrs <- function(fname, format) {
+read_mrs <- function(fname, format, ft = NULL, fs = NULL, ref = NULL) {
   if (format == "spar_sdat") {
     return(read_spar_sdat(fname))
+  } else if (format == "rda") {
+    return(read_rda(fname))
+  } else if (format == "list_data") {
+    if (is.null(ft)) stop("Please specify ft parameter for list_data format")
+    if (is.null(fs)) stop("Please specify fs parameter for list_data format")
+    if (is.null(ref)) stop("Please specify ref parameter for list_data format")
+    return(read_list_data(fname, ft, fs, ref))
   } else if (format == "dpt") {
     return(read_mrs_dpt(fname))
+  } else if (format == "paravis") {
+    return(read_paravis_raw(fname))
   } else {
     stop("Unrecognised file format.")
   }
@@ -327,32 +339,289 @@ read_spar_sdat <- function(fname) {
                              stringsAsFactors = FALSE)
                     
   N <- as.integer(paras$V2[which(paras$V1 == "samples")])
-  fs <- as.integer(paras$V2[which(paras$V1 == "sample_frequency")])
-  ft <- as.integer(paras$V2[which(paras$V1 == "synthesizer_frequency")])
-  rows <- as.integer(paras$V2[which(paras$V1 == "rows")])
+  dyns <- as.integer(paras$V2[which(paras$V1 == "rows")])
+  ft <- as.numeric(paras$V2[which(paras$V1 == "synthesizer_frequency")])
+  fs <- as.numeric(paras$V2[which(paras$V1 == "sample_frequency")])
+  te <- as.numeric(paras$V2[which(paras$V1 == "echo_time")]) * 1e-3
+  ap_oc <- as.numeric(paras$V2[which(paras$V1 == "ap_off_center")])
+  lr_oc <- as.numeric(paras$V2[which(paras$V1 == "lr_off_center")])
+  cc_oc <- as.numeric(paras$V2[which(paras$V1 == "cc_off_center")])
+  ap_an <- as.numeric(paras$V2[which(paras$V1 == "ap_angulation")])
+  lr_an <- as.numeric(paras$V2[which(paras$V1 == "lr_angulation")])
+  cc_an <- as.numeric(paras$V2[which(paras$V1 == "cc_angulation")])
+  ap_size <- as.numeric(paras$V2[which(paras$V1 == "ap_size")])
+  lr_size <- as.numeric(paras$V2[which(paras$V1 == "lr_size")])
+  cc_size <- as.numeric(paras$V2[which(paras$V1 == "cc_size")])
+  sli_thick <- as.numeric(paras$V2[which(paras$V1 == "slice_thickness")])
+  pe_fov <- as.numeric(paras$V2[which(paras$V1 == "phase_encoding_fov")])
+  cols <- as.numeric(paras$V2[which(paras$V1 == "dim2_pnts")])
+  rows <- as.numeric(paras$V2[which(paras$V1 == "dim3_pnts")])
+  #cols <- as.numeric(paras$V2[which(paras$V1 == "SUN_dim2_pnts")])
+  #rows <- as.numeric(paras$V2[which(paras$V1 == "SUN_dim3_pnts")])
+  
+  # May be useful...
+  # slices <- as.numeric(paras$V2[which(paras$V1 == "nr_of_slices_for_multislice")])
+  # avs <- as.integer(paras$V2[which(paras$V1 == "averages")])
+  # dim1_pts <- as.numeric(paras$V2[which(paras$V1 == "dim1_pnts")])
+  # dim1_pts <- as.numeric(paras$V2[which(paras$V1 == "SUN_dim1_pnts")])
+  # nuc <- as.numeric(paras$V2[which(paras$V1 == "nucleus")])
+  
+  true_row   <- c(1,0,0)
+  true_col   <- c(0,1,0)
+  true_slice <- c(0,0,1)
+  
+  row_ori <- rotate_vec(true_row, true_slice, cc_an * pi / 180)
+  row_ori <- rotate_vec(row_ori, true_col, ap_an * pi / 180)
+  row_ori <- rotate_vec(row_ori, true_row, lr_an * pi / 180)
+  
+  col_ori <- rotate_vec(true_col, true_slice, cc_an * pi / 180)
+  col_ori <- rotate_vec(col_ori, true_col, ap_an * pi / 180)
+  col_ori <- rotate_vec(col_ori, true_row, lr_an * pi / 180)
+  
+  pos_vec <- c(lr_oc, ap_oc, cc_oc)
   
   data_vec <- read_sdat(sdat)
-  data <- array(data_vec,dim = c(1, 1, 1, 1, N, 1, rows)) # TODO update for MRSI
+  
+  # TODO update dims for MRSI
+  data <- array(data_vec,dim = c(1, 1, 1, 1, N, 1, dyns)) 
   data = aperm(data,c(1, 2, 3, 4, 7, 6, 5))
   
-  # TODO
-  row_dim <- NA
-  col_dim <- NA
-  slice_dim <- NA
+  # SVS or MRSI?
+  if ((rows == 1) & (cols == 1)) {
+    row_dim   <- lr_size
+    col_dim   <- ap_size
+    slice_dim <- cc_size
+  } else {
+    row_dim   <- pe_fov / cols
+    col_dim   <- pe_fov / cols
+    slice_dim <- sli_thick
+    pos_vec <- (pos_vec - col_ori * row_dim * 0.5 * (rows - 1) - 
+                row_ori * col_dim * 0.5 * (cols - 1))
+  }
+  
   res <- c(NA, row_dim, col_dim, slice_dim, 1, NA, 1 / fs)
-  te <- NA
-  ref <- 4.65
-  row_vec <- NA
-  col_vec <- NA
-  pos_vec <- NA
+  ref <- def_acq_paras()$ref
   
   # freq domain vector
   freq_domain <- rep(FALSE, 7)
   
   mrs_data <- list(ft = ft, data = data, resolution = res, te = te, ref = ref, 
-                   row_vec = row_vec, col_vec = col_vec, pos_vec = pos_vec, 
+                   row_vec = row_ori, col_vec = col_ori, pos_vec = pos_vec, 
                    freq_domain = freq_domain)
   
   class(mrs_data) <- "mrs_data"
   mrs_data
+}
+
+read_list_data <- function(fname, ft, fs, ref) {
+  # generate matching data and list files
+  ext <- stringr::str_sub(fname, -5)
+  name <- stringr::str_sub(fname, 1, -6)
+  
+  if ( ext == ".list" ) {
+    list <- fname
+    data <- paste0(name, ".data")
+  } else if ( ext == ".data" ) {
+    data <- fname
+    list <- paste0(name, ".list")
+  } else {
+    stop("Incorrect file extension.")
+  }
+  
+  # check both files exist
+  if (!file.exists(list)) {
+    cat(list)
+    stop("list file not found.")
+  } else if (!file.exists(data)) {
+    cat(data)
+    stop("data file not found.")
+  }
+  
+  # read list file as text
+  txt <- as.array(readLines(list))
+  
+  N_txt <- ".    0    0    0  F-resolution"
+  N_ind <- which(apply(txt, 1, startsWith, N_txt))
+  N <- as.numeric(strsplit(txt[N_ind], ":")[[1]][2])
+  
+  data_ind_start_txt <- "# === START OF DATA VECTOR INDEX"
+  data_ind_start <- which(apply(txt, 1, startsWith, data_ind_start_txt))
+  data_ind_end_txt <- "# === END OF DATA VECTOR INDEX"
+  data_ind_end <- which(apply(txt, 1, startsWith, data_ind_end_txt))
+  data_ind_tab <- utils::read.table(text = txt[(data_ind_start + 3):(data_ind_end - 1)])
+  col_names <- strsplit(txt[data_ind_start + 2], "\\s+")[[1]][2:22]
+  colnames(data_ind_tab) <- col_names
+  
+  fid_num <- nrow(data_ind_tab)
+  chans <- max(data_ind_tab$chan) + 1
+  ref_inds <- which(data_ind_tab$typ == "STD" & data_ind_tab$mix == 1)
+  metab_inds <- which(data_ind_tab$typ == "STD" & data_ind_tab$mix == 0)
+  
+  ref_N <- length(ref_inds) 
+  ref_start <- (ref_inds[1] - 1) * N + 1
+  ref_end   <- ref_inds[ref_N] * N
+  
+  metab_N <- length(metab_inds) 
+  metab_start <- (metab_inds[1] - 1) * N + 1
+  metab_end   <- metab_inds[metab_N] * N
+  
+  raw_vec <- readBin(data, what = "double", n = 2 * N * (fid_num), size = 4,
+                     endian = "little")
+  
+  cplx_vec <- raw_vec[c(TRUE, FALSE)] - 1i * raw_vec[c(FALSE, TRUE)]
+  
+  ref_data <- cplx_vec[ref_start:ref_end]
+  dim(ref_data) <- c(N, chans, ref_N/chans, 1, 1, 1, 1)
+  ref_data <- aperm(ref_data, c(7,6,5,4,3,2,1))
+  
+  metab_data <- cplx_vec[metab_start:metab_end]
+  dim(metab_data) <- c(N, chans, metab_N/chans, 1, 1, 1, 1)
+  metab_data <- aperm(metab_data, c(7,6,5,4,3,2,1))
+  
+  #res <- rep(NA, 7)
+  res <- c(NA, NA, NA, NA, 1, NA, 1 / fs)
+  
+  # freq domain vector vector
+  freq_domain <- rep(FALSE, 7)
+  
+  metab_mrs <- list(ft = ft, data = metab_data, resolution = res, te = NA,
+                   ref = ref, row_vec = NA, col_vec = NA,
+                   pos_vec = NA, freq_domain = freq_domain)
+  class(metab_mrs) <- "mrs_data"
+  
+  
+  ref_mrs <- list(ft = ft, data = ref_data, resolution = res, te = NA,
+                   ref = ref, row_vec = NA, col_vec = NA,
+                   pos_vec = NA, freq_domain = freq_domain)
+  class(ref_mrs) <- "mrs_data"
+  
+  list(metab = metab_mrs, ref = ref_mrs)
+}
+
+read_rda <- function(fname) {
+  con = file(fname, "r")
+  n = 1
+  while (TRUE) {
+    line = readLines(con, n = 1)
+    if (startsWith(line, ">>> End of header <<<")) {
+      data_pos <- seek(con)
+      break
+    }
+    n = n + 1
+  }
+  
+  # go back to the start
+  seek(con, 0)
+  txt <- utils::read.delim(con, sep = ":", nrows = (n - 2), header = FALSE,
+                    strip.white = TRUE, stringsAsFactors = FALSE,
+                    comment.char = ">")
+  close(con)
+  
+  N <- as.integer(txt$V2[which(txt$V1 == "VectorSize")])
+  fs <- 1e6 / as.numeric(txt$V2[which(txt$V1 == "DwellTime")])
+  ft <- 1e6 * as.numeric(txt$V2[which(txt$V1 == "MRFrequency")])
+  te <- as.numeric(txt$V2[which(txt$V1 == "TE")]) / 1e3
+  #avgs <- as.integer(txt$V2[which(txt$V1 == "NumberOfAverages")]) 
+  rows <- as.numeric(txt$V2[which(txt$V1 == "CSIMatrixSize[0]")])
+  cols <- as.numeric(txt$V2[which(txt$V1 == "CSIMatrixSize[1]")])
+  slices <- as.numeric(txt$V2[which(txt$V1 == "CSIMatrixSize[2]")])
+  
+  fids <- rows * cols * slices
+  
+  # open in binary mode
+  con <- file(fname, "rb")
+  # skip the text bit
+  seek(con, data_pos, "start", rw = "rb")
+  raw_vec <- readBin(con, what = "double", n = N * 2 * fids, size = 8,
+                     endian = "little")
+  close(con)
+  
+  data <- raw_vec[c(TRUE, FALSE)] + 1i * raw_vec[c(FALSE, TRUE)]
+  
+  dim(data) <- c(N, rows, cols, slices, 1, 1, 1)
+  data <- aperm(data, c(7,2,3,4,5,6,1))
+  
+  res <- c(NA, rows, cols, slices, 1, NA, 1 / fs)
+  ref <- def_acq_paras()$ref
+  row_ori = NA
+  col_ori = NA
+  pos_vec = NA
+  
+  # freq domain vector
+  freq_domain <- rep(FALSE, 7)
+  
+  mrs_data <- list(ft = ft, data = data, resolution = res, te = te, ref = ref, 
+                   row_vec = row_ori, col_vec = col_ori, pos_vec = pos_vec, 
+                   freq_domain = freq_domain)
+  
+  class(mrs_data) <- "mrs_data"
+  mrs_data
+}
+
+read_paravis_raw <- function(fname) {
+  # find the method file in the same directory
+  method_fname <- file.path(dirname(fname), "method")
+  
+  if (!file.exists(method_fname)) {
+    cat(method_fname)
+    stop("method file not found.")
+  }
+  
+  # read paramters
+  lines <- utils::read.delim(method_fname, sep = "=", header = FALSE, 
+                      stringsAsFactors = FALSE)
+  
+  reps <- as.integer(get_para_val(lines, "##$PVM_NRepetitions"))
+  avgs <- as.integer(get_para_val(lines, "##$PVM_NAverages"))
+  dynamics <- reps * avgs
+  N <- as.integer(get_para_val(lines, "##$PVM_DigNp"))
+  fs <- as.double(get_para_val(lines, "##$PVM_DigSw"))
+  shift <- as.integer(get_para_val(lines, "##$PVM_DigShift"))
+  coils <- as.integer(get_para_val(lines, "##$PVM_EncNReceivers"))
+  ft_str <- lines$V1[1 + which(lines$V1 == "##$PVM_FrqRef")]
+  ft <- as.double(strsplit(ft_str, " ")[[1]][1]) * 1e6
+  te <- as.double(get_para_val(lines, "##$PVM_EchoTime")) / 1e3
+  
+  expected_Npts <- dynamics * N * 2 * coils
+    
+  # read the raw data file 
+  fbytes <- file.size(fname)
+  Npts <- fbytes / 4
+  
+  if (Npts != expected_Npts) warning("Unexpected number of data points.")
+  
+  raw_vec <- readBin(fname, "int", size = 4, n = Npts)
+  data <- raw_vec[c(TRUE, FALSE)] - 1i * raw_vec[c(FALSE, TRUE)]
+  
+  dim(data) <- c(N, coils, dynamics, 1, 1, 1, 1)
+  data <- aperm(data, c(7,6,5,4,3,2,1))
+  
+  # move dig. filter guff to end of the FID (the Bruker way of doing things?)
+  #data <- abind::abind(data[,,,,,,(shift + 1):N,drop = FALSE], 
+  #                     data[,,,,,,1:shift,drop = FALSE], along = 7)
+  
+  filt_pts <- data[,,,,,,shift:1,drop = FALSE]
+  second_part <- data[,,,,,,(shift + 1):N, drop = FALSE]
+  data <- second_part 
+  data[,,,,,,1:shift] <- data[,,,,,,1:shift, drop = FALSE] - filt_pts
+  data <- abind::abind(data[,,,,,,,drop = FALSE], 
+                       array(0, dim = dim(filt_pts)), along = 7)
+  
+  res <- c(NA, NA, NA, NA, 1, NA, 1 / fs)
+  
+  # freq domain vector vector
+  freq_domain <- rep(FALSE, 7)
+
+  ref <- def_acq_paras()$ref
+  
+  mrs_data <- list(ft = ft, data = data, resolution = res, te = te,
+                   ref = ref, row_vec = NA, col_vec = NA,
+                   pos_vec = NA, freq_domain = freq_domain)
+  
+  class(mrs_data) <- "mrs_data"
+  mrs_data
+}
+
+get_para_val <- function(lines, name_str) {
+  lines$V2[which(lines$V1 == name_str)]
 }
