@@ -573,20 +573,28 @@ get_seg_ind <- function(scale, start, end) {
   c(st_ind, end_ind)
 }
 
-crop_spec <- function(mrs_data, xlim = c(4,0.5), scale = "ppm") {
+#' Crop \code{mrs_data} object based on a frequency range.
+#' @param mrs_data MRS data.
+#' @param xlim the range of values to crop in the spectral dimension 
+#' xlim = c(4,1).
+#' @param x_units the units to use for the x-axis, can be one of: "ppm", "hz" or 
+#' "points".
+#' @return cropped \code{mrs_data} object.
+#' @export
+crop_spec <- function(mrs_data, xlim = c(4,0.5), x_units = "ppm") {
   # needs to be a fd operation
   if (!is_fd(mrs_data)) {
       mrs_data <- td2fd(mrs_data)
   }
   
-  if (scale == "ppm") {
+  if (x_units == "ppm") {
     x_scale <- ppm(mrs_data)
   } else if (scale == "hz") {
     x_scale <- hz(mrs_data)
   } else if (scale == "points") {
     x_scale <- pts(mrs_data)
-  } else if (scale == "seconds") {
-    x_scale <- seconds(mrs_data)
+  } else {
+    stop("Error, scale not recognised.")
   }
   
   if (is.null(xlim)) {
@@ -828,7 +836,12 @@ get_metab <- function(mrs_data) {
 #' @return A single MRS data object with the input objects concatenated together.
 #' @export
 append_dyns <- function(...) {
-  x <- list(...)
+  # make a list if not one already
+  if (!is.list(...)) {
+    x <- list(...)
+  } else {
+    x <- list(...)[[1]]
+  }
   
   first_dataset <- x[[1]]
   
@@ -1210,7 +1223,9 @@ ecc_ref <- function(mrs_data) {
   apply_mrs(mrs_data, 7, ecc_1d_array)
 }
 
-#' Apply eddy current correction using the Klose method:
+#' Eddy current correction.
+#' 
+#' Apply eddy current correction using the Klose method.
 #' 
 #' In vivo proton spectroscopy in presence of eddy currents.
 #' Klose U.
@@ -1297,43 +1312,51 @@ zp_vec <- function(vector, n) {
 
 #' Combine coil data based on the first data point of a reference signal.
 #' 
-#' Elements are phased and optionally scaled prior to summation. Where a 
+#' By default, elements are phased and scaled prior to summation. Where a 
 #' reference signal is not given, the mean dynamic signal will be used
 #' instead.
-#' @param metab_mrs MRS data containing metabolite data.
-#' @param ref_mrs MRS data containing reference data (optional).
-#' @param scale Option to rescale coil elements based on the first data point
+#' @param metab MRS data containing metabolite data.
+#' @param ref MRS data containing reference data (optional).
+#' @param noise MRS data from a noise scan (optional).
+#' @param scale option to rescale coil elements based on the first data point
 #' (logical).
-#' @return MRS data with coil elements combined.
+#' @param sum_coils sum the coil elements as a final step (logical).
+#' @return MRS data.
 #' @export
-comb_coils <- function(metab_mrs, ref_mrs = NULL, scale = TRUE) {
+comb_coils <- function(metab, ref = NULL, noise = NULL, 
+                       scale = TRUE, sum_coils = TRUE) {
+  
   metab_only <- FALSE
-  if (is.null(ref_mrs)) {
-    ref_mrs <- mean_dyns(metab_mrs)
+  if (is.null(ref)) {
+    ref <- mean_dyns(metab)
     metab_only <- TRUE
   }
   
-  if (is_fd(metab_mrs)) {
+  if (is_fd(metab)) {
       metab <- fd2td(metab)
   }
   
-  if (is_fd(ref_mrs)) {
+  if (is_fd(ref)) {
       ref <- fd2td(ref)
   }
   
   # get the first dynamic of the ref data
-  # first_ref <- get_dyns(ref_mrs, 1)
+  # first_ref <- get_dyns(ref, 1)
   # fp <- get_fp(first_ref)
   
   # get the dynamic mean of the ref data
-  mean_ref <- mean_dyns(ref_mrs)
+  mean_ref <- mean_dyns(ref)
   fp <- get_fp(mean_ref)
   
   phi <- Arg(fp)
   amp <- Mod(fp)
   
+  if (!is.null(noise)) {
+    amp <- amp / (calc_coil_noise_sd(noise) ^ 2)
+  }
+  
   # phase and scale ref data
-  ref_dims <- dim(ref_mrs$data)
+  ref_dims <- dim(ref$data)
   
   ang <- rep(phi, prod(ref_dims[-6]))
   dim(ang) <- c(ref_dims[c(6, 2, 3, 4, 5, 1, 7)])
@@ -1344,17 +1367,17 @@ comb_coils <- function(metab_mrs, ref_mrs = NULL, scale = TRUE) {
     dim(scale_f) <- c(ref_dims[c(6, 2, 3, 4, 5, 1, 7)])
     scale_f <- aperm(scale_f, c(6, 2, 3, 4, 5, 1, 7))
     
-    ref_mrs_ps <- ref_mrs
-    ref_mrs_ps$data <- ref_mrs$data * exp(-1i * ang) * scale_f
+    ref_ps <- ref
+    ref_ps$data <- ref$data * exp(-1i * ang) * scale_f
   } else {
-    ref_mrs_ps <- ref_mrs
-    ref_mrs_ps$data <- ref_mrs$data * exp(-1i * ang)
+    ref_ps <- ref
+    ref_ps$data <- ref$data * exp(-1i * ang)
   }
   
-  ref_mrs_ps <- sum_coils(ref_mrs_ps)
+  ref_ps <- sum_coils(ref_ps)
   
   # phase and scale metab data
-  metab_dims <- dim(metab_mrs$data)
+  metab_dims <- dim(metab$data)
   
   ang <- rep(phi, prod(metab_dims[-6]))
   dim(ang) <- c(metab_dims[c(6, 2, 3, 4, 5, 1, 7)])
@@ -1365,18 +1388,21 @@ comb_coils <- function(metab_mrs, ref_mrs = NULL, scale = TRUE) {
     dim(scale_f) <- c(metab_dims[c(6, 2, 3, 4, 5, 1, 7)])
     scale_f <- aperm(scale_f, c(6, 2, 3, 4, 5, 1, 7))
     
-    metab_mrs_ps <- metab_mrs
-    metab_mrs_ps$data <- metab_mrs$data * exp(-1i * ang) * scale_f
+    metab_ps <- metab
+    metab_ps$data <- metab$data * exp(-1i * ang) * scale_f
   } else {
-    metab_mrs_ps <- metab_mrs
-    metab_mrs_ps$data <- metab_mrs$data * exp(-1i * ang)
+    metab_ps <- metab
+    metab_ps$data <- metab$data * exp(-1i * ang)
   }
-  metab_mrs_ps <- sum_coils(metab_mrs_ps)
+  
+  if (sum_coils == TRUE) {
+    metab_ps <- sum_coils(metab_ps)
+  }
   
   if (metab_only) {
-    return(metab_mrs_ps)
+    return(metab_ps)
   } else {
-    return(list(metab = metab_mrs_ps, ref = ref_mrs_ps))
+    return(list(metab = metab_ps, ref = ref_ps))
   }
 }
 
@@ -1417,4 +1443,62 @@ est_noise_sd_vec <- function(x, n = 100, offset = 100, p_order = 2) {
   seg <- Re(x[(N - offset - n + 1):(N - offset)])
   lm_res <- stats::lm(seg ~ poly(1:n, p_order))
   stats::sd(lm_res$residual)
+}
+
+#' Calculate the noise correlation between coil elements.
+#' @param noise_data \code{mrs_data} object with one FID for each coil element.
+#' @return Correlation matrix.
+#' @export
+calc_coil_noise_cor <- function(noise_data) {
+  cplx_data <- drop(noise_data$data)
+  # concat real and imag parts
+  real_data <- cbind(Re(cplx_data), Im(cplx_data))
+  stats::cor(t(real_data))
+}
+
+#' Calculate the noise standard deviation for each coil element.
+#' @param noise_data \code{mrs_data} object with one FID for each coil element.
+#' @return array of standard deviations.
+#' @export
+calc_coil_noise_sd <- function(noise_data) {
+  cplx_data <- drop(noise_data$data)
+  # concat real and imag parts
+  real_data <- cbind(Re(cplx_data), Im(cplx_data))
+  apply(real_data, 1, stats::sd)
+}
+
+#' Calculate the spectral SNR.
+#' 
+#' SNR is defined as the maximum signal value divided by 2 times the standard 
+#' deviation of the noise.
+#' 
+#' The mean noise value is subtracted from the maximum signal value to reduce DC
+#' offset bias. A polynomial detrending fit (second order by default) is applied 
+#' to the noise region before the noise standard deviation is estimated.
+#' 
+#' @param mrs_data an object of class \code{mrs_data}.
+#' @param sig_region a ppm region to define where the maximum signal value
+#' should be estimated.
+#' @param noise_region a ppm region to defined where the noise level should be 
+#' estimated.
+#' @param p_order polynomial order to fit to the noise region before estimating 
+#' the standard deviation.
+#' @return an array of SNR values.
+#' @export
+calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5), 
+                          noise_region = c(-0.5,-2.5), p_order = 2) {
+  
+  sig_data <- crop_spec(mrs_data, sig_region)
+  noise_data <- crop_spec(mrs_data, noise_region)
+  
+  max_sig <- apply_mrs(sig_data, 7, re_max, data_only = TRUE)
+  noise_mean <- apply_mrs(noise_data, 7, re_mean, data_only = TRUE)
+  max_sig <- max_sig - noise_mean
+  
+  #noise_sd <- apply_mrs(noise_data, 7, re_sd, data_only = TRUE)
+  
+  noise_sd <- est_noise_sd(noise_data, offset = 0, n = N(noise_data), 
+                           p_order = p_order)
+  
+  max_sig / (2 * noise_sd)
 }

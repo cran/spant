@@ -22,7 +22,7 @@
 #' @param metab Metabolite data.
 #' @param basis A basis class object or character vector to basis file in 
 #' LCModel .basis format.
-#' @param method 'VARPRO', 'TARQUIN' or 'LCMODEL'
+#' @param method 'VARPRO', 'VARPRO_3P', 'TARQUIN' or 'LCMODEL'
 #' @param w_ref Water reference data for concentration scaling (optional).
 #' @param opts Options to pass to the analysis method.
 #' @param parallel Perform analysis in parallel (TRUE or FALSE)
@@ -33,7 +33,7 @@
 #' svs <- read_mrs(fname, format="spar_sdat")
 #' \dontrun{
 #' basis <- sim_basis_1h_brain_press(svs)
-#' fit_result <- fit_mrs(metab, basis)
+#' fit_result <- fit_mrs(svs, basis)
 #' }
 #' @export
 fit_mrs <- function(metab, basis, method = 'VARPRO', w_ref = NULL, opts = NULL, 
@@ -113,10 +113,11 @@ fit_mrs <- function(metab, basis, method = 'VARPRO', w_ref = NULL, opts = NULL,
     
     
   } else if (method == "TARQUIN") {
-    
-    if (dyns(w_ref) > 1) {
-      w_ref <- mean_dyns(w_ref)
-      warning("Using the mean reference signal for water scaling.")
+    if (!is.null(w_ref)) { 
+      if (dyns(w_ref) > 1) {
+        w_ref <- mean_dyns(w_ref)
+        warning("Using the mean reference signal for water scaling.")
+      }
     }
     
     # repeat the refernce signal to match the number of dynamics
@@ -149,9 +150,11 @@ fit_mrs <- function(metab, basis, method = 'VARPRO', w_ref = NULL, opts = NULL,
                          #.paropts = list(.options.snow=snowopts),
                          #.paropts = list(.export="N",.packages="spant"),
   } else if (method == "LCMODEL") {
-    if (dyns(w_ref) > 1) {
-      w_ref <- mean_dyns(w_ref)
-      warning("Using the mean reference signal for water scaling.")
+    if (!is.null(w_ref)) { 
+      if (dyns(w_ref) > 1) {
+        w_ref <- mean_dyns(w_ref)
+        warning("Using the mean reference signal for water scaling.")
+      }
     }
     
     # repeat the reference signal to match the number of dynamics
@@ -217,10 +220,10 @@ fit_mrs <- function(metab, basis, method = 'VARPRO', w_ref = NULL, opts = NULL,
   diags = plyr::ldply(df_list_diags, data.frame)[-1]
   fits <- result_list[seq(from = 4, by = res_n, length.out = fit_num)]
   
-  out <- list(results = cbind(labs, amps, crlbs, diags), fits = fits, 
+  out <- list(res_tab = cbind(labs, amps, crlbs, diags), fits = fits, 
               data = metab, amp_cols = ncol(amps))
   
-  class(out) <- "analysis_results"
+  class(out) <- "fit_result"
   return(out)
 }
 
@@ -281,10 +284,10 @@ tarquin_fit <- function(element, temp_mrs, basis_file, opts) {
     stop("Error loading data with above TARQUIN command.")
   }
   
-  results <- read_tqn_result(result_csv_f)
+  res_tab <- read_tqn_result(result_csv_f)
   fit <- read_tqn_fit(result_fit_f)
   
-  return(append(results,list(fit = fit, metab_file = metab_file, 
+  return(append(res_tab,list(fit = fit, metab_file = metab_file, 
                              ref_file = ref_file, result_csv_f = result_csv_f, 
                              result_fit_f = result_fit_f)))  
 }
@@ -355,10 +358,10 @@ lcmodel_fit <- function(element, temp_mrs, basis_file, opts) {
   }
   
   coord_res <- read_lcm_coord(coord_f)
-  results <- coord_res$results
+  res_tab <- coord_res$results
   fit <- coord_res$fit
   
-  return(append(results,list(fit = fit, metab_file = metab_file, 
+  return(append(res_tab, list(fit = fit, metab_file = metab_file, 
                              ref_file = ref_file, coord_f = coord_f, 
                              control_f = control_f)))  
 }
@@ -394,7 +397,7 @@ read_tqn_result <- function(result_f, remove_rcs=TRUE) {
 #' @export
 read_tqn_fit <- function(fit_f) {
   fit <- utils::read.csv(fit_f, skip = 1)
-  class(fit) <- "fit_table"
+  class(fit) <- c("fit_table", "data.frame")
   return(fit)
 }
 
@@ -444,13 +447,13 @@ read_lcm_coord <- function(coord_f) {
   crlbs <- amps*crlbs/100
   crlbs[max_crlbs] = Inf
   row.names(crlbs) <- "1"
-  results <- list(amps = amps, crlbs = crlbs, diags = diags)
+  res_tab <- list(amps = amps, crlbs = crlbs, diags = diags)
   
   data_lines <- ceiling(points/10)
   #print(data_lines)
   n <- 0
   colnames <- vector()
-  fit_table_list <- list()
+  fit_tab_list <- list()
   repeat {
     header_line <- line_reader[data_start + n * (data_lines + 1)]
     if ( endsWith(header_line,"lines in following diagnostic table:") ) {break}
@@ -460,7 +463,7 @@ read_lcm_coord <- function(coord_f) {
                                                     nrows = data_lines,
                                                     fill = T))))
     
-    fit_table_list <- c(fit_table_list, list(data))
+    fit_tab_list <- c(fit_tab_list, list(data))
     colnames <- c(colnames, name)
     n = n + 1
   }
@@ -468,76 +471,15 @@ read_lcm_coord <- function(coord_f) {
   colnames[2] = "Data"
   colnames[3] = "Fit"
   colnames[4] = "Baseline"
-  names(fit_table_list) <- colnames
-  fit_table <- stats::na.omit(as.data.frame(fit_table_list))
-  fit_table$Fit <- fit_table$Fit - fit_table$Baseline
-  fit_table[5:ncol(fit_table)] <- fit_table[5:ncol(fit_table)] - fit_table$Baseline 
-  class(fit_table) <- "fit_table"
+  names(fit_tab_list) <- colnames
+  fit_tab <- stats::na.omit(as.data.frame(fit_tab_list))
+  fit_tab$Fit <- fit_tab$Fit - fit_tab$Baseline
+  fit_tab[5:ncol(fit_tab)] <- fit_tab[5:ncol(fit_tab)] - fit_tab$Baseline 
+  class(fit_tab) <- c("fit_table", "data.frame")
   
-  return(list(fit = fit_table, results = results))
+  return(list(fit = fit_tab, res_tab = res_tab))
 }
 
-get_corr_factor <- function(te, tr, B0, gm_vol, wm_vol, csf_vol) {
-  # Correction factor calcualted according to the method of Gasparovic et al (MRM 55:1219-1226 2006)
-  # NOTE - gives concs as Mol/kg of water NOT Mol/liter of tissue like default LCM/TQN analysis.
-  if (B0 == 3.0) {
-    # Wanasapura values given in Harris paper
-    t1_gm    = 1.331
-    t2_gm    = 0.110
-    t1_wm    = 0.832
-    t2_wm    = 0.0792
-    t1_csf   = 3.817
-    t2_csf   = 0.503
-    t1_metab = 1.15
-    t2_metab = 0.3
-  } else if (B0 == 1.5) {
-    # values from Gasparovic 2006 MRM paper
-    t1_gm    = 1.304
-    t2_gm    = 0.093
-    t1_wm    = 0.660
-    t2_wm    = 0.073
-    t1_csf   = 2.93
-    t2_csf   = 0.23
-    t1_metab = 1.15
-    t2_metab = 0.3
-  } else {
-    stop("Error. Relaxation values not available for this field strength.")
-  }
-  
-  # MR-visable water densities
-  gm_vis  = 0.78
-  wm_vis  = 0.65
-  csf_vis = 0.97
-  
-  # molal concentration (moles/gram) of MR-visible water
-  water_conc = 55510.0
-  
-  # fractions of water attributable to GM, WM and CSF
-  f_gm  = gm_vol * gm_vis / 
-          (gm_vol * gm_vis + wm_vol * wm_vis + csf_vol * csf_vis)
-  
-  f_wm  = wm_vol * wm_vis / 
-          (gm_vol * gm_vis + wm_vol * wm_vis + csf_vol * csf_vis)
-  
-  f_csf = csf_vol * csf_vis / 
-          (gm_vol * gm_vis + wm_vol * wm_vis + csf_vol * csf_vis)
-  
-  #This might give the result in Mol/kg?
-  #f_gm  = gm_vol  * gm_vis   / ( gm_vol + wm_vol + csf_vol )
-  #f_wm  = wm_vol  * wm_vis   / ( gm_vol + wm_vol + csf_vol )
-  #f_csf = csf_vol * csf_vis  / ( gm_vol + wm_vol + csf_vol )
-  
-  # Relaxtion attenuation factors
-  R_h2o_gm  = exp(-te / t2_gm) * (1.0 - exp(-tr / t1_gm))
-  R_h2o_wm  = exp(-te / t2_wm) * (1.0 - exp(-tr / t1_wm))
-  R_h2o_csf = exp(-te / t2_csf) * (1.0 - exp(-tr / t1_csf))
-  R_metab   = exp(-te / t2_metab) * (1.0 - exp(-tr / t1_metab))
-  
-  corr_factor = ((f_gm * R_h2o_gm + f_wm * R_h2o_wm + f_csf * R_h2o_csf) / 
-                ((1 - f_csf) * R_metab)) * water_conc
-  
-  return(corr_factor)
-}
 
 #' Integrate a spectral region.
 #' @param mrs_data MRS data.
@@ -601,7 +543,7 @@ test_varpro <- function() {
   basis <- sim_basis_1h_brain_press(acq_paras, xlim = c(4.0,0))
   fit_opts <- varpro_opts()
   fit <- fit_mrs(mrs_data, basis, opts = fit_opts)
-  plot(fit, xlim = c(4,0.5))
+  graphics::plot(fit, xlim = c(4,0.5))
   system.time(replicate(10, fit_mrs(mrs_data, basis)))
 }
 
@@ -689,12 +631,42 @@ varpro_3_para <- function(mrs_data, basis, opts = NULL) {
   amps <- data.frame(t(ahat))
   colnames(amps) <- basis$names
   
+  # create some common metabolite combinations
+  if (("NAA" %in% colnames(amps)) & ("NAAG" %in% colnames(amps))) {
+    amps['TNAA'] <- amps['NAA'] + amps['NAAG']
+  }
+  
+  if (("PCh" %in% colnames(amps)) & ("GPC" %in% colnames(amps))) {
+    amps['TCho'] <- amps['PCh'] + amps['GPC']
+  }
+  
+  if (("Cr" %in% colnames(amps)) & ("PCr" %in% colnames(amps))) {
+    amps['TCr'] <- amps['Cr'] + amps['PCr']
+  }
+  
+  if (("Glu" %in% colnames(amps)) & ("Gln" %in% colnames(amps))) {
+    amps['Glx'] <- amps['Glu'] + amps['Gln']
+  }
+  
+  if (("Lip09" %in% colnames(amps)) & ("MM09" %in% colnames(amps))) {
+    amps['TLM09'] <- amps['Lip09'] + amps['MM09']
+  }
+  
+  if (("Lip13a" %in% colnames(amps)) & ("Lip13b" %in% colnames(amps)) & 
+        ("MM12" %in% colnames(amps)) & ("MM14" %in% colnames(amps))) {
+    amps["TLM13"] <- amps["Lip13a"] + amps["Lip13b"] + amps["MM12"] + amps["MM14"]
+  }
+  
+  if (("Lip20" %in% colnames(amps)) & ("MM20" %in% colnames(amps))) {
+    amps['TLM20'] <- amps['Lip20'] + amps['MM20']
+  }
+  
   fit <- data.frame(PPMScale = ppm(mrs_data, N = Npts * 2), Data = Re(Y),
                     Fit = Re(YHAT), Baseline = Re(BL))
   
   fit <- cbind(fit, basis_frame)
   
-  class(fit) <- "fit_table"
+  class(fit) <- c("fit_table", "data.frame")
   
   diags <- data.frame(phase = res$par[1] * 180 / pi, damping = res$par[2],
                       shift = res$par[3], res$deviance, res$niter, res$info, 
@@ -795,10 +767,40 @@ varpro <- function(mrs_data, basis, opts = NULL) {
 
   fit <- cbind(fit, basis_frame)
   
-  class(fit) <- "fit_table"
+  class(fit) <- c("fit_table", "data.frame")
   
   diags <- data.frame(res$deviance, res$niter, res$info, res$deviance,
                       res$message)
+  
+  # create some common metabolite combinations
+  if (("NAA" %in% colnames(amps)) & ("NAAG" %in% colnames(amps))) {
+    amps['TNAA'] <- amps['NAA'] + amps['NAAG']
+  }
+  
+  if (("PCh" %in% colnames(amps)) & ("GPC" %in% colnames(amps))) {
+    amps['TCho'] <- amps['PCh'] + amps['GPC']
+  }
+  
+  if (("Cr" %in% colnames(amps)) & ("PCr" %in% colnames(amps))) {
+    amps['TCr'] <- amps['Cr'] + amps['PCr']
+  }
+  
+  if (("Glu" %in% colnames(amps)) & ("Gln" %in% colnames(amps))) {
+    amps['Glx'] <- amps['Glu'] + amps['Gln']
+  }
+  
+  if (("Lip09" %in% colnames(amps)) & ("MM09" %in% colnames(amps))) {
+    amps['TLM09'] <- amps['Lip09'] + amps['MM09']
+  }
+  
+  if (("Lip13a" %in% colnames(amps)) & ("Lip13b" %in% colnames(amps)) & 
+        ("MM12" %in% colnames(amps)) & ("MM14" %in% colnames(amps))) {
+    amps["TLM13"] <- amps["Lip13a"] + amps["Lip13b"] + amps["MM12"] + amps["MM14"]
+  }
+  
+  if (("Lip20" %in% colnames(amps)) & ("MM20" %in% colnames(amps))) {
+    amps['TLM20'] <- amps['Lip20'] + amps['MM20']
+  }
   
   list(amps = amps, crlbs = t(rep(NA, length(amps))), diags = diags, fit = fit)
 }
@@ -941,9 +943,9 @@ varpro_3_para_fn <- function(par, y, basis, t, nstart, sc_res = FALSE) {
 #' calculation.
 #' @return List of options.
 #' @examples
-#' varpro_opts(nstart = 20)
+#' varpro_opts(nstart = 10)
 #' @export
-varpro_opts <- function(nstart = 10, init_g_damping = 2, maxiters = 200,
+varpro_opts <- function(nstart = 20, init_g_damping = 2, maxiters = 200,
                         max_shift = 5, max_g_damping = 5, max_ind_damping = 5,
                         anal_jac = TRUE, bl_smth_pts = 80) {
   
@@ -969,9 +971,9 @@ varpro_opts <- function(nstart = 10, init_g_damping = 2, maxiters = 200,
 #' calculation.
 #' @return List of options.
 #' @examples
-#' varpro_opts(nstart = 20)
+#' varpro_opts(nstart = 10)
 #' @export
-varpro_3_para_opts <- function(nstart = 10, init_damping = 2, maxiters = 200,
+varpro_3_para_opts <- function(nstart = 20, init_damping = 2, maxiters = 200,
                         max_shift = 5, max_damping = 5, anal_jac = FALSE,
                         bl_smth_pts = 80) {
   
@@ -1016,26 +1018,3 @@ varpro_3_para_anal_jac <- function(par, y, basis, t, nstart) {
   c(phase_jac_real, g_lw_jac_real, shift_jac_real)
 }
 
-#' Apply water reference scaling to a fitting results object to yield metabolite 
-#' quantities in units of mM.
-#' @param result A result object generated from fitting.
-#' @param ref_data Water reference MRS data object.
-#' @param w_att Water attenuation factor (default = 0.7).
-#' @param w_conc Assumed water concentration (default = 35880).
-#' @return A result object with a results_ws data table added.
-#' @export
-apply_water_scaling <- function(result, ref_data, w_att = 0.7, w_conc = 35880) {
-  
-  w_amp <- as.numeric(get_td_amp(ref_data))
-  
-  result$results$w_amp = w_amp
-  
-  amp_cols = result$amp_cols
-  ws_cols <- 6:(5 + amp_cols * 2)
-  
-  result$results_ws <- result$results
-  result$results_ws[, ws_cols] <- (result$results_ws[, ws_cols] * w_att * 
-                                   w_conc / w_amp)
-  
-  result
-}

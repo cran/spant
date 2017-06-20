@@ -23,6 +23,18 @@ hilbert <- function(x) {
   stats::fft(y, inverse = TRUE) / n
 }
 
+re_max <- function(x) {
+  max(Re(x))
+}
+
+re_mean <- function(x) {
+  mean(Re(x))
+}
+
+re_sd <- function(x) {
+  stats::sd(Re(x))
+}
+
 is.installed <- function(mypkg) {
   is.element(mypkg, utils::installed.packages()[,1]) 
 }
@@ -66,4 +78,33 @@ calc_sd_poly <- function(y, degree = 1) {
   x <- 1:length(y)
   model <- stats::lm(y ~ poly(x, degree))
   stats::sd(model$residual)
+}
+
+# Compute the vector cross product between x and y, and return the components
+# indexed by i. Stolen from: 
+# http://stackoverflow.com/questions/15162741/what-is-rs-crossproduct-function
+crossprod_3d <- function(x, y, i = 1:3) {
+  # Project inputs into 3D, since the cross product only makes sense in 3D.
+  To3D <- function(x) utils::head(c(x, rep(0, 3)), 3)
+  x <- To3D(x)
+  y <- To3D(y)
+  
+  # Indices should be treated cyclically (i.e., index 4 is "really" index 1, and
+  # so on).  Index3D() lets us do that using R's convention of 1-based (rather
+  # than 0-based) arrays.
+  Index3D <- function(i) (i - 1) %% 3 + 1
+  
+  # The i'th component of the cross product is:
+  # (x[i + 1] * y[i + 2]) - (x[i + 2] * y[i + 1])
+  # as long as we treat the indices cyclically.
+  return(x[Index3D(i + 1)] * y[Index3D(i + 2)] -
+            x[Index3D(i + 2)] * y[Index3D(i + 1)])
+}
+
+# stolen from the interweb
+add_alpha <- function(col, alpha = 1) {
+  if (missing(col))
+    stop("Please provide a vector of colours.")
+  apply(sapply(col, grDevices::col2rgb) / 255, 2, 
+        function(x) grDevices::rgb(x[1], x[2], x[3], alpha = alpha))  
 }

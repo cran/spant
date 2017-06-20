@@ -4,21 +4,26 @@
 \alias{comb_coils}
 \title{Combine coil data based on the first data point of a reference signal.}
 \usage{
-comb_coils(metab_mrs, ref_mrs = NULL, scale = TRUE)
+comb_coils(metab, ref = NULL, noise = NULL, scale = TRUE,
+  sum_coils = TRUE)
 }
 \arguments{
-\item{metab_mrs}{MRS data containing metabolite data.}
+\item{metab}{MRS data containing metabolite data.}
 
-\item{ref_mrs}{MRS data containing reference data (optional).}
+\item{ref}{MRS data containing reference data (optional).}
 
-\item{scale}{Option to rescale coil elements based on the first data point
+\item{noise}{MRS data from a noise scan (optional).}
+
+\item{scale}{option to rescale coil elements based on the first data point
 (logical).}
+
+\item{sum_coils}{sum the coil elements as a final step (logical).}
 }
 \value{
-MRS data with coil elements combined.
+MRS data.
 }
 \description{
-Elements are phased and optionally scaled prior to summation. Where a
+By default, elements are phased and scaled prior to summation. Where a
 reference signal is not given, the mean dynamic signal will be used
 instead.
 }

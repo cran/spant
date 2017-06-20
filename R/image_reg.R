@@ -1,56 +1,86 @@
-
-get_svs_voi <- function(mrs_data, mrsi_data = NA) {
+#' Generate a SVS acquisition volume from an \code{mrs_data} object.
+#' @param mrs_data MRS data.
+#' @param target_mri optional image data to match the intended volume space.
+#' @return volume data as a nifti object.
+#' @export
+get_svs_voi <- function(mrs_data, target_mri) {
   affine <- get_mrs_affine(mrs_data)
   raw_data <- array(1, c(mrs_data$resolution[2:4]))
-  nifti_data <- RNifti::retrieveNifti(raw_data)
-  #RNifti::sform(nifti_data) <- structure(affine, code = 2L)
-  RNifti::`sform<-`(nifti_data,structure(affine, code = 2L))
-  #RNifti::pixunits(nifti_data) <- c("mm")
-  affine[1:3, 4] = c(50, 50, 50)
-  return(nifti_data)
+  voi <- RNifti::retrieveNifti(raw_data)
+  voi <- RNifti::`sform<-`(voi, structure(affine, code = 2L))
+  
+  if (missing(target_mri)) {
+    warning("Target MRI data has not been specified.")  
+  } else {
+    voi <- resample_voi(voi, target_mri)
+  }
+  voi  
 }
 
-resample_svi_voi <- function(svs_voi, target) {
-  reg_res <- RNiftyReg::niftyreg.linear(svs_voi, target, nLevels = 0, 
+#' Resample a VOI to match a target image space.
+#' @param voi volume data as a nifti object.
+#' @param mri image data as a nifti object.
+#' @return volume data as a nifti object.
+#' @export
+resample_voi <- function(voi, mri) {
+  reg_res <- RNiftyReg::niftyreg.linear(voi, mri, nLevels = 0, 
                                         interpolation = 0, init = diag(4))$image
 }
 
-# stolen from the interweb
-add_alpha <- function(col, alpha = 1){
-  if (missing(col))
-    stop("Please provide a vector of colours.")
-  apply(sapply(col, grDevices::col2rgb) / 255, 2, 
-        function(x) 
-          grDevices::rgb(x[1], x[2], x[3], alpha = alpha))  
-}
-
-plot_vox_overlay <- function(mrs, mri) {
-  # TODO test if the mrs needs resampling before doing it
-  res_mrs <- resample_svi_voi(mrs, mri)
-  vox_inds <- get_vox_cog(res_mrs)
+#' Plot a volume as an image overlay.
+#' @export
+#' @param voi volume data as a nifti object.
+#' @param mri image data as a nifti object.
+plot_voi_overlay <- function(voi, mri) {
+  # check the image orientation etc is the same
+  check_geom(voi, mri)
+  
+  # get the centre of gravity coords
+  vox_inds <- get_voi_cog(voi)
   plot_col <- add_alpha(grDevices::heat.colors(10), 0.4)
-  neurobase::ortho2(oro.nifti::nifti(mri), oro.nifti::nifti(res_mrs),
-                    xyz = vox_inds, col.y = plot_col, zlim.y = c(1, 2))
+  mri_oro <- neurobase::robust_window(oro.nifti::nifti(mri))
+  neurobase::ortho2(mri_oro, oro.nifti::nifti(voi), xyz = vox_inds, 
+                    col.y = plot_col, zlim.y = c(1, 2))
 }
 
-plot_vox_overlay_seg <- function(mrs, mri) {
-  # TODO test if the mrs needs resampling before doing it
-  res_mrs <- resample_svi_voi(mrs, mri)
-  vox_inds <- get_vox_cog(res_mrs)
-  pvs <- get_vox_seg(res_mrs, mri)
+#' Plot a volume as an overlay on a segmented brain volume.
+#' @param voi volume data as a nifti object.
+#' @param mri_seg segmented brain volume as a nifti object.
+#' @export
+plot_voi_overlay_seg <- function(voi, mri_seg) {
+  # check the image orientation etc is the same
+  check_geom(voi, mri_seg)
+  
+  # get the centre of gravity coords
+  vox_inds <- get_voi_cog(voi)
+  
+  pvs <- get_voi_seg(voi, mri_seg)
   table <- paste("WM\t\t=  ", sprintf("%.1f", pvs[["WM"]]), "%\nGM\t\t=  ", 
                  sprintf("%.1f", pvs[["GM"]]), "%\nCSF\t=  ", 
                  sprintf("%.1f", pvs[["CSF"]]), "%\nOther\t=  ", 
                  sprintf("%.1f", pvs[["Other"]]),'%', sep = "")
   
   plot_col <- add_alpha(grDevices::heat.colors(10), 0.4)
-  neurobase::ortho2(oro.nifti::nifti(mri), oro.nifti::nifti(res_mrs),
+  neurobase::ortho2(oro.nifti::nifti(mri_seg), oro.nifti::nifti(voi),
                     xyz = vox_inds, col.y = plot_col, zlim.y = c(1, 2))
   
   graphics::par(xpd = NA)
   graphics::text(x = 0.55, y = 0.12, labels = c(table), col = "white", pos = 4, 
                  cex = 1.5)
-  x = 1
+}
+
+#' Return the white matter, gray matter and CSF composition of a volume.
+#' @param voi volume data as a nifti object.
+#' @param mri_seg segmented brain volume as a nifti object.
+#' @return a vector of partial volumes expressed as percentages.
+#' @export
+get_voi_seg <- function(voi, mri_seg) {
+  # check the image orientation etc is the same
+  check_geom(voi, mri_seg)
+  vals <- mri_seg[voi == 1]
+  pvs <- summary(factor(vals, levels = c(0, 1, 2, 3), 
+        labels = c("Other", "CSF", "GM", "WM"))) / sum(voi) * 100
+  return(pvs)
 }
 
 # generate an sform affine for nifti generation
@@ -75,64 +105,18 @@ get_mrs_affine <- function(mrs_data) {
   return(affine)
 }
 
-get_vox_pvcs <- function(mrs_data, seg_mri) {
-  mrs_nii <- get_svs_voi(mrs_data)
-  res_mrs <- resample_svi_voi(mrs_nii, seg_mri)
-  pvs <- get_vox_seg(res_mrs, seg_mri)
-  return(pvs)  
-}
+# check two nifti images are in the same space
+check_geom <- function(a, b) {
+  eq_xform <- identical(RNifti::xform(a), RNifti::xform(b))
+  eq_dim <- identical(dim(a), dim(b))
+  eq_pix_dim <- identical(RNifti::pixdim(a), RNifti::pixdim(b))
+  
+  if ( !eq_xform | !eq_dim | !eq_pix_dim ) {
+    stop("Inconsistant image geometry.")
+  }
+} 
 
-apply_pvc <- function(result, pvcs, tr){
-  te = result$data$te
-  B0 = round(result$data$ft / 42.58e6,1)
-  corr_factor <- get_corr_factor(te, tr, B0, pvcs[["GM"]], pvcs[["WM"]],
-                                 pvcs[["CSF"]])
-  
-  amp_cols = result$amp_cols
-  default_factor = 35880 * 0.7
-  result$results$GM_vol = pvcs[["GM"]]
-  result$results$WM_vol = pvcs[["WM"]]
-  result$results$CSF_vol = pvcs[["CSF"]]
-  result$results$Other_vol = pvcs[["Other"]]
-  result$results_pvc <- result$results
-  pvc_cols <- 6:(5 + amp_cols * 2)
-  result$results_pvc[, pvc_cols] <- result$results_pvc[, pvc_cols] /
-                                    default_factor * corr_factor
-  
-  # append tables with %GM, %WM, %CSF and %Other
-  
-  return(result)
-}
-
-get_vox_cog <- function(vox_data) {
-  as.integer(colMeans(which(vox_data == 1, arr.ind = TRUE)))
-}
-
-get_vox_seg <- function(vox_data, seg_data) {
-  vox_num = sum(vox_data)
-  vals <- seg_data[vox_data == 1]
-  pvs <- summary(factor(vals, levels = c(0, 1, 2, 3), 
-        labels = c("Other", "CSF", "GM", "WM"))) / sum(vox_data) * 100
-  return(pvs)
-}
-
-# Compute the vector cross product between x and y, and return the components
-# indexed by i. Stolen from: 
-# http://stackoverflow.com/questions/15162741/what-is-rs-crossproduct-function
-crossprod_3d <- function(x, y, i = 1:3) {
-  # Project inputs into 3D, since the cross product only makes sense in 3D.
-  To3D <- function(x) utils::head(c(x, rep(0, 3)), 3)
-  x <- To3D(x)
-  y <- To3D(y)
-  
-  # Indices should be treated cyclically (i.e., index 4 is "really" index 1, and
-  # so on).  Index3D() lets us do that using R's convention of 1-based (rather
-  # than 0-based) arrays.
-  Index3D <- function(i) (i - 1) %% 3 + 1
-  
-  # The i'th component of the cross product is:
-  # (x[i + 1] * y[i + 2]) - (x[i + 2] * y[i + 1])
-  # as long as we treat the indices cyclically.
-  return(x[Index3D(i + 1)] * y[Index3D(i + 2)] -
-            x[Index3D(i + 2)] * y[Index3D(i + 1)])
+# VOI centre of gravity
+get_voi_cog <- function(voi) {
+  as.integer(colMeans(which(voi == 1, arr.ind = TRUE)))
 }
