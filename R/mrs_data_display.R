@@ -95,8 +95,7 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
     xlim <- c(x_scale[1], x_scale[N(x)])
   }
   
-  x_inds <- get_seg_ind(x_scale, xlim[1], xlim[2])
-  subset <- x_inds[1]:x_inds[2]
+  subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   
   #graphics::par("xaxs" = "i", "yaxs"="i") # tight axes limits
   graphics::par("xaxs" = "i") # tight axes limits
@@ -166,8 +165,7 @@ image.mrs_data <- function(x, xlim = NULL, mode = "real", col = NULL,
   graphics::par(mar = c(3.5, 3.5, 1, 1)) # margins
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
   
-  x_inds <- get_seg_ind(x_scale, xlim[1], xlim[2])
-  subset <- x_inds[1]:x_inds[2]
+  subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   
   data_dim <- dim(x$data)
   
@@ -295,8 +293,8 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "real", col = NULL,
     z_pos <- as.integer(data_dim[4] / 2) + 1
   }
   
-  x_inds <- get_seg_ind(x_scale, xlim[1], xlim[2])
-  subset <- x_inds[1]:x_inds[2]
+  subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
+  
   if (dim == "dyn") {
     plot_data <- t(x$data[1, x_pos, y_pos, y_pos, , coil, subset])
     yN <- data_dim[5]
@@ -367,9 +365,8 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "real", col = NULL,
         #col=gray.colors(64), ...)
 }
 
-
 plot_slice_map <- function(data, lower = NULL, upper = NULL, mask_map = NULL,
-                           mask_cutoff = 20, interp = 16, slice = 1, dyn = 1,
+                           mask_cutoff = 20, interp = 1, slice = 1, dyn = 1,
                            coil = 1, ref = 1, denom = NULL,
                            horizontal = FALSE) {
   
@@ -392,18 +389,20 @@ plot_slice_map <- function(data, lower = NULL, upper = NULL, mask_map = NULL,
     data <- data / denom
   }
   
+  asp <- ncol(data) / nrow(data)
+  
   if (!is.null(lower) & !is.null(upper)) {
     data <- crop_range(data, lower, upper)
     breaks <- seq(from = lower, to = upper, length.out = 129)
     fields::image.plot(data, col = viridis::viridis(128), useRaster = T,
-                       asp = 1, axes = F, breaks = breaks,
+                       asp = asp, axes = F, breaks = breaks,
                        horizontal = horizontal)
     
     #image(data, col=viridis::viridis(128), useRaster = T, asp = 1, axes = F,
     #      breaks = breaks)
   } else {
     fields::image.plot(data, col = viridis::viridis(128), useRaster = T,
-                       asp = 1, axes = F, horizontal = horizontal)
+                       asp = asp, axes = F, horizontal = horizontal)
     
     #image(data, col = viridis::viridis(128), useRaster = T, asp = 1, axes = F)
   }
