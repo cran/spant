@@ -36,8 +36,28 @@
 #' fit_result <- fit_mrs(svs, basis)
 #' }
 #' @export
-fit_mrs <- function(metab, basis, method = 'VARPRO_3P', w_ref = NULL, opts = NULL, 
+fit_mrs <- function(metab, basis = NULL, method = 'VARPRO_3P', w_ref = NULL, opts = NULL, 
                     parallel = FALSE, cores = 4) {
+  
+  # start the clock
+  ptm <- proc.time()
+  
+  # force uppercase for matching
+  METHOD <- toupper(method)
+  
+  # let's assume a PRESS basis and simulate if one isn't specified
+  if (is.null(basis)) {
+    if (METHOD == "LCMODEL") {
+      lcm_compat = TRUE
+    } else {
+      lcm_compat = FALSE
+    }
+    TE1 = 0.01
+    TE2 = metab$te - TE1
+    warning("Basis set not specified, so simulating default PRESS brain basis.")
+    basis <- sim_basis_1h_brain_press(metab, lcm_compat = lcm_compat, TE1 = TE1, 
+                                      TE2 = TE2) 
+  }
   
   if (class(basis) == "basis_set") {
     # TODO check basis matches mrs_data 
@@ -45,6 +65,7 @@ fit_mrs <- function(metab, basis, method = 'VARPRO_3P', w_ref = NULL, opts = NUL
     if (!file.exists(basis)) {
       stop("Error, basis file not found.")
     }
+    basis <- read_basis(basis)
   } else {
     stop("Error, specified basis is not the correct data type.")
   }
@@ -67,9 +88,6 @@ fit_mrs <- function(metab, basis, method = 'VARPRO_3P', w_ref = NULL, opts = NUL
   #  library(parallel)
   #  parallel::makeCluster(cores, type = "SOCK")
   #}
-  
-  # force uppercase for matching
-  METHOD <- toupper(method)
   
   if (METHOD == "VARPRO") {
     # read basis into memory if a file
@@ -230,8 +248,12 @@ fit_mrs <- function(metab, basis, method = 'VARPRO_3P', w_ref = NULL, opts = NUL
   res_tab <- cbind(labs, amps, crlbs, diags)
   res_tab[, 1:5] <- sapply(res_tab[, 1:5], as.numeric)
   
+  # stop the clock
+  proc_time <- proc.time() - ptm
+  
   out <- list(res_tab = res_tab, fits = fits, 
-              data = metab, amp_cols = ncol(amps))
+              data = metab, basis = basis, amp_cols = ncol(amps), 
+              proc_time = proc_time)
   
   class(out) <- "fit_result"
   return(out)

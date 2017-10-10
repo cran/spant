@@ -2,14 +2,20 @@
 % Please edit documentation in R/mrs_data_proc.R
 \name{lb}
 \alias{lb}
-\title{Apply line-broadening (apodisation) to MRS data.}
+\alias{lb.mrs_data}
+\alias{lb.basis_set}
+\title{Apply line-broadening (apodisation) to MRS data or basis object.}
 \usage{
-lb(mrs_data, lb, lg = 1)
+lb(x, lb, lg = 1)
+
+\method{lb}{mrs_data}(x, lb, lg = 1)
+
+\method{lb}{basis_set}(x, lb, lg = 1)
 }
 \arguments{
-\item{mrs_data}{input data}
+\item{x}{input mrs_data or basis_set object}
 
-\item{lb}{amount on line-broadening in Hz}
+\item{lb}{amount of line-broadening in Hz}
 
 \item{lg}{Lorentz-Gauss lineshape parameter (between 0 and 1)}
 }
@@ -17,5 +23,5 @@ lb(mrs_data, lb, lg = 1)
 line-broadened data
 }
 \description{
-Apply line-broadening (apodisation) to MRS data.
+Apply line-broadening (apodisation) to MRS data or basis object.
 }
