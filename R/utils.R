@@ -1,9 +1,14 @@
+#' Covert a beta value in the time-domain to an equivalent linewidth in Hz:
+#' x * exp(-i * t * t * beta)
+#' @param beta beta damping value 
+#' @return linewidth value in Hz
+#' @export
 beta2lw <- function(beta) {2 * (-beta * log(0.5)) ^ 0.5 / pi}
 
 #' Covert a linewidth in Hz to an equivalent beta value in the time-domain ie:
-#' x * exp(-i * t * t * beta).
-#' @param lw linewidth in Hz.
-#' @return beta value.
+#' x * exp(-i * t * t * beta)
+#' @param lw linewidth in Hz
+#' @return beta damping value
 #' @export
 lw2beta <- function(lw) {(lw * pi / 2) ^ 2 / (-log(0.5))}
 
@@ -157,3 +162,6 @@ crop_range <- function(map, lower, upper) {
   map <- ifelse(map > upper_lim, upper_lim,map)  
   ifelse(map < lower_lim, lower_lim, map)  
 }
+
+# https://stackoverflow.com/questions/13432863/determine-level-of-nesting-in-r
+depth <- function(this) ifelse(is.list(this), 1L + max(sapply(this, depth)), 0L)

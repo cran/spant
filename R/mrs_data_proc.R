@@ -281,6 +281,32 @@ apply_mrs <- function(mrs_data, dims, fun, ..., data_only = FALSE) {
   }
 }
 
+#' Apply a frequency shift to MRS data
+#' @param mrs_data MRS data
+#' @param shift frequency shift (in ppm by default)
+#' @param units of the shift ("ppm" or "hz")
+#' @return frequency shifted MRS data.
+#' @export
+shift <- function(mrs_data, shift, units = "ppm") {
+  # covert to time-domain
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  if (units == "hz") {
+    shift_hz <- shift
+  } else if (units == "ppm") {
+    shift_hz <- ppm2hz(shift, mrs_data$ft, 0)
+  } else {
+    stop("Error, did not recognise the units.") 
+  }
+  
+  t_orig <- rep(seconds(mrs_data), each = Nspec(mrs_data))
+  t_array <- array(t_orig, dim = dim(mrs_data$data))
+  shift_array <- array(shift_hz, dim = dim(mrs_data$data))
+  shift_array <- exp(2i * pi * t_array * shift_array)
+  mrs_data$data <- mrs_data$data * shift_array
+  mrs_data
+}
+
 #' Apply phasing parameters to MRS data.
 #' @param mrs_data MRS data.
 #' @param zero_order Zero'th order phase term in degrees.
@@ -428,7 +454,6 @@ zf <- function(mrs_data, factor = 2) {
 #' appropriate.
 #' @param mrs_data MRS data.
 #' @param pts Number of data points.
-#' @param ref reference value for ppm scale.
 #' @return MRS data with pts data points.
 #' @export
 set_td_pts <- function(mrs_data, pts) {
@@ -451,8 +476,10 @@ set_td_pts <- function(mrs_data, pts) {
   return(mrs_data)
 }
 
+#' Set the ppm reference value (eg ppm value at 0Hz).
+#' @param mrs_data MRS data.
+#' @param ref reference value for ppm scale.
 #' @export
-#' @rdname set_td_pts
 set_ref <- function(mrs_data, ref) {
   mrs_data$ref = ref
   return(mrs_data)
@@ -529,6 +556,9 @@ dyns <- function(mrs_data) {
   dim(mrs_data$data)[5]
 }
 
+#' Return the total number of spectra in an MRS dataset.
+#' @param mrs_data MRS data.
+#' @export
 Nspec <- function(mrs_data) {
   mrs_dims <- dim(mrs_data$data)
   (mrs_dims[1] * mrs_dims[2] * mrs_dims[3] * mrs_dims[4] * mrs_dims[5] *
@@ -708,15 +738,14 @@ align <- function(mrs_data, ref_peak = 4.65, zf_factor = 2, lb = 2,
   shifts <- apply_mrs(mrs_data_zf, 7, conv_align, ref_data, window,
                       1/mrs_data$resolution[7], data_only = TRUE)
   
-  #return(shifts)
-  t_orig <- rep(seconds(mrs_data), each = Nspec(mrs_data))
-  t_array <- array(t_orig, dim = dim(mrs_data$data))
-  shift_array <- array(shifts, dim = dim(mrs_data$data))
-  shift_array <- exp(2i * pi * t_array * shift_array)
-  mrs_data$data <- mrs_data$data * shift_array
   if (ret_df) {
     return(list(mrs_data, abind::adrop(shifts, 7)))
   } else {
+    t_orig <- rep(seconds(mrs_data), each = Nspec(mrs_data))
+    t_array <- array(t_orig, dim = dim(mrs_data$data))
+    shift_array <- array(shifts, dim = dim(mrs_data$data))
+    shift_array <- exp(2i * pi * t_array * shift_array)
+    mrs_data$data <- mrs_data$data * shift_array
     return(mrs_data)
   }
 }
@@ -873,23 +902,21 @@ get_metab <- function(mrs_data) {
   mrs_data
 }
 
-
-#' Append MRS data across the dynamic dimension.
-#' @param ... MRS data objects.
-#' @return A single MRS data object with the input objects concatenated together.
+#' Append MRS data across the dynamic dimension, assumes they matched across the
+#' other dimensions.
+#' @param ... MRS data objects as arguments, or a list of MRS data objects
+#' @return A single MRS data object with the input objects concatenated together
 #' @export
 append_dyns <- function(...) {
-  # make a list if not one already
-  if (!is.list(...)) {
-    x <- list(...)
-  } else {
-    x <- list(...)[[1]]
-  }
+  x <- list(...)
+  
+  # were the arguments a list already? 
+  if (depth(x) == 3) x <- x[[1]]
   
   first_dataset <- x[[1]]
   
   if (is_fd(first_dataset)) {
-        first_dataset <- fd2td(first_dataset)
+    first_dataset <- fd2td(first_dataset)
   }
   
   # data needs to be in the same domain
@@ -901,7 +928,7 @@ append_dyns <- function(...) {
   }
   
   new_data <- abind::abind(x, along = 5)
-  first_dataset$data <- new_data
+  first_dataset$data <- unname(new_data)
   first_dataset
 }
 

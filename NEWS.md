@@ -1,3 +1,13 @@
+# spant 0.6.0
+* Interactive plotting function added for fit results - plot_fit_slice_inter.
+* Bug fix for appending dynamic results.
+* Bug fix for reading list data files without reference data.
+* Bug fix for append_dyns function.
+* basis2mrs_data function has been extended to allow the summation of basis
+elements and setting of individual amplitudes.
+* Added a shift function for manual frequency shift adjustment.
+* Added initial unit tests and automated coveralls checking.
+
 # spant 0.5.0
 * A default brain PRESS basis is now simulated by the fit_mrs function when the
 basis argument isn't specified.
@@ -7,7 +17,7 @@ basis argument isn't specified.
 * Bug fix for simulating basis sets with one element.
 * lb function can now be used with basis-set objects.
 * Bug fix for spar_sdat reader for non-localised MRS.
-* AppVeyor now being used to test Windows compatability - John Muschelli.
+* AppVeyor now being used to test Windows compatibility - John Muschelli.
 
 # spant 0.4.0
 * Bug fix for SPAR/SDAT SVS voxel dimensions.

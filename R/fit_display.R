@@ -190,7 +190,16 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 0.04,
 #' @param ... further arguments.
 #' @export
 print.fit_result <- function(x, ...) {
-  print(summary(x$res_tab))
+  cat("Fitting results\n", sep = "")
+  cat("--------------------------\n", sep = "")
+  cat("Analysis duration : ", x$proc_time[3],"s\n", sep = "")
+  #cat("Mean residual     : ", mean(x$res_tab$res.deviance),"\n", sep = "")
+  #cat("Mean iterations   : ", mean(x$res_tab$res.niter),"\n", sep = "")
+  cat("Number of spectra : ", Nspec(x$data),"\n", sep = "")
+  cat("Basis elements    : ", dim(x$basis$data)[2], "\n\n", sep = "")
+  cat("Basis names\n", sep = "")
+  cat("-------------------------------\n")
+  cat(x$basis$names, sep = ",", fill = 31)
 }
 
 #' Print fit coordinates from a single index.
