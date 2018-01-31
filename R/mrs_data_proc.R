@@ -54,8 +54,8 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
     temp_data <- amp[n] * exp(1i * pi * phase[n] / 180 + 2i * pi * f_hz[n] * t)
     
     # LG peak model
-    temp_data <- temp_data * ((1 - lg) * exp(-lw[n] * t * pi) + 
-                              lg * exp(-lw2beta(lw[n]) * t * t))
+    temp_data <- temp_data * ((1 - lg[n]) * exp(-lw[n] * t * pi) + 
+                              lg[n] * exp(-lw2beta(lw[n]) * t * t))
     
     data <- data + temp_data
   }
@@ -263,6 +263,13 @@ sim_zeros <- function(fs = def_fs(), ft = def_ft(), N = def_N(),
   array2mrs_data(data_array, fs = fs, ft = ft, ref = ref)
 }
 
+#' Apply a function across given dimensions of a MRS data object
+#' @param mrs_data MRS data
+#' @param dims dimensions to apply the function
+#' @param fun name of the function
+#' @param ... arguments to the function
+#' @param data_only return an array rather than an MRS data object
+#' @export
 apply_mrs <- function(mrs_data, dims, fun, ..., data_only = FALSE) {
   dims <- sort(dims)
   margins <- c(1:7)[-dims]
@@ -485,6 +492,11 @@ set_ref <- function(mrs_data, ref) {
   return(mrs_data)
 }
 
+#' Check if the chemical shift dimension of an MRS data object is in the
+#' frequency domain
+#' @param mrs_data MRS data
+#' @return logical value
+#' @export
 is_fd <- function(mrs_data) {
   mrs_data$freq_domain[7]
 }
@@ -795,6 +807,18 @@ get_dyns <- function(mrs_data, subset) {
   return(mrs_data)
 }
 
+#' Interleave the first and second half of a dynamic series
+#' @param mrs_data dynamic MRS data
+#' @return interleaved data
+#' @export
+interleave_dyns <- function(mrs_data) {
+  total <- dyns(mrs_data)
+  fh <- 1:(total / 2)
+  sh <- (total / 2 + 1):total
+  new_idx <- c(rbind(fh, sh))
+  get_dyns(mrs_data, new_idx)
+}
+
 set_dyns <- function(mrs_data, subset, mrs_data_in) {
   mrs_data$data[,,,, subset,,] = mrs_data_in$data[,,,, 1,,]
   return(mrs_data)
@@ -833,6 +857,24 @@ get_voxel <- function(mrs_data, x_pos = 1, y_pos = 1, z_pos = 1, dyn = 1, coil =
 get_slice <- function(mrs_data, z_pos) {
   mrs_data$data <- mrs_data$data[,,,z_pos,,,, drop = FALSE]
   return(mrs_data)
+}
+
+#' Return the first half of a dynamic series
+#' @param mrs_data dynamic MRS data
+#' @return first half of the dynamic series
+#' @export
+get_fh_dyns <- function(mrs_data) {
+  fh <- 1:(dyns(mrs_data) / 2)
+  get_dyns(mrs_data, fh)
+}
+
+#' Return the second half of a dynamic series
+#' @param mrs_data dynamic MRS data
+#' @return second half of the dynamic series
+#' @export
+get_sh_dyns <- function(mrs_data) {
+  sh <- (dyns(mrs_data) / 2 + 1):dyns(mrs_data)
+  get_dyns(mrs_data, sh)
 }
   
 #' Return odd numbered dynamic scans starting from 1 (1,3,5...).
@@ -879,7 +921,7 @@ inv_even_dyns <- function(mrs_data) {
 #' @param ref reference mrs_data object.
 #' @return Combined metabolite and reference mrs_data object.
 #' @export
-combine_metab_ref <- function(metab, ref) {
+comb_metab_ref <- function(metab, ref) {
   metab$data <- abind::abind(metab$data, ref$data, along = 1)
   metab
 }
@@ -1040,6 +1082,10 @@ cplx_median <- function(input) {
   stats::median(Re(input)) + stats::median(Im(input)) * 1i
 }
 
+#' Calculate the median dynamic data.
+#' @param mrs_data Dynamic MRS data.
+#' @return Median dynamic data.
+#' @export
 median_dyns <- function(mrs_data) {
   return(apply_mrs(mrs_data, 5, cplx_median))
 }
@@ -1324,7 +1370,7 @@ ecc <- function(metab, ref) {
     ref <- rep_dyn(ref, dyns(metab))
   }
   
-  mrs_data <- combine_metab_ref(metab, ref)
+  mrs_data <- comb_metab_ref(metab, ref)
   ecc_data <- apply_mrs(mrs_data, c(1,7), ecc_2d_array)
   get_metab(ecc_data)
 }
@@ -1678,4 +1724,22 @@ int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "real") {
   }
   
   apply(data_arr, c(1, 2, 3, 4, 5, 6), sum)
+}
+
+
+#' Calculate the sum of squares differences between two mrs_data objects
+#' @param mrs_data mrs_data oject 
+#' @param ref reference mrs_data object to calculate differences
+#' @param xlim spectral limits to perform calculation
+#' @return an array of the sum of squared difference values
+#' @export
+calc_spec_diff <- function(mrs_data, ref = NULL, xlim = c(4, 0.5)) {
+  # diff from mean dynamic if ref not given
+  if (is.null(ref)) ref <- mean_dyns(mrs_data)
+  
+  mrs_data_crop <- crop_spec(mrs_data, xlim)
+  ref_crop <- crop_spec(ref, xlim)
+  ref_crop <- rep_dyn(ref_crop, dyns(mrs_data))
+  res <- mrs_data_crop - ref_crop
+  apply_mrs(res, 7, cplx_sum_sq, data_only = TRUE)
 }

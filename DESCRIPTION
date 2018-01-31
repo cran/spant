@@ -1,8 +1,8 @@
 Package: spant
 Type: Package
 Title: MR Spectroscopy Analysis Tools
-Version: 0.6.0
-Date: 2017-10-25
+Version: 0.7.0
+Date: 2018-01-01
 Authors@R: c(
   person("Martin", "Wilson", email = "martin@pipegrep.co.uk", role = c("cre","aut")),
   person("John", "Muschelli", role = "ctb"))
@@ -22,9 +22,9 @@ Suggests: oro.nifti, MASS, fastICA, fields, mmand, ptw, viridisLite,
 VignetteBuilder: knitr
 Encoding: UTF-8
 NeedsCompilation: no
-Packaged: 2017-10-25 12:29:43 UTC; wilsonmp
+Packaged: 2018-01-31 11:00:19 UTC; wilsonmp
 Author: Martin Wilson [cre, aut],
   John Muschelli [ctb]
 Maintainer: Martin Wilson <martin@pipegrep.co.uk>
 Repository: CRAN
-Date/Publication: 2017-10-25 12:36:04 UTC
+Date/Publication: 2018-01-31 11:08:05 UTC

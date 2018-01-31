@@ -1,3 +1,10 @@
+# spant 0.7.0
+* Added new function for frequency drift correction.
+* Added support for Siemens ima and TWIX SVS data.
+* Added support for GE p-file SVS data.
+* Added apply_axes fn.
+* Support for reading SPM style segmentation results (spm_pve2categorical).
+
 # spant 0.6.0
 * Interactive plotting function added for fit results - plot_fit_slice_inter.
 * Bug fix for appending dynamic results.

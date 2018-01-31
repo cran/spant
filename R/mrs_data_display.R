@@ -50,6 +50,8 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
                           y_pos = 1, z_pos = 1, coil = 1, lwd = NULL, 
                           bty = NULL, label = "", ...) {
   
+  .pardefault <- graphics::par(no.readonly = T)
+  
   # convert to the correct domain for plotting
   if (fd & !is_fd(x)) {
     x <- td2fd(x)
@@ -131,6 +133,8 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
     graphics::text(xlim[1],max_dp * 1.03, label, cex = 2.5)
     graphics::par(xpd = F) 
   }
+  
+  graphics::par(.pardefault)
 }
 
 #' Image plot method for objects of class mrs_data.
@@ -152,6 +156,9 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
 image.mrs_data <- function(x, xlim = NULL, mode = "real", col = NULL, 
                            dim = "dyn", x_pos = NULL, y_pos = NULL,
                            z_pos = NULL, dyn = 1, coil = 1, ...) { 
+  
+  .pardefault <- graphics::par(no.readonly = T)
+  
   if (!is_fd(x)) {
     x <- td2fd(x)
   }
@@ -227,6 +234,8 @@ image.mrs_data <- function(x, xlim = NULL, mode = "real", col = NULL,
                   plot_data[length(subset):1,], xlim = xlim,
                   xlab = "Frequency (ppm)", ylab = y_title, 
                   col = col, ...)
+  
+  graphics::par(.pardefault)
 }
 
 #' Produce a plot with multiple traces.
@@ -259,6 +268,8 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "real", col = NULL,
                                x_offset = 0, y_offset = 5, dim = "dyn", 
                                x_pos = NULL, y_pos = NULL, z_pos = NULL, 
                                dyn = 1, coil = 1, ...) {
+  
+  .pardefault <- graphics::par(no.readonly = T)
   
   if (!is_fd(x)) {
     x <- td2fd(x)
@@ -363,6 +374,8 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "real", col = NULL,
           #, (1:dyns(mrs_data)), plot_data[length(subset):1,],
         #xlim=xlim, xlab="Frequency (ppm)", ylab="Dynamic", 
         #col=gray.colors(64), ...)
+  
+  graphics::par(.pardefault)
 }
 
 #' Plot a slice from a 7 dimensional array
