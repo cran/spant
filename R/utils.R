@@ -32,22 +32,41 @@ apply_axes <- function(x, axes, fun, ...) {
   x
 }
 
-# TODO
-# see rep dyn for example
-#rep_array_dim <- function(x, dim, n) {
-#  orig_dim <- dim(x)
-#  new_dim <- orig_dim
-#  new_dim[dim] <- new_dim[dim] * n
-#  # make the dynamic dimension (5th) the last
-#  z <- aperm(x, c(1,2,3,4,6,7,5))
-#  # duplicate the data
-#  z <- rep(z, n)
-#  # set the new dimesnions
-#  dim(z) <- new_dim[c(1,2,3,4,6,7,5)]
-#  # reorder
-#  aperm(z, c(1,2,3,4,7,5,6))
-#}
+#' Repeat an array over a given dimension
+#' @param x array
+#' @param rep_dim dimension to extend
+#' @param n number of times to repeat
+#' @return extended array
+#' @export
+rep_array_dim <- function(x, rep_dim, n) {
+  dims <- length(dim(x))
+  orig_dim <- dim(x)
+  new_dim <- orig_dim
+  new_dim[rep_dim] <- new_dim[rep_dim] * n
+  # make rep_dim the last dimension
+  perm_vec <- (1:dims)[-rep_dim]
+  perm_vec <- c(perm_vec, rep_dim)
+  z <- aperm(x, perm_vec)
+  # duplicate the data
+  z <- rep(z, n)
+  # set the new dimensions
+  dim(z) <- new_dim[perm_vec]
+  # reorder
+  perm_vec <- append((1:(dims - 1)), dims, rep_dim - 1)
+  aperm(z, perm_vec)
+}
 
+#rep_array_dim <- function(x, rep_dim, n) {
+#  if (dim(x)[rep_dim] != 1) stop("Starting dimension extent does not equal one.")
+#  z <- replicate(n, x)
+#  dims <- length(dim(z))
+#  perm_vec <- 1:dims
+#  perm_vec[rep_dim] <- dims
+#  perm_vec[dims] <- rep_dim
+#  z <- aperm(z, perm_vec)
+#  # drop the last dimension
+#  abind::adrop(z, dims)
+#}
 
 #' Covert a beta value in the time-domain to an equivalent linewidth in Hz:
 #' x * exp(-i * t * t * beta)
@@ -101,7 +120,7 @@ mvfftshift <- function(x) {
   m <- NROW(x)
   p <- ceiling(m/2)
   idx <- c((p + 1):m, 1:p)
-  x[idx,,drop=FALSE]
+  x[idx,,drop = FALSE]
 }
 
 hilbert <- function(x) {
@@ -219,3 +238,49 @@ crop_range <- function(map, lower, upper) {
 
 # https://stackoverflow.com/questions/13432863/determine-level-of-nesting-in-r
 depth <- function(this) ifelse(is.list(this), 1L + max(sapply(this, depth)), 0L)
+
+#' Simulate MRS data with a similar appearance to normal brain (by default).
+#' @param acq_paras list of acquisition parameters or an mrs_data object. See
+#' \code{\link{def_acq_paras}}
+#' @param type type of spectrum, only "normal" is implemented currently.
+#' @param pul_seq pulse sequence function to use
+#' @param xlim range of frequencies to simulate in ppm
+#' @param full_output when FALSE (default) only output the simulated MRS data.
+#' When TRUE output a list containing the MRS data, basis set object and 
+#' corresponding amplitudes.
+#' @param amps a vector of basis amplitudes may be specified to modify the
+#' output spectrum
+#' @param ... extra parameters to pass to the pulse sequence function.
+#' @return see full_output option
+#' @export
+sim_brain_1h <- function(acq_paras = def_acq_paras(), type = "normal",
+                         pul_seq = press_ideal, xlim = c(0.5, 4.2), 
+                         full_output = FALSE, amps = NULL,  ...) {
+  
+  brain_basis_paras <- get_1h_brain_basis_paras(ft = acq_paras$ft)
+  
+  basis <- sim_basis(brain_basis_paras, pul_seq, fs = acq_paras$fs,
+                     N = acq_paras$N, ref = acq_paras$ref, ft = acq_paras$ft, 
+                     xlim = xlim, ...)
+  
+  if (is.null(amps)) {
+    if (type == "normal") {
+      amps <- c(0.000000000, 0.009799548, 0.072152490, 0.077845526, 0.045575002, 
+                0.005450371, 0.000000000, 0.028636132, 0.076469056, 0.028382618,
+                0.069602483, 0.001763720, 0.042031981, 0.013474549, 0.000000000, 
+                0.000000000, 0.015705756, 0.001903173, 0.063409950, 0.051807236,
+                0.222599530, 0.110431759, 0.023451957, 0.000000000, 0.032474090,
+                0.007033074, 0.000000000)
+    } else {
+      stop("invalid spectrum type")
+    }
+  }
+
+  mrs_data <- basis2mrs_data(basis, sum_elements = TRUE, amp = amps)
+  
+  if (!full_output) {
+    return(mrs_data)
+  } else {
+    return(list(mrs_data = mrs_data, basis = basis, amps = amps))
+  }
+}

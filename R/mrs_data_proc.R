@@ -308,7 +308,15 @@ shift <- function(mrs_data, shift, units = "ppm") {
   
   t_orig <- rep(seconds(mrs_data), each = Nspec(mrs_data))
   t_array <- array(t_orig, dim = dim(mrs_data$data))
-  shift_array <- array(shift_hz, dim = dim(mrs_data$data))
+  
+  if (length(shift_hz) == 1) {
+    shift_array <- array(shift_hz, dim = dim(mrs_data$data))
+  } else {
+    if (length(shift_hz) != dyns(mrs_data)) stop("Shift vector has an incorrect length.")
+    # assume array should be applied in the dynamic dimension
+    shift_array <- array(shift_hz, dim = c(1,1,1,1,dyns(mrs_data),1,N(mrs_data)))
+  }
+  
   shift_array <- exp(2i * pi * t_array * shift_array)
   mrs_data$data <- mrs_data$data * shift_array
   mrs_data
@@ -321,9 +329,9 @@ shift <- function(mrs_data, shift, units = "ppm") {
 #' @return MRS data with applied phase parameters.
 #' @export
 phase <- function(mrs_data, zero_order, first_order = 0) {
-  if (first_order == 0) {
+  if ((first_order == 0) && (length(zero_order) == 1)) {
     mrs_data$data = mrs_data$data * exp(1i * zero_order * pi / 180)
-  } else {
+  } else if ((length(zero_order) == 1) && (first_order != 0)) {
     freq <- rep(hz(mrs_data), each = Nspec(mrs_data))
     freq_mat <- array(freq, dim = dim(mrs_data$data))
     # needs to be a freq-domain operation
@@ -332,6 +340,13 @@ phase <- function(mrs_data, zero_order, first_order = 0) {
     }
     mrs_data$data = mrs_data$data * exp(2i * pi * (zero_order / 360 - freq_mat
                                                    * first_order / 1000))
+  } else if ((length(zero_order) > 0) && (first_order == 0)) {
+    if (length(zero_order) != dyns(mrs_data)) stop("Shift vector has an incorrect length.")
+    # assume array should be applied in the dynamic dimension
+    phase_array <- array(zero_order, dim = c(1,1,1,1,dyns(mrs_data),1,N(mrs_data)))
+    mrs_data$data = mrs_data$data * exp(1i * phase_array * pi / 180)
+  } else {
+    stop("Unsupported input options.")
   }
   return(mrs_data)
 }
@@ -1522,24 +1537,38 @@ comb_coils <- function(metab, ref = NULL, noise = NULL,
   }
 }
 
-#' Replicate a scan in the dynamic dimension.
-#' @param mrs_data MRS data to be replicated.
-#' @param times Number of times to replicate.
-#' @return Replicated data object.
+#' Replicate a scan in the dynamic dimension
+#' @param mrs_data MRS data to be replicated
+#' @param times Number of times to replicate
+#' @return replicated data object
 #' @export
 rep_dyn <- function(mrs_data, times) {
-  orig_dim <- dim(mrs_data$data)
-  new_dim <- orig_dim
-  new_dim[5] <- new_dim[5] * times
-  # make the dynamic dimension (5th) the last
-  rep_data <- aperm(mrs_data$data, c(1,2,3,4,6,7,5))
-  # duplicate the data
-  rep_data <- rep(rep_data, times)
-  # set the new dimesnions
-  dim(rep_data) <- new_dim[c(1,2,3,4,6,7,5)]
-  # reorder
-  rep_data <- aperm(rep_data, c(1,2,3,4,7,5,6))
-  mrs_data$data <- rep_data
+  mrs_data$data <- rep_array_dim(mrs_data$data, 5, times)
+  mrs_data
+}
+
+#' Replicate a scan over a given dimension
+#' @param mrs_data MRS data to be replicated
+#' @param x_rep number of x replications
+#' @param y_rep number of y replications
+#' @param z_rep number of z replications
+#' @param dyn_rep number of dynamic replications
+#' @param coil_rep number of coil replications
+#' @return replicated data object
+#' @export
+rep_mrs <- function(mrs_data, x_rep = 1, y_rep = 1, z_rep = 1, dyn_rep = 1,
+                    coil_rep = 1) {
+  
+  old_dims <- dim(mrs_data$data) 
+  
+  if (x_rep != 1) mrs_data$data <- rep_array_dim(mrs_data$data, 2, x_rep)
+  if (y_rep != 1) mrs_data$data <- rep_array_dim(mrs_data$data, 3, y_rep)
+  if (z_rep != 1) mrs_data$data <- rep_array_dim(mrs_data$data, 4, z_rep)
+  if (dyn_rep != 1) mrs_data$data <- rep_array_dim(mrs_data$data, 5, dyn_rep)
+  if (coil_rep != 1) mrs_data$data <- rep_array_dim(mrs_data$data, 6, coil_rep)
+  
+  if (identical(old_dims, dim(mrs_data$data))) warning("Data dimensions not changed.")
+  
   mrs_data
 }
 
@@ -1690,7 +1719,7 @@ calc_peak_info_vec <- function(data_pts, interp_f) {
 #' @param mrs_data MRS data.
 #' @param xlim spectral range to be integrated.
 #' @param scale units of xlim, can be : "ppm", "Hz" or "points".
-#' @param mode spectral mode, can be : "real", "imag" or "abs".
+#' @param mode spectral mode, can be : "re", "im" or "mod".
 #' @return an array of integral values.
 #' @export
 int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "real") {
@@ -1715,11 +1744,11 @@ int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "real") {
   
   data_arr <- mrs_data$data[,,,,,, subset, drop = F]
   
-  if (mode == "real") {
+  if (mode == "re") {
     data_arr <- Re(data_arr)
-  } else if (mode == "imag") {
+  } else if (mode == "im") {
     data_arr <- Im(data_arr)
-  } else if (mode == "abs") {
+  } else if (mode == "mod") {
     data_arr <- Mod(data_arr)
   }
   

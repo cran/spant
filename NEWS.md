@@ -1,3 +1,10 @@
+# spant 0.8.0
+* Updated plotting modes to be one of : "re", "im", "mod" or "arg".
+* Updated int_spec function to use "re", "im", or "mod".
+* Added a function to replicate data across a particular dimension.
+* Added a convenience function to simulate normal looking 1H brain MRS data.
+* phase and shift functions now accept vector inputs.
+
 # spant 0.7.0
 * Added new function for frequency drift correction.
 * Added support for Siemens ima and TWIX SVS data.
