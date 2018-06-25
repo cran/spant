@@ -43,12 +43,13 @@ print.mrs_data <- function(x, ...) {
 #' @param lwd plot linewidth.
 #' @param bty option to draw a box around the plot. See ?par.
 #' @param label character string to add to the top left of the plot window.
+#' @param restore_def_par restore default plotting par values after the plot has 
 #' @param ... other arguments to pass to the plot method.
 #' @export
 plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
                           y_scale = FALSE, mode = "re", dyn = 1, x_pos = 1,
                           y_pos = 1, z_pos = 1, coil = 1, lwd = NULL, 
-                          bty = NULL, label = "", ...) {
+                          bty = NULL, label = "", restore_def_par = TRUE, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -59,13 +60,10 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
     x <- fd2td(x)
   }
   
-  if (is.null(lwd)) {
-    lwd <- 1.2
-  }
+  if (is.null(lwd)) lwd <- 1.0
   
-  if (is.null(bty)) {
-    bty <- "o"
-  }
+  if (is.null(bty) && !y_scale) bty <- "n"
+  if (is.null(bty) && y_scale) bty <- "l"
   
   if (fd) {
     xlab <- "Chemical Shift"  
@@ -95,9 +93,7 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
     stop("Invalid x_units option, should be one of : 'ppm', 'hz', 'points' or 'seconds'") 
   }
   
-  if (is.null(xlim)) {
-    xlim <- c(x_scale[1], x_scale[N(x)])
-  }
+  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[N(x)])
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   
@@ -120,34 +116,38 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
   if (y_scale) {
     graphics::par(mar = c(3.5, 3.5, 1, 1))
-    graphics::plot(x_scale[subset], plot_data[subset],type = 'l',xlim = xlim, 
-                   xlab = xlab, ylab = "Intensity (au)", lwd = lwd,
-                   bty = bty, ...)
+    graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim, 
+                   xlab = xlab, ylab = "Intensity (au)", lwd = lwd, bty = bty, 
+                   xaxt = "n", yaxt = "n", ...)
+    graphics::axis(2, lwd = 0, lwd.ticks = 1)
   } else {
     graphics::par(mar = c(3.5, 1, 1, 1))
     graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim,
-         xlab = xlab, yaxt = "n", ylab = "", lwd = lwd, bty = bty, ...)
+         xlab = xlab, yaxt = "n", xaxt = "n", ylab = "", lwd = lwd, bty = bty,
+         ...)
   }
   
+  graphics::axis(1, lwd = 0, lwd.ticks = 1)
+  
   if (bty == "n") {
-    graphics::abline(a = graphics::par("usr")[3], b = 0, lwd = 1.0) 
+    graphics::abline(h = graphics::par("usr")[3]) 
   }
   
   if (!is.null(label)) {
     max_dp <- max(plot_data[subset])
     graphics::par(xpd = T)
-    graphics::text(xlim[1],max_dp * 1.03, label, cex = 2.5)
+    graphics::text(xlim[1], max_dp * 1.03, label, cex = 2.5)
     graphics::par(xpd = F) 
   }
   
-  graphics::par(.pardefault)
+  if (restore_def_par) graphics::par(.pardefault)
 }
 
 #' Image plot method for objects of class mrs_data.
 #' @param x object of class mrs_data.
 #' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
 #' @param mode representation of the complex numbers to be plotted, can be one
-#' of: "re", "im", "abs" or "arg".
+#' of: "re", "im", "mod" or "arg".
 #' @param col Colour map to use, defaults to viridis if the package is 
 #' available.
 #' @param dim the dimension to display on the y-axis, can be one of: "dyn", "x",
@@ -157,11 +157,13 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
 #' @param z_pos the z index to plot.
 #' @param dyn the dynamic index to plot.
 #' @param coil the coil element number to plot.
+#' @param restore_def_par restore default plotting par values after the plot has 
 #' @param ... other arguments to pass to the plot method.
 #' @export
 image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL, 
                            dim = "dyn", x_pos = NULL, y_pos = NULL,
-                           z_pos = NULL, dyn = 1, coil = 1, ...) { 
+                           z_pos = NULL, dyn = 1, coil = 1,
+                           restore_def_par = TRUE, ...) { 
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -245,7 +247,7 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
                   xlab = "Frequency (ppm)", ylab = y_title, 
                   col = col, ...)
   
-  graphics::par(.pardefault)
+  if (restore_def_par) graphics::par(.pardefault)
 }
 
 #' Produce a plot with multiple traces.
@@ -261,6 +263,10 @@ stackplot <- function(x, ...) {
 #' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
 #' @param mode representation of the complex numbers to be plotted, can be one
 #' of: "re", "im", "abs" or "arg".
+#' @param fd display data in the frequency-domain (default), or time-domain 
+#' (logical).
+#' @param x_units the units to use for the x-axis, can be one of: "ppm", "hz", 
+#' "points" or "seconds".
 #' @param col set the colour of the line, eg col = rgb(1,0,0,0.5).
 #' @param x_offset separate plots in the x-axis direction by this value. 
 #' Default value is 0.
@@ -272,28 +278,68 @@ stackplot <- function(x, ...) {
 #' @param z_pos the z index to plot.
 #' @param dyn the dynamic index to plot.
 #' @param coil the coil element number to plot.
+#' @param bty option to draw a box around the plot. See ?par.
+#' @param labels add labels to each data item.
+#' @param lab_cex label size.
+#' @param right_marg change the size of the right plot margin.
+#' @param restore_def_par restore default plotting par values after the plot has 
+#' been made.
 #' @param ... other arguments to pass to the matplot method.
 #' @export
-stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL, 
-                               x_offset = 0, y_offset = 5, dim = "dyn", 
-                               x_pos = NULL, y_pos = NULL, z_pos = NULL, 
-                               dyn = 1, coil = 1, ...) {
+stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
+                               fd = TRUE, col = NULL, x_offset = 0,
+                               y_offset = 5, dim = "dyn", x_pos = NULL, 
+                               y_pos = NULL, z_pos = NULL, dyn = 1, coil = 1, 
+                               bty = NULL, labels = NULL, lab_cex = 1, 
+                               right_marg = NULL, restore_def_par = TRUE, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
-  if (!is_fd(x)) {
+  # convert to the correct domain for plotting
+  if (fd & !is_fd(x)) {
     x <- td2fd(x)
+  } else if (!fd & is_fd(x)) {
+    x <- fd2td(x)
   }
   
-  if (is.null(col)) {
-    col <- 1
-  }
+  if (is.null(col)) col <- 1
   
-  #par("xaxs" = "i") # tight axes limits
+  if (is.null(bty)) bty <- "n"
+  
+  if (is.null(right_marg) && is.null(labels)) right_marg = 1
+  if (is.null(right_marg) && !is.null(labels)) right_marg = 4
+  
+  graphics::par("xaxs" = "i") # tight axes limits
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
-  graphics::par(mar = c(3.5, 1, 1, 1)) # margins
+  graphics::par(mar = c(3.5, 1, 1, right_marg)) # margins
   
-  x_scale <- ppm(x)
+  if (fd) {
+    xlab <- "Chemical Shift"  
+  } else {
+    xlab <- "Time"  
+  }
+  
+  if (is.null(x_units) & fd) {
+    x_units = "ppm"
+  } else if (is.null(x_units) & !fd) {
+    x_units = "seconds"
+  }
+  
+  if ( x_units == "ppm" ) {
+    x_scale <- ppm(x)
+    xlab <- paste(xlab, "(ppm)")
+  } else if (x_units == "hz") {
+    x_scale <- hz(x)
+    xlab <- paste(xlab, "(Hz)")
+  } else if (x_units == "points") {
+    x_scale <- pts(x)
+    xlab <- paste(xlab, "(Data Points)")
+  } else if (x_units == "seconds") {
+    x_scale <- seconds(x)
+    xlab <- paste(xlab, "(s)")
+  } else {
+    stop("Invalid x_units option, should be one of : 'ppm', 'hz', 'points' or 'seconds'") 
+  }
   
   if (is.null(xlim)) {
     xlim <- c(x_scale[1], x_scale[N(x)])
@@ -369,27 +415,37 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
   
   x_scale_mat <- x_scale_mat + x_offset_mat
   
+  xlim_labs <- xlim
+  xlim <- range(x_scale_mat)
+  
+  # bug fix for rounding errors
+  if (xlim[1] > xlim_labs[1]) xlim[1] = xlim_labs[1]
+  if (xlim[2] < xlim_labs[2]) xlim[2] = xlim_labs[2]
+  
+  if ( x_units == "ppm" ) xlim <- rev(xlim)
+  
   graphics::matplot(x_scale_mat[length(subset):1,],
                     plot_data[length(subset):1,], type = "l", 
-                    lty = 1, col = col, xlab = "Frequency (PPM)", ylab = "",
-                    yaxt = "n", xaxt = "n", xlim = rev(range(x_scale_mat)),
-                    bty = "n", ...)
+                    lty = 1, col = col, xlab = xlab, ylab = "",
+                    yaxt = "n", xaxt = "n", xlim = xlim,
+                    bty = bty, ...)
   
-  graphics::axis(1, pretty(xlim))
+  graphics::axis(1, lwd = 0, lwd.ticks = 1)
   
-  #graphics::matplot(x_scale[subset][length(subset):1],
-  #                  plot_data[length(subset):1,], type = "l", xlim = xlim,
-  #                  lty = 1, col = 1, xlab = "Frequency (PPM)", ylab = "",
-  #                  yaxt = "n", ...)
+  if (bty == "n") graphics::abline(h = graphics::par("usr")[3]) 
   
-  #abline(a = par("usr")[3], b = 0, lw = 2.0) # looks better for bty="n"
+  # write text labels if provided
+  if (!is.null(labels)) {
+    
+    # allow text outside axes
+    graphics::par(xpd = NA)
+    for (n in 1:length(labels)) {
+      graphics::text(xlim[2] , y_offset_vec[n], labels[n], pos = 4,
+                     cex = lab_cex)
+    }
+  }
   
-  #matplot(x_scale[subset][length(subset):1])
-          #, (1:dyns(mrs_data)), plot_data[length(subset):1,],
-        #xlim=xlim, xlab="Frequency (ppm)", ylab="Dynamic", 
-        #col=gray.colors(64), ...)
-  
-  graphics::par(.pardefault)
+  if (restore_def_par) graphics::par(.pardefault)
 }
 
 #' Plot a slice from a 7 dimensional array

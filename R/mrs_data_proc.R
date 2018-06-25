@@ -242,16 +242,16 @@ mat2mrs_data <- function(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(),
 #' @param N Number of data points in the spectral dimension.
 #' @param ref Reference value for ppm scale.
 #' @param dyns Number of dynamic scans to generate.
+#' @param fd Return data in the frequency-domian (TRUE) or time-domain (FALSE)
 #' @return mrs_data object.
 #' @export
 sim_noise <- function(sd = 0.1, fs = def_fs(), ft = def_ft(), N = def_N(),
-                      ref = def_ref(), dyns = 1) {
+                      ref = def_ref(), dyns = 1, fd = TRUE) {
  
   data_pts <- dyns * N 
-  # generate data in TD
   vec <- stats::rnorm(data_pts, 0, sd) + 1i*stats::rnorm(data_pts, 0, sd)
   data_array <- array(vec, dim = c(1, 1, 1, 1, dyns, 1, N))
-  array2mrs_data(data_array, fs = fs, ft = ft, ref = ref)
+  array2mrs_data(data_array, fs = fs, ft = ft, ref = ref, fd)
 }
 
 sim_zeros <- function(fs = def_fs(), ft = def_ft(), N = def_N(),
@@ -463,13 +463,25 @@ lb.basis_set <- function(x, lb, lg = 1) {
 }
 
 #' Zero-fill MRS data in the time domain.
-#' @param mrs_data MRS data.
+#' @param x input mrs_data or basis_set object
 #' @param factor Zero-filling factor, factor of 2 returns a dataset with
 #' twice the original data points.
 #' @return Zero-filled data.
+#' @rdname zf
 #' @export
-zf <- function(mrs_data, factor = 2) {
-  set_td_pts(mrs_data, factor * N(mrs_data))
+zf <- function(x, factor = 2) UseMethod("zf")
+
+#' @rdname zf
+#' @export
+zf.mrs_data <- function(x, factor = 2) {
+  set_td_pts(x, factor * N(x))
+}
+
+#' @rdname zf
+#' @export
+zf.basis_set <- function(x, factor = 2) {
+  x_mrs_data <- basis2mrs_data(x)
+  mrs_data2basis(set_td_pts(x_mrs_data, factor * N(x_mrs_data)), x$names)
 }
 
 #' Set the number of time-domain data points, truncating or zero-filling as
@@ -1008,7 +1020,7 @@ bc <- function(mrs_data, lambda, p) {
 
 #' @export
 `+.mrs_data` <- function(a, b) {
-  if ( class(b) == "mrs_data" ) {
+  if (class(b) == "mrs_data" ) {
     a$data <- a$data + b$data
   } else if (class(b) == "numeric") {
     a$data <- a$data + b
@@ -1018,12 +1030,32 @@ bc <- function(mrs_data, lambda, p) {
 
 #' @export
 `-.mrs_data` <- function(a, b = NULL) {
-  if ( class(b) == "mrs_data" ) {
+  if (class(b) == "mrs_data" ) {
     a$data = a$data - b$data
   } else if (is.null(b)) {
     a$data = -a$data
   } else if ( class(b) == "numeric") {
     a$data = a$data - b
+  }
+  return(a)
+}
+
+#' @export
+`*.mrs_data` <- function(a, b) {
+  if (class(b) == "mrs_data" ) {
+    a$data <- a$data * b$data
+  } else if ( class(b) == "numeric") {
+    a$data <- a$data * b
+  }
+  return(a)
+}
+
+#' @export
+`/.mrs_data` <- function(a, b) {
+  if (class(b) == "mrs_data" ) {
+    a$data <- a$data / b$data
+  } else if (class(b) == "numeric") {
+    a$data <- a$data / b
   }
   return(a)
 }
@@ -1105,25 +1137,7 @@ median_dyns <- function(mrs_data) {
   return(apply_mrs(mrs_data, 5, cplx_median))
 }
 
-#' @export
-`*.mrs_data` <- function(a, b) {
-  if ( class(b) == "mrs_data" ) {
-    a$data <- a$data * b$data
-  } else if ( class(b) == "numeric") {
-    a$data <- a$data * b
-  }
-  return(a)
-}
 
-#' @export
-`/.mrs_data` <- function(a,b) {
-  if ( class(b) == "mrs_data" ) {
-    a$data <- a$data / b$data
-  } else if (class(b) == "numeric") {
-    a$data <- a$data / b
-  }
-  return(a)
-}
 
 # TODO correct first imaginary data point?
 recon_imag_vec <- function(data) {
@@ -1660,7 +1674,7 @@ calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5),
 #' @return list of arrays containing the highest peak frequency, height and FWHM
 #' in units of PPM and Hz.
 #' @export
-calc_peak_info <- function(mrs_data, xlim = c(4,0.5), interp_f = 4, 
+peak_info <- function(mrs_data, xlim = c(4,0.5), interp_f = 4, 
                            scale = "ppm", mode = "real") {
   
   mrs_data_crop <- crop_spec(mrs_data, xlim, scale)

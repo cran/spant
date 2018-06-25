@@ -1,3 +1,9 @@
+#' Create a spin system object for pulse sequence simulation
+#' @param spin_params an object describing the spin system properties
+#' @param ft transmitter frequency in Hz
+#' @param ref reference value for ppm scale
+#' @return spin system object
+#' @export
 spin_sys <- function(spin_params, ft, ref) {
   # TODO checks on input
   
@@ -50,6 +56,13 @@ H <- function(spin_n, nucleus, chem_shift, j_coupling_mat, ft, ref) {
   H_mat
 }
 
+#' Simulate pulse sequence acquisition.
+#' @param sys spin system object
+#' @param rec_phase reciever phase in degrees
+#' @param tol ignore resonance amplitudes below this threshold
+#' @param detect detection nuclie
+#' @return a list of resonance amplitudes and frequencies
+#' @export
 acquire <- function(sys, rec_phase = 180, tol = 1e-4, detect = NULL) {
   if (is.null(detect)) {
     Fp <- gen_F(sys, "p")
@@ -69,7 +82,13 @@ acquire <- function(sys, rec_phase = 180, tol = 1e-4, detect = NULL) {
   list(amps = amps, freqs = freqs)
 }
 
-gen_F <- function(sys, op, detect=NULL) {
+#' Generate the F product operator
+#' @param sys spin system object
+#' @param op operator, one of "x", "y", "z", "p", "m"
+#' @param detect detection nuclei
+#' @return F product operator matrix
+#' @export
+gen_F <- function(sys, op, detect = NULL) {
   basis_size <- prod(sys$spin_num * 2 + 1)
   F_mat <- matrix(0, basis_size, basis_size)
   if (is.null(detect)) {
@@ -82,6 +101,38 @@ gen_F <- function(sys, op, detect=NULL) {
     F_mat = F_mat + gen_I(n, sys$spin_num, op)
   }
   F_mat
+}
+
+#' Generate the Fxy product operator with a specified phase
+#' @param sys spin system object
+#' @param phase phase angle in degrees
+#' @param detect detection nuclei
+#' @return product operator matrix
+#' @export
+gen_F_xy <- function(sys, phase, detect = NULL) {
+  F_mat <- cos(phase * pi / 180) * gen_F(sys, "x", detect) +
+           sin(phase * pi / 180) * gen_F(sys, "y", detect)
+  F_mat
+}
+
+#' Get the quantum coherence matrix for a spin system
+#' @param sys spin system object
+#' @return quantum coherence number matrix
+qn_states <- function(sys) {
+  Fz <- gen_F(sys, "z")
+  states_vec <- diag(Fz)
+  outer(states_vec, states_vec, '-')
+}
+
+#' Zero all non-zero-order coherences
+#' @param sys spin system object
+#' @param rho density matrix
+#' @return density matrix
+#' @export
+zero_nzoc <- function(sys, rho) {
+  qn_states <- qn_states(sys)
+  rho[qn_states != 0] <- 0
+  rho
 }
 
 gen_I <- function(n, spin_num, op) {
@@ -163,7 +214,7 @@ get_spin_num <- function(nucleus) {
 #' from the output.
 #' @return list of \code{mol_parameter} objects.
 #' @export
-get_1h_brain_basis_paras <- function(ft, metab_lw = NULL, lcm_compat = FALSE) {
+get_1h_brain_basis_paras_v1 <- function(ft, metab_lw = NULL, lcm_compat = FALSE) {
   if (!lcm_compat) {
     m_cr_ch2 <- get_m_cr_ch2_paras(metab_lw)
   }
@@ -208,6 +259,43 @@ get_1h_brain_basis_paras <- function(ft, metab_lw = NULL, lcm_compat = FALSE) {
   basis_list
 }
 
+#' Return a list of \code{mol_parameter} objects suitable for 1H brain MRS
+#' analyses.
+#' @param ft transmitter frequency in Hz.
+#' @param metab_lw linewidth of metabolite signals (Hz).
+#' @param lcm_compat when TRUE, lipid, MM and -CrCH molecules will be excluded
+#' from the output.
+#' @return list of \code{mol_parameter} objects.
+#' @export
+get_1h_brain_basis_paras <- function(ft, metab_lw = NULL, lcm_compat = FALSE) {
+  get_1h_brain_basis_paras_v1(ft, metab_lw, lcm_compat)
+}
+
+#' Simulate a basis-set suitable for 1H brain MRS analysis acquired with a PRESS 
+#' sequence. Note, ideal pulses are assumed.
+#' @param pul_seq A pulse sequence function to use.
+#' @param acq_paras List of acquisition parameters or an mrs_data object. See
+#' \code{\link{def_acq_paras}}
+#' @param xlim Range of frequencies to simulate in ppm.
+#' @param lcm_compat Exclude lipid and MM signals for use with default LCModel
+#' options.
+#' @param ... Extra parameters to pass to the pulse sequence function.
+#' @return Basis object.
+#' @export
+sim_basis_1h_brain <- function(pul_seq = seq_press_ideal, 
+                               acq_paras = def_acq_paras(), xlim = c(0.5, 4.2), 
+                               lcm_compat = FALSE, ...) {
+  
+  if (class(acq_paras) == "mrs_data") {
+    acq_paras <- get_acq_paras(acq_paras)
+  }
+  
+  sim_basis(get_1h_brain_basis_paras(ft = acq_paras$ft, lcm_compat = lcm_compat), 
+                                     pul_seq = pul_seq, fs = acq_paras$fs, 
+                                     N = acq_paras$N, ref = acq_paras$ref,
+                                     ft = acq_paras$ft, xlim = xlim, ...)
+}
+
 #' Simulate a basis-set suitable for 1H brain MRS analysis acquired with a PRESS 
 #' sequence. Note, ideal pulses are assumed.
 #' @param acq_paras List of acquisition parameters or an mrs_data object. See
@@ -228,7 +316,7 @@ sim_basis_1h_brain_press <- function(acq_paras = def_acq_paras(),
   }
   
   sim_basis(get_1h_brain_basis_paras(ft = acq_paras$ft, lcm_compat = lcm_compat), 
-                                     press_ideal, fs = acq_paras$fs, 
+                                     seq_press_ideal, fs = acq_paras$fs, 
                                      N = acq_paras$N, ref = acq_paras$ref,
                                      ft = acq_paras$ft, xlim = xlim, TE1 = TE1,
                                      TE2 = TE2)
@@ -253,7 +341,7 @@ get_mol_para_list_names <- function(mol_para_list) {
 #' @param ... Extra parameters to pass to the pulse sequence function.
 #' @return A basis object.
 #' @export
-sim_basis <- function(mol_list, pul_seq = pulse_acquire, ft = def_ft(),
+sim_basis <- function(mol_list, pul_seq = seq_pulse_acquire, ft = def_ft(),
                       ref = def_ref(), fs = def_fs(), N = def_N(),
                       xlim = NULL, ...) {
   
@@ -279,7 +367,7 @@ sim_basis <- function(mol_list, pul_seq = pulse_acquire, ft = def_ft(),
 #' @param ... Extra parameters to pass to the pulse sequence function.
 #' @return An \code{mrs_data} object.
 #' @export
-sim_mol <- function(mol, pul_seq = pulse_acquire, ft = def_ft(), 
+sim_mol <- function(mol, pul_seq = seq_pulse_acquire, ft = def_ft(), 
                     ref = def_ref(), fs = def_fs(), N = def_N(),
                     xlim = NULL, ...) {
   # create empty fid

@@ -1,4 +1,15 @@
-# spant 0.8.0
+# spant 0.10.0
+* The names of in-built pulse sequence functions now all start with seq_* to
+make them easier to find.
+* Added new functions to simulate the following MRS sequences: CPMG, MEGA-PRESS, STEAM, sLASER. sLASER sequence kindly contributed by Pierre-Gilles Henry.
+* Bug fix for get_mol_names function.
+* stackplot function now accepts labels argument and time-domain plotting.
+* def_acq_paras function now accepts arguments to override the defaults.
+* Added a source field to mol.paras object to cite the origin of the values.
+* Option to restore plotting par defaults.
+* The magrittr pipe operator is now exported.
+
+# spant 0.9.0
 * Updated plotting modes to be one of : "re", "im", "mod" or "arg".
 * Updated int_spec function to use "re", "im", or "mod".
 * Added a function to replicate data across a particular dimension.
