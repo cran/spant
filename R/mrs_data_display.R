@@ -44,12 +44,14 @@ print.mrs_data <- function(x, ...) {
 #' @param bty option to draw a box around the plot. See ?par.
 #' @param label character string to add to the top left of the plot window.
 #' @param restore_def_par restore default plotting par values after the plot has 
+#' @param mar option to adjust the plot margins. See ?par.
 #' @param ... other arguments to pass to the plot method.
 #' @export
 plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
                           y_scale = FALSE, mode = "re", dyn = 1, x_pos = 1,
                           y_pos = 1, z_pos = 1, coil = 1, lwd = NULL, 
-                          bty = NULL, label = "", restore_def_par = TRUE, ...) {
+                          bty = NULL, label = "", restore_def_par = TRUE, 
+                          mar = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -66,7 +68,7 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
   if (is.null(bty) && y_scale) bty <- "l"
   
   if (fd) {
-    xlab <- "Chemical Shift"  
+    xlab <- "Chemical shift"  
   } else {
     xlab <- "Time"  
   }
@@ -114,14 +116,17 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
   }
   
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
+  
+  if (!is.null(mar)) graphics::par(mar = mar)
+  
   if (y_scale) {
-    graphics::par(mar = c(3.5, 3.5, 1, 1))
+    if (is.null(mar)) graphics::par(mar = c(3.5, 3.5, 1, 1))
     graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim, 
                    xlab = xlab, ylab = "Intensity (au)", lwd = lwd, bty = bty, 
                    xaxt = "n", yaxt = "n", ...)
     graphics::axis(2, lwd = 0, lwd.ticks = 1)
   } else {
-    graphics::par(mar = c(3.5, 1, 1, 1))
+    if (is.null(mar)) graphics::par(mar = c(3.5, 1, 1, 1))
     graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim,
          xlab = xlab, yaxt = "n", xaxt = "n", ylab = "", lwd = lwd, bty = bty,
          ...)
@@ -252,7 +257,7 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
 
 #' Produce a plot with multiple traces.
 #' @param x object for plotting.
-#' @param ... Arguments to be passed to methods.
+#' @param ... arguments to be passed to methods.
 #' @export
 stackplot <- function(x, ...) {
   UseMethod("stackplot", x)
@@ -314,7 +319,7 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   graphics::par(mar = c(3.5, 1, 1, right_marg)) # margins
   
   if (fd) {
-    xlab <- "Chemical Shift"  
+    xlab <- "Chemical shift"  
   } else {
     xlab <- "Time"  
   }
@@ -448,19 +453,19 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   if (restore_def_par) graphics::par(.pardefault)
 }
 
-#' Plot a slice from a 7 dimensional array
-#' @param data 7d array of values to be plotted
-#' @param zlim smallest and largest values to be plotted
+#' Plot a slice from a 7 dimensional array.
+#' @param data 7d array of values to be plotted.
+#' @param zlim smallest and largest values to be plotted.
 #' @param mask_map matching map with logical values to indicate if the 
-#' corresponding values should be plotted
-#' @param mask_cutoff minimum values to plot (as a percentage of the maximum)
-#' @param interp map interpolation factor
-#' @param slice the slice index to plot
-#' @param dyn the dynamic index to plot
-#' @param coil the coil element number to plot
-#' @param ref reference index to plot
-#' @param denom map to use as a denominator
-#' @param horizontal display the colorbar horizontally (logical)
+#' corresponding values should be plotted.
+#' @param mask_cutoff minimum values to plot (as a percentage of the maximum).
+#' @param interp map interpolation factor.
+#' @param slice the slice index to plot.
+#' @param dyn the dynamic index to plot.
+#' @param coil the coil element number to plot.
+#' @param ref reference index to plot.
+#' @param denom map to use as a denominator.
+#' @param horizontal display the colorbar horizontally (logical).
 #' @export
 plot_slice_map <- function(data, zlim = NULL, mask_map = NULL,
                            mask_cutoff = 20, interp = 1, slice = 1, dyn = 1,

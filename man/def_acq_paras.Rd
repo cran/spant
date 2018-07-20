@@ -12,7 +12,7 @@ def_acq_paras(ft = getOption("spant.def_ft"),
 \arguments{
 \item{ft}{specify the transmitter frequency in Hz.}
 
-\item{fs}{specity the sampling frequency in Hz.}
+\item{fs}{specify the sampling frequency in Hz.}
 
 \item{N}{specify the number of data points in the spectral dimension.}
 
@@ -21,10 +21,10 @@ def_acq_paras(ft = getOption("spant.def_ft"),
 \value{
 A list containing the following elements:
 \itemize{
-\item ft Transmitter frequency in Hz.
-\item fs Sampling frequency in Hz.
-\item N Number of data points in the spectral dimension.
-\item ref Reference value for ppm scale.
+\item ft transmitter frequency in Hz.
+\item fs sampling frequency in Hz.
+\item N number of data points in the spectral dimension.
+\item ref reference value for ppm scale.
 }
 }
 \description{

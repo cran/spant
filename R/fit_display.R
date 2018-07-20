@@ -10,7 +10,7 @@
 #' @param y_pos the y index to plot.
 #' @param z_pos the z index to plot.
 #' @param coil the coil element number to plot.
-#' @param n single index element to plot (overides other indices when given).
+#' @param n single index element to plot (overrides other indices when given).
 #' @param sub_bl subtract the baseline from the data and fit (logical).
 #' @param ... further arguments to plot method.
 #' @export
@@ -59,7 +59,7 @@ plot.fit_result <- function(x, xlim = NULL, plt_title = FALSE,
     marg = (max_dp - min_dp) * 0.02
     graphics::plot(x$PPMScale, x$Data, type = 'l', xlim = xlim, 
          ylim = c(min_dp - marg, max_dp + marg), yaxt = "n", ylab = "",
-         xlab = "Chemical Shift (ppm)", ...)
+         xlab = "Chemical shift (ppm)", ...)
     
     if (!is.null(label)) {
       graphics::par(xpd = TRUE)
@@ -83,7 +83,7 @@ plot.fit_result <- function(x, xlim = NULL, plt_title = FALSE,
     
     graphics::plot(x$PPMScale, x$Data, type = 'l', xlim = xlim, 
          ylim = c(min_dp,max_dp + res_range), yaxt = "n", ylab = "",
-         xlab = "Chemical Shift (ppm)", ...)
+         xlab = "Chemical shift (ppm)", ...)
     graphics::lines(x$PPMScale, fit_line, col = 'Red', lw = 2)
     if (!sub_bl) {
       graphics::lines(x$PPMScale, x$Baseline)
@@ -110,7 +110,7 @@ plot.fit_result <- function(x, xlim = NULL, plt_title = FALSE,
 #' @param y_pos the y index to plot.
 #' @param z_pos the z index to plot.
 #' @param coil the coil element number to plot.
-#' @param n single index element to plot (overides other indices when given).
+#' @param n single index element to plot (overrides other indices when given).
 #' @param sub_bl subtract the baseline from the data and fit (logical).
 #' @param ... further arguments to plot method.
 #' @export
@@ -175,7 +175,7 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 0.04,
   
   graphics::plot(x$PPMScale, x$Data, type = 'l', xlim = xlim, 
        ylim = c(min_basis - basis_yoff, max_dp + res_range), yaxt = "n", ylab = "",
-       xlab = "Chemical Shift (ppm)", ...)
+       xlab = "Chemical shift (ppm)", ...)
   graphics::lines(x$PPMScale, fit_line, col = 'Red', lw = 2)
   
   if (!sub_bl) {
@@ -226,12 +226,12 @@ fit_tab2csv <- function(x, fname, pvc = FALSE) {
   utils::write.csv(x, fname, quote = FALSE, row.names = FALSE)
 }
 
-#' Plot a 2D slice from an MRSI fit result object
-#' @param fit_res \code{fit_result} object
-#' @param name name of the quantity to plot, eg "TNAA"
-#' @param slice slice to plot in the z direction
-#' @param zlim range of values to plot
-#' @param interp interpolation factor
+#' Plot a 2D slice from an MRSI fit result object.
+#' @param fit_res \code{fit_result} object.
+#' @param name name of the quantity to plot, eg "TNAA".
+#' @param slice slice to plot in the z direction.
+#' @param zlim range of values to plot.
+#' @param interp interpolation factor.
 #' @export
 plot_fit_slice <- function(fit_res, name, slice = 1, zlim = NULL, interp = 1) {
   result_map <- fit_res$res_tab[[name]]
@@ -252,9 +252,9 @@ plot_fit_slice <- function(fit_res, name, slice = 1, zlim = NULL, interp = 1) {
   }
 }
 
-#' Get a data array from a fit result
-#' @param fit_res \code{fit_result} object
-#' @param name name of the quantity to plot, eg "TNAA"
+#' Get a data array from a fit result.
+#' @param fit_res \code{fit_result} object.
+#' @param name name of the quantity to plot, eg "TNAA".
 #' @export
 get_fit_map <- function(fit_res, name) {
   result_map <- fit_res$res_tab[[name]]
