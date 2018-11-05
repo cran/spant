@@ -44,14 +44,16 @@ print.mrs_data <- function(x, ...) {
 #' @param bty option to draw a box around the plot. See ?par.
 #' @param label character string to add to the top left of the plot window.
 #' @param restore_def_par restore default plotting par values after the plot has 
+#' been made.
 #' @param mar option to adjust the plot margins. See ?par.
+#' @param xaxis_lab x-axis label.
 #' @param ... other arguments to pass to the plot method.
 #' @export
 plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
                           y_scale = FALSE, mode = "re", dyn = 1, x_pos = 1,
                           y_pos = 1, z_pos = 1, coil = 1, lwd = NULL, 
                           bty = NULL, label = "", restore_def_par = TRUE, 
-                          mar = NULL, ...) {
+                          mar = NULL, xaxis_lab = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -94,6 +96,8 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
   } else {
     stop("Invalid x_units option, should be one of : 'ppm', 'hz', 'points' or 'seconds'") 
   }
+  
+  if (!is.null(xaxis_lab)) xlab <- xaxis_lab
   
   if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[N(x)])
   
@@ -163,6 +167,7 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
 #' @param dyn the dynamic index to plot.
 #' @param coil the coil element number to plot.
 #' @param restore_def_par restore default plotting par values after the plot has 
+#' been made.
 #' @param ... other arguments to pass to the plot method.
 #' @export
 image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL, 
@@ -267,7 +272,7 @@ stackplot <- function(x, ...) {
 #' @param x object of class mrs_data.
 #' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
 #' @param mode representation of the complex numbers to be plotted, can be one
-#' of: "re", "im", "abs" or "arg".
+#' of: "re", "im", "mod" or "arg".
 #' @param fd display data in the frequency-domain (default), or time-domain 
 #' (logical).
 #' @param x_units the units to use for the x-axis, can be one of: "ppm", "hz", 

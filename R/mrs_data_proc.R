@@ -213,6 +213,20 @@ mrs_data2mat <- function(mrs_data) {
   t(as.matrix(mrs_data$data[1,1,1,1,,1,]))
 }
 
+#' Convert mrs_data object to a vector.
+#' @param mrs_data MRS data object.
+#' @param dyn dynamic index.
+#' @param x_pos x index.
+#' @param y_pos y index.
+#' @param z_pos z index.
+#' @param coil coil element index.
+#' @return MRS data vector.
+#' @export
+mrs_data2vec <- function(mrs_data, dyn = 1, x_pos = 1,
+                          y_pos = 1, z_pos = 1, coil = 1) {
+  as.vector(mrs_data$data[1, x_pos, y_pos, z_pos, dyn, coil,])
+}
+
 #' Convert a matrix (with spectral points in the row dimension and dynamics in
 #' the column dimensions) into a mrs_data object.
 #' @param mat data matrix.
@@ -399,6 +413,24 @@ fp_mag <- function(mrs_data) {
   abind::adrop(Mod(mrs_data$data[,,,,,, 1, drop = F]), 7)
 }
 
+#' Convolve two MRS data objects.
+#' @param mrs_data MRS data to be convolved.
+#' @param conv convolution data stored as an mrs_data object.
+#' @return convolved data.
+#' @export
+conv_mrs <- function(mrs_data, conv) {
+  # needs to be a time-domain operation
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  if (is_fd(conv)) conv <- fd2td(conv)
+  
+  if (dyns(mrs_data) > 1) {
+    warning("Repeating convolution data to match mrs_data dynamics.")
+    conv <- rep_dyn(conv, dyns(mrs_data))
+  }
+  
+  mrs_data * conv 
+}
+
 #' Return the phase of the first data point in the time-domain.
 #' @param mrs_data MRS data.
 #' @return phase values in degrees.
@@ -418,8 +450,9 @@ fp_phase <- function(mrs_data) {
 #' @return conjugated data.
 #' @export
 conj <- function(mrs_data) {
-    mrs_data$data = Re(mrs_data$data) - Im(mrs_data$data) * 1i
-    mrs_data
+  warning("Depreciated function, use Conj instead.") 
+  mrs_data$data = Re(mrs_data$data) - Im(mrs_data$data) * 1i
+  mrs_data
 }
 
 #' Apply line-broadening (apodisation) to MRS data or basis object.
@@ -579,6 +612,60 @@ ft <- function(mrs_data, dims) {
   apply_mrs(mrs_data, dims, ft_shift)
 }
 
+#' Apply the diff operator to an MRS dataset.
+#' @param x MRS data.
+#' @param ... additional arguments to the diff function.
+#' @return MRS data following diff operator.
+#' @export
+diff.mrs_data <- function(x, ...) {
+  apply_mrs(x, 7, ...)
+}
+
+#' Apply Re operator to an MRS dataset.
+#' @param z MRS data.
+#' @return MRS data following Re operator.
+#' @export
+Re.mrs_data <- function(z) {
+  z$data <- Re(z$data)
+  z
+}
+
+#' Apply Im operator to an MRS dataset.
+#' @param z MRS data.
+#' @return MRS data following Im operator.
+#' @export
+Im.mrs_data <- function(z) {
+  z$data <- Im(z$data)
+  z
+}
+
+#' Apply Mod operator to an MRS dataset.
+#' @param z MRS data.
+#' @return MRS data following Mod operator.
+#' @export
+Mod.mrs_data <- function(z) {
+  z$data <- Mod(z$data)
+  z
+}
+
+#' Apply Arg operator to an MRS dataset.
+#' @param z MRS data.
+#' @return MRS data following Arg operator.
+#' @export
+Arg.mrs_data <- function(z) {
+  z$data <- Arg(z$data)
+  z
+}
+
+#' Apply Conj operator to an MRS dataset.
+#' @param z MRS data.
+#' @return MRS data following Conj operator.
+#' @export
+Conj.mrs_data <- function(z) {
+  z$data <- Conj(z$data)
+  z
+}
+
 ift <- function(mrs_data, dims) {
   apply_mrs(mrs_data, dims, ift_shift)
 }
@@ -682,7 +769,7 @@ pts <- function(mrs_data) {
 #' @export
 seconds <- function(mrs_data) {
   fs <- fs(mrs_data)
-  seq(from = 0, to = (N(mrs_data) - 1)/fs, by = 1 / fs)
+  seq(from = 0, to = (N(mrs_data) - 1) / fs, by = 1 / fs)
 }
 
 #' Get the indices of data points lying between two values (end > x > start).
@@ -809,9 +896,12 @@ get_td_amp <- function(mrs_data, nstart = 10, nend = 50) {
   if (is_fd(mrs_data)) {
       mrs_data <- fd2td(mrs_data)
   }
-  t <- seconds(mrs_data)
-  amps <- apply_mrs(mrs_data, 7, measure_lorentz_amp, t, nstart, nend)$data
   
+  #t <- seconds(mrs_data)
+  #amps <- apply_mrs(mrs_data, 7, measure_lorentz_amp, t, nstart, nend)$data
+  
+  amps <- apply_mrs(mrs_data, 7, measure_td_amp, nstart, nend)$data
+ 
   abind::adrop(amps, 7)
   amps
 }
@@ -1017,7 +1107,7 @@ split_metab_ref <- function(mrs_data) {
   return(list(metab, ref))
 }
 
-bc <- function(mrs_data, lambda, p) {
+bc <- function(mrs_data, lambda = 1e3, p = 0.1) {
   if (!is_fd(mrs_data)) {
       mrs_data <- td2fd(mrs_data)
   }
@@ -1384,16 +1474,15 @@ ecc_ref <- function(mrs_data) {
 #' 
 #' @param metab MRS data to be corrected.
 #' @param ref ceference dataset.
+#' @param rev reverse the correction.
 #' @return corrected data in the time domain.
 #' @export
-ecc <- function(metab, ref) {
-  if (is_fd(metab)) {
-      metab <- fd2td(metab)
-  }
+ecc <- function(metab, ref, rev = FALSE) {
+  if (is_fd(metab)) metab <- fd2td(metab)
   
-  if (is_fd(ref)) {
-      ref <- fd2td(ref)
-  }
+  if (is_fd(ref)) ref <- fd2td(ref)
+  
+  if (rev) ref <- Conj(ref)
   
   if (dyns(ref) > 1) {
     ref <- mean_dyns(ref)
@@ -1676,7 +1765,7 @@ calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5),
 #' @param interp_f interpolation factor, defaults to 4x.
 #' @param scale the units to use for the frequency scale, can be one of: "ppm", 
 #' "hz" or "points".
-#' @param mode spectral mode, can be : "real", "imag" or "abs".
+#' @param mode spectral mode, can be : "real", "imag" or "mod".
 #' @return list of arrays containing the highest peak frequency, height and FWHM
 #' in units of PPM and Hz.
 #' @export
@@ -1689,7 +1778,7 @@ peak_info <- function(mrs_data, xlim = c(4,0.5), interp_f = 4,
     mrs_data_crop$data <- Re(mrs_data_crop$data)
   } else if (mode == "imag") {
     mrs_data_crop$data <- Im(mrs_data_crop$data)
-  } else if (mode == "abs") {
+  } else if (mode == "mod") {
     mrs_data_crop$data <- Mod(mrs_data_crop$data)
   }
   

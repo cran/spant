@@ -6,13 +6,17 @@
 #' @param ft transmitter frequency in Hz (required for list_data format).
 #' @param fs sampling frequency in Hz (required for list_data format).
 #' @param ref reference value for ppm scale (required for list_data format).
+#' @param n_ref_scans override the number of water reference scans detected in
+#' the file header (GE p-file only).
 #' @return MRS data object.
 #' @examples
 #' fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT", package = "spant")
 #' mrs_data <- read_mrs(fname, format = "spar_sdat")
 #' print(mrs_data)
 #' @export
-read_mrs <- function(fname, format, ft = NULL, fs = NULL, ref = NULL) {
+read_mrs <- function(fname, format, ft = NULL, fs = NULL, ref = NULL,
+                     n_ref_scans = NULL) {
+  
   if (format == "spar_sdat") {
     return(read_spar_sdat(fname))
   } else if (format == "rda") {
@@ -22,7 +26,7 @@ read_mrs <- function(fname, format, ft = NULL, fs = NULL, ref = NULL) {
   } else if (format == "twix") {
     return(read_twix(fname))
   } else if (format == "pfile") {
-    return(read_pfile(fname))
+    return(read_pfile(fname, n_ref_scans))
   } else if (format == "list_data") {
     if (is.null(ft)) stop("Please specify ft parameter for list_data format")
     if (is.null(fs)) stop("Please specify fs parameter for list_data format")
@@ -193,11 +197,12 @@ read_mrs_tqn <- function(fname, fname_ref = NA, format, id = NA, group = NA) {
   
   if (file.exists(w_fname)) {
     ref <- read_mrs_dpt(w_fname)
-    main$data <- comb_metab_ref(main, ref)
+    #main$data <- comb_metab_ref(main, ref)
     #main$data <- abind::abind(main$data, ref$data, along=1)
+    return(list(metab = main, ref = ref))
+  } else {
+    return(main)
   }
-  
-  return(main)
 }
 
 #' Write MRS data object to file in dangerplot (dpt) v2 format.
@@ -232,12 +237,22 @@ write_mrs_dpt_v2 <- function(fname, mrs_data) {
   sink()
 }
 
-write_mrs_lcm_raw <- function(fname, mrs_data) {
+#' Write MRS data object to file in a RAW format compatible with LCModel.
+#' @param fname the filename of the output RAW format MRS data.
+#' @param mrs_data object to be written to file.
+#' @param id text string to identify the data.
+#' @examples
+#' \dontrun{
+#' mrs_data <- write_mrs_lcm_raw("my_mrs_data.RAW", my_mrs_data)
+#' }
+#' @export
+write_mrs_lcm_raw <- function(fname, mrs_data, id = NA) {
   sig <- mrs_data$data[1, 1, 1, 1, 1, 1,]
   N <- length(sig)
   sink(fname)
   cat(" $NMID\n")
-  cat(" ID='Simulated Data', FMTDAT='(2E15.6)'\n")
+  if (is.na(id)) id <- fname
+  cat(paste(" ID='", id, "', FMTDAT='(2E15.6)'\n", sep = ""))
   cat(" VOLUME=1\n")
   cat(" TRAMP=1\n")
   cat(" $END\n")

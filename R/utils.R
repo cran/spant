@@ -76,7 +76,7 @@ rep_array_dim <- function(x, rep_dim, n) {
 beta2lw <- function(beta) {2 * (-beta * log(0.5)) ^ 0.5 / pi}
 
 #' Covert a linewidth in Hz to an equivalent beta value in the time-domain ie:
-#' x * exp(-i * t * t * beta).
+#' x * exp(-t * t * beta).
 #' @param lw linewidth in Hz.
 #' @return beta damping value.
 #' @export
@@ -84,6 +84,11 @@ lw2beta <- function(lw) {(lw * pi / 2) ^ 2 / (-log(0.5))}
 
 alpha2lw <- function(alpha) {alpha / pi}
 
+#' Covert a linewidth in Hz to an equivalent alpha value in the time-domain ie:
+#' x * exp(-t * alpha).
+#' @param lw linewidth in Hz.
+#' @return beta damping value.
+#' @export
 lw2alpha <- function(lw) {lw * pi}
 
 #' Perform a fft and ffshift on a vector.
@@ -179,6 +184,12 @@ measure_lorentz_amp <- function(y, t, start_pnt = 10, end_pnt = 50) {
   a <- a / (sum(y) * sum(t ^ 2 * y) - sum(t * y) ^ 2)
   A <- exp(a)
   A
+}
+
+measure_td_amp <- function(y, start_pnt = 10, end_pnt = 50) {
+  # crop to time region and take Mod
+  y <- Mod(y[start_pnt:end_pnt])
+  stats::spline(start_pnt:end_pnt, y, xout=1, method = "natural")$y
 }
 
 # return the sum of squares of a complex vector

@@ -1,7 +1,6 @@
 #' Plot the fitting results of an object of class \code{fit_result}.
 #' @param x fit_result object.
 #' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
-#' @param plt_title title to add to the plot.
 #' @param data_only display only the processed data (logical).
 #' @param label character string to add to the top left of the plot window.
 #' @param plot_sigs a character vector of signal names to add to the plot.
@@ -12,13 +11,16 @@
 #' @param coil the coil element number to plot.
 #' @param n single index element to plot (overrides other indices when given).
 #' @param sub_bl subtract the baseline from the data and fit (logical).
+#' @param mar option to adjust the plot margins. See ?par.
+#' @param restore_def_par restore default plotting par values after the plot has 
+#' been made.
 #' @param ... further arguments to plot method.
 #' @export
-plot.fit_result <- function(x, xlim = NULL, plt_title = FALSE,
-                           data_only = FALSE, label = NULL, 
+plot.fit_result <- function(x, xlim = NULL, data_only = FALSE, label = NULL, 
                            plot_sigs = NULL, dyn = 1, x_pos = 1,
                            y_pos = 1, z_pos = 1, coil = 1, n = NULL,
-                           sub_bl = FALSE, ...) {
+                           sub_bl = FALSE, mar = NULL, restore_def_par = TRUE, 
+                           ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -38,10 +40,10 @@ plot.fit_result <- function(x, xlim = NULL, plt_title = FALSE,
   
   graphics::par("xaxs" = "i", "yaxs" = "i") # tight axes limits
   
-  if ( plt_title == FALSE ) {
-    graphics::par(mar = c(3.5, 1.2, 1.2, 1.2)) # space around the plot
+  if (!is.null(mar)) {
+    graphics::par(mar = mar)
   } else {
-    graphics::par(mar = c(3.5, 1.2, 2, 1.2)) # space around the plot
+    graphics::par(mar = c(3.5, 1.2, 1.2, 1.2)) # space around the plot
   }
   
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
@@ -96,7 +98,7 @@ plot.fit_result <- function(x, xlim = NULL, plt_title = FALSE,
     graphics::lines(x$PPMScale, x[sig][[1]] + x$Baseline, col = "blue")
   }
   
-  graphics::par(.pardefault)
+  if (restore_def_par) graphics::par(.pardefault)
 }
 
 #' Plot the fitting results of an object of class \code{fit_result} with 
@@ -104,7 +106,6 @@ plot.fit_result <- function(x, xlim = NULL, plt_title = FALSE,
 #' @param x fit_result object.
 #' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
 #' @param y_offset separate basis signals in the y-axis direction by this value.
-#' @param plt_title title to add to the plot.
 #' @param dyn the dynamic index to plot.
 #' @param x_pos the x index to plot.
 #' @param y_pos the y index to plot.
@@ -112,12 +113,17 @@ plot.fit_result <- function(x, xlim = NULL, plt_title = FALSE,
 #' @param coil the coil element number to plot.
 #' @param n single index element to plot (overrides other indices when given).
 #' @param sub_bl subtract the baseline from the data and fit (logical).
+#' @param labels print signal labels at the right side of the plot.
+#' @param sig_col colour of individual signal components.
+#' @param restore_def_par restore default plotting par values after the plot has 
+#' been made.
 #' @param ... further arguments to plot method.
 #' @export
-stackplot.fit_result <- function(x, xlim = NULL, y_offset = 0.04,
-                                 plt_title = FALSE, dyn = 1, x_pos = 1,
-                                 y_pos = 1, z_pos = 1, coil = 1,
-                                 n = NULL, sub_bl = FALSE, ...) {
+stackplot.fit_result <- function(x, xlim = NULL, y_offset = 1, dyn = 1, 
+                                 x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
+                                 n = NULL, sub_bl = FALSE, labels = FALSE,
+                                 sig_col = "black", restore_def_par = TRUE, 
+                                 ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -131,17 +137,18 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 0.04,
   
   x <- x$fits[[n]]
   
+  # label names 
+  names <- colnames(x)[5:length(colnames(x))]
+  
   if (is.null(xlim)) {
     xlim <- rev(range(x$PPMScale))
   }
   
   graphics::par("xaxs" = "i", "yaxs" = "i") # tight axes limits
   
-  if ( plt_title == FALSE ) {
-    graphics::par(mar = c(3.5, 1.2, 1.2, 1.2)) # space around the plot
-  } else {
-    graphics::par(mar = c(3.5, 1.2, 2, 1.2)) # space around the plot
-  }
+  right_mar <- ifelse(labels, 4, 1.2)
+  
+  graphics::par(mar = c(3.5, 1.2, 1.2, right_mar)) # space around the plot
   
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
   
@@ -165,7 +172,7 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 0.04,
   res_range <- max(res[ind]) - min(res[ind])
   offset <- max_dp - min(res[ind])
   
-  basis_yoff <- (max_dp - min_dp) * y_offset
+  basis_yoff <- (max_dp - min_dp) * y_offset / length(names)
   
   min_basis <- Inf
   for (p in 5:ncol(x)) {
@@ -186,10 +193,21 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 0.04,
   graphics::abline(h = max_dp)
   
   for (p in 5:ncol(x)) {
-    graphics::lines(x$PPMScale, x[,p])
+    if (substr(colnames(x)[p], 1, 3) == "SP_") {
+      graphics::lines(x$PPMScale, x[,p], col = "blue")
+    } else {
+      graphics::lines(x$PPMScale, x[,p], col = sig_col)
+    }
   }
   
-  graphics::par(.pardefault)
+  if (labels) {
+    for (p in 5:ncol(x)) {
+      graphics::text(graphics::par("usr")[2], -(p - 4) * basis_yoff + min_dp, 
+                     names[p - 4], xpd = TRUE, pos = 4, offset = 0.25)
+    }
+  }
+  
+  if (restore_def_par) graphics::par(.pardefault)
 }
 
 #' Print a summary of an object of class \code{fit_result}.
