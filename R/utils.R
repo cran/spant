@@ -145,6 +145,11 @@ re_max <- function(x) {
   max(Re(x))
 }
 
+re_max_interp <- function(data_pts, interp_f) {
+  data_pts <- stats::spline(Re(data_pts), n = interp_f * length(data_pts))
+  max(data_pts$y)
+}
+
 re_mean <- function(x) {
   mean(Re(x))
 }
@@ -340,3 +345,7 @@ comb_csv_results <- function(pattern, supp_mess = TRUE, ...) {
 #' @importFrom magrittr %>%
 #' @export
 magrittr::`%>%`
+
+#' @importFrom magrittr %$%
+#' @export
+magrittr::`%$%`

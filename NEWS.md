@@ -1,3 +1,12 @@
+# spant 0.13.0
+* Various bug fixes for Siemens TWIX reader.
+* rats and tdsr functions now use the mean spectrum as the default reference.
+* Added the option to remove the x axis in an mrs_data plot.
+* Added ylim and y_scale options to fit plotting.
+* Added %$% operator from magrittr package.
+* Added an interpolation option to calc_spec_snr.
+* Added hline and vline options to image.mrs_data.
+
 # spant 0.12.0
 * Fit results stackplot now has the option to display labels.
 * Added the option to reverse eddy current correction.

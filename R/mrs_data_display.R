@@ -33,6 +33,7 @@ print.mrs_data <- function(x, ...) {
 #' "points" or "seconds".
 #' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
 #' @param y_scale option to display the y-axis values (logical).
+#' @param x_ax option to display the x-axis values (logical).
 #' @param mode representation of the complex numbers to be plotted, can be one
 #' of: "re", "im", "mod" or "arg".
 #' @param dyn the dynamic index to plot.
@@ -50,8 +51,8 @@ print.mrs_data <- function(x, ...) {
 #' @param ... other arguments to pass to the plot method.
 #' @export
 plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
-                          y_scale = FALSE, mode = "re", dyn = 1, x_pos = 1,
-                          y_pos = 1, z_pos = 1, coil = 1, lwd = NULL, 
+                          y_scale = FALSE, x_ax = TRUE, mode = "re", dyn = 1,
+                          x_pos = 1, y_pos = 1, z_pos = 1, coil = 1, lwd = NULL, 
                           bty = NULL, label = "", restore_def_par = TRUE, 
                           mar = NULL, xaxis_lab = NULL, ...) {
   
@@ -136,7 +137,7 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
          ...)
   }
   
-  graphics::axis(1, lwd = 0, lwd.ticks = 1)
+  if (x_ax) graphics::axis(1, lwd = 0, lwd.ticks = 1)
   
   if (bty == "n") {
     graphics::abline(h = graphics::par("usr")[3]) 
@@ -168,12 +169,16 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
 #' @param coil the coil element number to plot.
 #' @param restore_def_par restore default plotting par values after the plot has 
 #' been made.
+#' @param y_ticks a vector of indices specifying where to place tick marks.
+#' @param vline draw a vertical line at the value of vline.
+#' @param hline draw a horizonal line at the value of hline.
 #' @param ... other arguments to pass to the plot method.
 #' @export
 image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL, 
                            dim = "dyn", x_pos = NULL, y_pos = NULL,
                            z_pos = NULL, dyn = 1, coil = 1,
-                           restore_def_par = TRUE, ...) { 
+                           restore_def_par = TRUE, y_ticks = NULL, 
+                           vline = NULL, hline = NULL, ...) { 
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -187,7 +192,12 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
     xlim <- c(x_scale[1], x_scale[N(x)])
   }
   
-  graphics::par(mar = c(3.5, 3.5, 1, 1)) # margins
+  if (is.null(y_ticks)) {
+    graphics::par(mar = c(3.5, 3.5, 1, 1)) # margins
+  } else {
+    graphics::par(mar = c(3.5, 3.5, 1, 1.5)) # margins
+  }
+  
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
@@ -256,6 +266,15 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
                   plot_data[length(subset):1,], xlim = xlim,
                   xlab = "Frequency (ppm)", ylab = y_title, 
                   col = col, ...)
+  
+  if (!is.null(y_ticks)) {
+    graphics::axis(4, at = y_ticks, labels=F, col = NA, col.ticks = "red")
+    graphics::axis(2, at = y_ticks, labels=F, col = NA, col.ticks = "red")
+  }
+  
+  if (!is.null(vline)) graphics::abline(v = vline, col = "white")
+  
+  if (!is.null(hline)) graphics::abline(h = hline, col = "white")
   
   if (restore_def_par) graphics::par(.pardefault)
 }
@@ -409,7 +428,7 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   }
   
   max_val <- max(abs(plot_data))
-  y_offset_vec <- 0:(ncol(plot_data) - 1) * max_val * y_offset / 100
+  y_offset_vec <- 0:(ncol(plot_data) - 1) * max_val * -y_offset / 100
   y_offset_mat <- matrix(y_offset_vec, nrow = nrow(plot_data),
                          ncol = ncol(plot_data), byrow = TRUE)
   

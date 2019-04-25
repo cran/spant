@@ -612,13 +612,30 @@ ft <- function(mrs_data, dims) {
   apply_mrs(mrs_data, dims, ft_shift)
 }
 
-#' Apply the diff operator to an MRS dataset.
-#' @param x MRS data.
+#' Apply the diff operator to an MRS dataset in the FID/spectral dimension.
+#' @param mrs_data MRS data.
 #' @param ... additional arguments to the diff function.
 #' @return MRS data following diff operator.
 #' @export
-diff.mrs_data <- function(x, ...) {
-  apply_mrs(x, 7, ...)
+diff_mrs <- function(mrs_data, ...) {
+  apply_mrs(mrs_data, 7, fun = diff, ...)
+}
+
+#' Apply the max operator to an MRS dataset.
+#' @param mrs_data MRS data.
+#' @return MRS data following max operator.
+#' @export
+max_mrs <- function(mrs_data) {
+  apply_mrs(mrs_data, 7, max, data_only = TRUE)
+}
+
+#' Apply the max operator to an interpolated MRS dataset.
+#' @param mrs_data MRS data.
+#' @param interp_f interpolation factor.
+#' @return Array of maximum values (real only).
+#' @export
+max_mrs_interp <- function(mrs_data, interp_f = 4) {
+  apply_mrs(mrs_data, 7, re_max_interp, interp_f, data_only = TRUE)
 }
 
 #' Apply Re operator to an MRS dataset.
@@ -785,6 +802,25 @@ get_seg_ind <- function(scale, start, end) {
     start <- tmp
   }
   which(scale >= start & scale <= end)
+}
+
+#' Crop \code{mrs_data} object data points in the time-domain.
+#' @param mrs_data MRS data.
+#' @param start starting data point (defaults to 1).
+#' @param end ending data point (defaults to the last saved point).
+#' @return cropped \code{mrs_data} object.
+#' @export
+crop_td_pts <- function(mrs_data, start = NULL, end = NULL) {
+  # needs to be a TD operation
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  if (is.null(start)) start <- 1
+  
+  if (is.null(end)) end <- N(mrs_data)
+  
+  mrs_data$data <- mrs_data$data[,,,,,,start:end, drop = F]
+  
+  mrs_data
 }
 
 #' Crop \code{mrs_data} object based on a frequency range.
@@ -1244,7 +1280,7 @@ recon_imag_vec <- function(data) {
   data <- fh + Conj(rev(sh))
 }
 
-td_conv_filt_vec <- function(fid, K = 25, ext = 1)
+conv_filt_vec <- function(fid, K = 25, ext = 1)
 {
   k = -K:K
   filt_fun = exp(-4 * k ^ 2 / K ^ 2)
@@ -1313,7 +1349,19 @@ td_conv_filt <- function(mrs_data, K = 25, ext = 1) {
   if (is_fd(mrs_data)) {
       mrs_data <- fd2td(mrs_data)
   }
-  apply_mrs(mrs_data, 7, td_conv_filt_vec, K, ext)
+  apply_mrs(mrs_data, 7, conv_filt_vec, K, ext)
+}
+
+#' Frequency-domain convolution based filter.
+#' @param mrs_data MRS data to be filtered.
+#' @param K window width in data points.
+#' @param ext point separation for linear extrapolation.
+#' @export
+fd_conv_filt <- function(mrs_data, K = 25, ext = 1) {
+  if (!is_fd(mrs_data)) {
+      mrs_data <- td2fd(mrs_data)
+  }
+  apply_mrs(mrs_data, 7, conv_filt_vec, K, ext)
 }
 
 #' HSVD based signal filter.
@@ -1592,7 +1640,16 @@ comb_coils <- function(metab, ref = NULL, noise = NULL,
   amp <- Mod(fp)
   
   if (!is.null(noise)) {
+    # estimate noise from noise data
     amp <- amp / (calc_coil_noise_sd(noise) ^ 2)
+  } else {
+    # estimate noise from first FID of the metab data
+    metab_first <- get_dyns(metab, 1)
+    noise_data <- crop_spec(metab_first, c(-0.5, -2.5))
+    noise_sd <- est_noise_sd(noise_data, offset = 0, n = N(noise_data),
+                             p_order = 2)
+    
+    amp <- amp / (noise_sd ^ 2)
   }
   
   # phase and scale ref data
@@ -1737,15 +1794,20 @@ calc_coil_noise_sd <- function(noise_data) {
 #' estimated.
 #' @param p_order polynomial order to fit to the noise region before estimating 
 #' the standard deviation.
+#' @param interp_f interpolation factor to improve detection of the highest
+#' signal value.
+#' @param full_output output signal, noise and SNR values separatly.
 #' @return an array of SNR values.
 #' @export
 calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5), 
-                          noise_region = c(-0.5,-2.5), p_order = 2) {
+                          noise_region = c(-0.5,-2.5), p_order = 2,
+                          interp_f = 4, full_output = FALSE) {
   
   sig_data <- crop_spec(mrs_data, sig_region)
   noise_data <- crop_spec(mrs_data, noise_region)
   
-  max_sig <- apply_mrs(sig_data, 7, re_max, data_only = TRUE)
+  #max_sig <- apply_mrs(sig_data, 7, re_max, data_only = TRUE)
+  max_sig <- apply_mrs(sig_data, 7, re_max_interp, interp_f, data_only = TRUE)
   noise_mean <- apply_mrs(noise_data, 7, re_mean, data_only = TRUE)
   max_sig <- max_sig - noise_mean
   
@@ -1754,7 +1816,13 @@ calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5),
   noise_sd <- est_noise_sd(noise_data, offset = 0, n = N(noise_data), 
                            p_order = p_order)
   
-  max_sig / (2 * noise_sd)
+  snr <- max_sig / (2 * noise_sd)
+  
+  if (full_output) {
+    return(list(snr = snr, max_sig = max_sig, noise_sd = noise_sd))
+  } else {
+    return(snr)
+  }
 }
 
 #' Search for the highest peak in a spectral region and return the frequency,

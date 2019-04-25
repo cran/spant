@@ -1,4 +1,4 @@
-read_twix <- function(fname) {
+read_twix <- function(fname, verbose, full_data = FALSE) {
   # check the file size
   fbytes <- file.size(fname)
   
@@ -9,7 +9,7 @@ read_twix <- function(fname) {
   #print(first_int)
   #print(second_int)
   if ((first_int < 10000) && (second_int <= 64)) {
-    cat("TWIX file is VD format.\n")
+    if (verbose) cat("TWIX file is VD format.\n")
     version <- "vd"
     Nscans <- second_int
     measID <- read_uint32(con)
@@ -24,7 +24,7 @@ read_twix <- function(fname) {
     dataStart <- measOffset + hdrLength
     #print(dataStart)
   } else {
-    cat("TWIX file is VB format.\n")
+    if (verbose) cat("TWIX file is VB format.\n")
     version <- "vb"
     dataStart <- first_int
     Nscans <- 1
@@ -41,14 +41,18 @@ read_twix <- function(fname) {
   
   # overestimate the number of data points and pre-allocate
   expected_pts <- as.integer((fbytes - dataStart) / 4)  
-  raw_pts <- c(NA)
-  length(raw_pts) <- expected_pts
-  raw_pt_start <- 1
+  
+  if (verbose) cat(paste("Scans           :", Nscans, "\n"))
   
   for (scans in 0:(Nscans - 1)) {
+    # the final scan is the one we are interested in, so clear the last one 
+    raw_pts <- c(NA)
+    length(raw_pts) <- expected_pts
+    raw_pt_start <- 1
+    
     n <- 0
     while (TRUE) {
-      cat(".")
+      if (verbose) cat(".")
       seek(con, cPos, "start")
       n <- n + 1
       ulDMALength_bin <- intToBits(read_int32(con))
@@ -172,14 +176,16 @@ read_twix <- function(fname) {
   }
   close(con)
   
-  cat("\n")
+  if (verbose) cat("\n")
   raw_pts <- raw_pts[1:raw_pt_end]
   fid_offset <- floor(ima_kspace_center_column / 2) + 1
   dynamics <- length(raw_pts) / ima_coils / (ima_samples * 2)
-  cat(paste("Coils          :", ima_coils, "\n"))
-  cat(paste("Complex pts    :", ima_samples, "\n"))
-  cat(paste("Dynamics       :", dynamics, "\n"))
-  cat(paste("FID offset pts :", fid_offset, "\n"))
+  if (verbose) cat(paste("Raw data points :", length(raw_pts), "\n"))
+  if (verbose) cat(paste("Coils           :", ima_coils, "\n"))
+  if (verbose) cat(paste("Complex pts     :", ima_samples, "\n"))
+  if (verbose) cat(paste("Dynamics        :", dynamics, "\n"))
+  if (verbose) cat(paste("kspace center   :", ima_kspace_center_column, "\n"))
+  #if (verbose) cat(paste("FID offset pts  :", fid_offset, "\n"))
   
   # make complex
   data <- raw_pts[c(TRUE, FALSE)] - 1i * raw_pts[c(FALSE, TRUE)]
@@ -187,8 +193,9 @@ read_twix <- function(fname) {
   data <- array(data, dim = c(ima_samples, ima_coils, dynamics, 1, 1, 1, 1))
   data <- aperm(data, c(7,6,5,4,3,2,1))
    
-  if (floor(ima_kspace_center_column / 2) > 0) {
-    data <- data[,,,,,,(fid_offset + 1):ima_samples, drop = FALSE]
+  if (!full_data & (floor(ima_kspace_center_column / 2) > 0)) {
+    #data <- data[,,,,,,(fid_offset + 1):ima_samples, drop = FALSE]
+    data <- data[,,,,,,(ima_kspace_center_column + 1):ima_samples, drop = FALSE]
   }
   
   res <- c(NA, NA, NA, NA, 1, NA, 1 / vars$fs)
@@ -229,7 +236,7 @@ read_siemens_txt_hdr <- function(fname, version) {
   
   while (TRUE) {
     line <- readLines(con, n = 1, skipNul = TRUE)
-    if (grepl("### ASCCONV END ###", line, fixed = TRUE)) {
+    if (grepl("### ASCCONV END ###", line, fixed = TRUE, useBytes = TRUE)) {
       break
     } else if (startsWith(line, "lAverages")) {
       vars$averages <- as.integer(strsplit(line, "=")[[1]][2])

@@ -13,7 +13,9 @@ get_mol_paras <- function(name, ...) {
 get_mol_names <- function() {
   funs <- ls(getNamespace("spant"), all.names = TRUE)
   funs <- funs[!funs %in% c("get_mol_paras", "get_acq_paras",
-                            "get_1h_brain_basis_paras")]
+                            "get_1h_brain_basis_paras",
+                            "get_1h_brain_basis_paras_v1",
+                            "get_1h_brain_basis_paras_v2")]
   
   sub("_paras", "", sub("get_", "", funs[grep("get_.*_paras", funs)]))
 }
@@ -41,7 +43,6 @@ get_uncoupled_mol <- function(name, chem_shift, nucleus, scale_factor, lw, lg) {
   paras
 }
 
-#' @export
 print.mol_parameters <- function(x, ...) {
   cat(paste(c("Name        : ", x$name, "\n")), sep = "")
   cat(paste(c("Source      : ", x$source, "\n")), sep = "")
@@ -50,6 +51,9 @@ print.mol_parameters <- function(x, ...) {
     cat("\n")
     cat(paste(c("Spin group ", n, "\n")), sep = "")
     cat("------------\n")
+    cat(paste(c("Scaling factor : ", x$spin_groups[[n]]$scale_factor, "\n")), sep = "")
+    cat(paste(c("Linewidth (Hz) : ", x$spin_groups[[n]]$lw, "\n")), sep = "")
+    cat(paste(c("L/G lineshape  : ", x$spin_groups[[n]]$lg, "\n\n")), sep = "")
     print(data.frame(nucleus = x$spin_groups[[n]]$nucleus,
                      chem_shift = x$spin_groups[[n]]$chem_shift))
     
@@ -362,6 +366,36 @@ get_mm20_paras <- function(ft) {
   paras
 }
 
+get_mm_3t_paras <- function(ft) {
+  paras   <- get_uncoupled_mol("MM", 0.90, "1H", 0.72, 21.20 / 128 * ft / 1e6, 1)
+  paras_b <- get_uncoupled_mol("MM", 1.21, "1H", 0.28, 19.16 / 128 * ft / 1e6, 1)
+  paras_c <- get_uncoupled_mol("MM", 1.38, "1H", 0.38, 15.90 / 128 * ft / 1e6, 1)
+  paras_d <- get_uncoupled_mol("MM", 1.63, "1H", 0.05,  7.50 / 128 * ft / 1e6, 1)
+  paras_e <- get_uncoupled_mol("MM", 2.01, "1H", 0.45, 29.03 / 128 * ft / 1e6, 1)
+  paras_f <- get_uncoupled_mol("MM", 2.09, "1H", 0.36, 20.53 / 128 * ft / 1e6, 1)
+  paras_g <- get_uncoupled_mol("MM", 2.25, "1H", 0.36, 17.89 / 128 * ft / 1e6, 1)
+  paras_h <- get_uncoupled_mol("MM", 2.61, "1H", 0.04,  5.30 / 128 * ft / 1e6, 1)
+  paras_i <- get_uncoupled_mol("MM", 2.96, "1H", 0.20, 14.02 / 128 * ft / 1e6, 1)
+  paras_j <- get_uncoupled_mol("MM", 3.11, "1H", 0.11, 17.89 / 128 * ft / 1e6, 1)
+  paras_k <- get_uncoupled_mol("MM", 3.67, "1H", 0.64, 33.52 / 128 * ft / 1e6, 1)
+  paras_l <- get_uncoupled_mol("MM", 3.80, "1H", 0.07, 11.85 / 128 * ft / 1e6, 1)
+  paras_m <- get_uncoupled_mol("MM", 3.96, "1H", 1.00, 37.48 / 128 * ft / 1e6, 1)
+  paras$spin_groups[[2]] <- paras_b$spin_groups[[1]]
+  paras$spin_groups[[3]] <- paras_c$spin_groups[[1]]
+  paras$spin_groups[[4]] <- paras_d$spin_groups[[1]]
+  paras$spin_groups[[5]] <- paras_e$spin_groups[[1]]
+  paras$spin_groups[[6]] <- paras_f$spin_groups[[1]]
+  paras$spin_groups[[7]] <- paras_g$spin_groups[[1]]
+  paras$spin_groups[[8]] <- paras_h$spin_groups[[1]]
+  paras$spin_groups[[9]] <- paras_i$spin_groups[[1]]
+  paras$spin_groups[[10]] <- paras_j$spin_groups[[1]]
+  paras$spin_groups[[11]] <- paras_k$spin_groups[[1]]
+  paras$spin_groups[[12]] <- paras_l$spin_groups[[1]]
+  paras$spin_groups[[13]] <- paras_m$spin_groups[[1]]
+  paras$source <- "Birch et al Magn Reson Med. 2017 Jan; 77(1): 34-43."
+  paras
+}
+
 get_naa_paras <- function(lw = NULL, lg = 0) {
   if (is.null(lw)) lw = 0.5
   nucleus <- c("1H")
@@ -419,7 +453,6 @@ get_naa2_paras <- function(lw = NULL, lg = 0) {
   class(paras) <- "mol_parameters"
   paras
 }
-
 
 get_naag_ch3_paras <- function(lw = NULL, lg = 0) {
   if (is.null(lw)) lw = 0.5
@@ -762,50 +795,50 @@ get_gpc_paras <- function(lw = NULL, lg = 0) {
   paras
 }
 
-get_10spin_paras <- function(lw = NULL, lg = 0) {
-  if (is.null(lw)) lw = 2
-  nucleus <- rep("1H", 10)
-  chem_shift <- c(5.216, 3.519, 3.698, 3.395, 3.822, 3.826, 3.749, 1, 2, 3)
-  j_coupling_mat <- matrix(0, 10, 10)
-  j_coupling_mat[2,1] <- 3.8
-  j_coupling_mat[3,2] <- 9.6
-  j_coupling_mat[4,3] <- 9.4
-  j_coupling_mat[5,4] <- 9.9
-  j_coupling_mat[6,5] <- 1.5
-  j_coupling_mat[7,5] <- 6
-  j_coupling_mat[7,6] <- -12.1
-  
-  spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
-                       j_coupling_mat = j_coupling_mat, scale_factor = 1,
-                       lw = lw, lg = lg)
-  
-  source <- "made up molecule"
-  
-  paras <- list(spin_groups = list(spin_group_a), name = "Glc", source = source)
-  class(paras) <- "mol_parameters"
-  paras
-}
+# get_10spin_paras <- function(lw = NULL, lg = 0) {
+#   if (is.null(lw)) lw = 2
+#   nucleus <- rep("1H", 10)
+#   chem_shift <- c(5.216, 3.519, 3.698, 3.395, 3.822, 3.826, 3.749, 1, 2, 3)
+#   j_coupling_mat <- matrix(0, 10, 10)
+#   j_coupling_mat[2,1] <- 3.8
+#   j_coupling_mat[3,2] <- 9.6
+#   j_coupling_mat[4,3] <- 9.4
+#   j_coupling_mat[5,4] <- 9.9
+#   j_coupling_mat[6,5] <- 1.5
+#   j_coupling_mat[7,5] <- 6
+#   j_coupling_mat[7,6] <- -12.1
+#   
+#   spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
+#                        j_coupling_mat = j_coupling_mat, scale_factor = 1,
+#                        lw = lw, lg = lg)
+#   
+#   source <- "made up molecule"
+#   
+#   paras <- list(spin_groups = list(spin_group_a), name = "Glc", source = source)
+#   class(paras) <- "mol_parameters"
+#   paras
+# }
 
-get_9spin_paras <- function(lw = NULL, lg = 0) {
-  if (is.null(lw)) lw = 2
-  nucleus <- rep("1H", 9)
-  chem_shift <- c(5.216, 3.519, 3.698, 3.395, 3.822, 3.826, 3.749, 1, 2)
-  j_coupling_mat <- matrix(0, 9, 9)
-  j_coupling_mat[2,1] <- 3.8
-  j_coupling_mat[3,2] <- 9.6
-  j_coupling_mat[4,3] <- 9.4
-  j_coupling_mat[5,4] <- 9.9
-  j_coupling_mat[6,5] <- 1.5
-  j_coupling_mat[7,5] <- 6
-  j_coupling_mat[7,6] <- -12.1
-  
-  spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
-                       j_coupling_mat = j_coupling_mat, scale_factor = 1,
-                       lw = lw, lg = lg)
-  
-  source <- "made up molecule"
-  
-  paras <- list(spin_groups = list(spin_group_a), name = "Glc", source = source)
-  class(paras) <- "mol_parameters"
-  paras
-}
+# get_9spin_paras <- function(lw = NULL, lg = 0) {
+#   if (is.null(lw)) lw = 2
+#   nucleus <- rep("1H", 9)
+#   chem_shift <- c(5.216, 3.519, 3.698, 3.395, 3.822, 3.826, 3.749, 1, 2)
+#   j_coupling_mat <- matrix(0, 9, 9)
+#   j_coupling_mat[2,1] <- 3.8
+#   j_coupling_mat[3,2] <- 9.6
+#   j_coupling_mat[4,3] <- 9.4
+#   j_coupling_mat[5,4] <- 9.9
+#   j_coupling_mat[6,5] <- 1.5
+#   j_coupling_mat[7,5] <- 6
+#   j_coupling_mat[7,6] <- -12.1
+#   
+#   spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
+#                        j_coupling_mat = j_coupling_mat, scale_factor = 1,
+#                        lw = lw, lg = lg)
+#   
+#   source <- "made up molecule"
+#   
+#   paras <- list(spin_groups = list(spin_group_a), name = "Glc", source = source)
+#   class(paras) <- "mol_parameters"
+#   paras
+# }

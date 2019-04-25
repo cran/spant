@@ -14,13 +14,15 @@
 #' @param mar option to adjust the plot margins. See ?par.
 #' @param restore_def_par restore default plotting par values after the plot has 
 #' been made.
+#' @param ylim range of values to display on the y-axis, eg ylim = c(0,10).
+#' @param y_scale option to display the y-axis values (logical).
 #' @param ... further arguments to plot method.
 #' @export
 plot.fit_result <- function(x, xlim = NULL, data_only = FALSE, label = NULL, 
                            plot_sigs = NULL, dyn = 1, x_pos = 1,
                            y_pos = 1, z_pos = 1, coil = 1, n = NULL,
                            sub_bl = FALSE, mar = NULL, restore_def_par = TRUE, 
-                           ...) {
+                           ylim = NULL, y_scale = FALSE, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -43,7 +45,19 @@ plot.fit_result <- function(x, xlim = NULL, data_only = FALSE, label = NULL,
   if (!is.null(mar)) {
     graphics::par(mar = mar)
   } else {
-    graphics::par(mar = c(3.5, 1.2, 1.2, 1.2)) # space around the plot
+    if (y_scale) {
+      graphics::par(mar = c(3.5, 3.5, 1.2, 1.2)) # space around the plot
+    } else {
+      graphics::par(mar = c(3.5, 1.2, 1.2, 1.2)) # space around the plot
+    }
+  }
+  
+  if (y_scale) {
+    ylab <- "Intensity (au)"
+    yaxt <- "s"
+  } else {
+    ylab <- ""
+    yaxt <- "n"
   }
   
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
@@ -60,7 +74,7 @@ plot.fit_result <- function(x, xlim = NULL, data_only = FALSE, label = NULL,
     min_dp <- min(x$Data[ind])
     marg = (max_dp - min_dp) * 0.02
     graphics::plot(x$PPMScale, x$Data, type = 'l', xlim = xlim, 
-         ylim = c(min_dp - marg, max_dp + marg), yaxt = "n", ylab = "",
+         ylim = c(min_dp - marg, max_dp + marg), yaxt = yaxt, ylab = ylab,
          xlab = "Chemical shift (ppm)", ...)
     
     if (!is.null(label)) {
@@ -76,15 +90,26 @@ plot.fit_result <- function(x, xlim = NULL, data_only = FALSE, label = NULL,
     }
     
     fit_line <- x$Fit + x$Baseline
-    max_dp <- max(x$Data[ind],fit_line[ind])
-    min_dp <- min(x$Data[ind],fit_line[ind],x$Baseline[ind])
+    
+    if (is.null(ylim)) {
+      max_dp <- max(x$Data[ind],fit_line[ind])
+      min_dp <- min(x$Data[ind],fit_line[ind],x$Baseline[ind])
+    } else {
+      max_dp <- ylim[2]
+      min_dp <- ylim[1]
+    }
     
     res <- x$Data - fit_line
     res_range <- max(res[ind]) - min(res[ind])
     offset <- max_dp - min(res[ind])
     
+    if (!is.null(ylim)) {
+      x$Data[ind][x$Data[ind] > max_dp] <- max_dp
+      fit_line[fit_line > max_dp] <- max_dp
+    }
+    
     graphics::plot(x$PPMScale, x$Data, type = 'l', xlim = xlim, 
-         ylim = c(min_dp,max_dp + res_range), yaxt = "n", ylab = "",
+         ylim = c(min_dp,max_dp + res_range), yaxt = yaxt, ylab = ylab,
          xlab = "Chemical shift (ppm)", ...)
     graphics::lines(x$PPMScale, fit_line, col = 'Red', lw = 2)
     if (!sub_bl) {
