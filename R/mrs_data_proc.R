@@ -345,6 +345,10 @@ shift <- function(mrs_data, shift, units = "ppm") {
 phase <- function(mrs_data, zero_order, first_order = 0) {
   if ((first_order == 0) && (length(zero_order) == 1)) {
     mrs_data$data = mrs_data$data * exp(1i * zero_order * pi / 180)
+  } else if ((first_order == 0) && (dim(zero_order)[1:6] == dim(mrs_data$data)[1:6])) {
+    phase_array <- array(rep(zero_order,N(mrs_data)), 
+                         dim = dim(mrs_data$data))
+    mrs_data$data = mrs_data$data * exp(1i * phase_array * pi / 180)
   } else if ((length(zero_order) == 1) && (first_order != 0)) {
     freq <- rep(hz(mrs_data), each = Nspec(mrs_data))
     freq_mat <- array(freq, dim = dim(mrs_data$data))
@@ -483,9 +487,9 @@ lb.mrs_data <- function(x, lb, lg = 1) {
   }
   
   if (lg > 0) {
-    x$data = x$data * exp((lg * lb ^ 2 * pi ^ 2 / 4 /
-                                          log(0.5)) * (t ^ 2))
+    x$data = x$data * exp((lg * lb ^ 2 * pi ^ 2 / 4 / log(0.5)) * (t ^ 2))
   }
+  
   return(x)
 }
 
@@ -681,6 +685,22 @@ Arg.mrs_data <- function(z) {
 Conj.mrs_data <- function(z) {
   z$data <- Conj(z$data)
   z
+}
+
+#' Downsample an MRS signal by a factor.
+#' @param mrs_data MRS data object.
+#' @param q integer factor to downsample by (default = 2).
+#' @return downsampled data.
+#' @export
+decimate_mrs <- function(mrs_data, q = 2) {
+  # needs to be a TD operation
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  mrs_data_re <- apply_mrs(Re(mrs_data), 7, fun = signal::decimate, q)
+  mrs_data_im <- apply_mrs(Im(mrs_data), 7, fun = signal::decimate, q)
+  mrs_data$data <- (mrs_data_re$data + 1i * mrs_data_im$data) * q
+  mrs_data$resolution <- mrs_data$resolution * q
+  mrs_data
 }
 
 ift <- function(mrs_data, dims) {
@@ -1020,6 +1040,31 @@ get_slice <- function(mrs_data, z_pos) {
   return(mrs_data)
 }
 
+#' Extract a subset of MRS data.
+#' @param mrs_data MRS data object.
+#' @param x_set x indices to include in the output (default all).
+#' @param y_set y indices to include in the output (default all).
+#' @param z_set z indices to include in the output (default all). 
+#' @param dyn_set dynamic indices to include in the output (default all). 
+#' @param coil_set coil indices to include in the output (default all). 
+#' @return selected subset of MRS data.
+#' @export
+get_subset <- function(mrs_data, x_set = NULL, y_set = NULL, z_set = NULL,
+                       dyn_set = NULL, coil_set = NULL) {
+  
+  orig_dims <- dim(mrs_data$data)
+  
+  if (is.null(x_set)) x_set       <- 1:orig_dims[2]
+  if (is.null(y_set)) y_set       <- 1:orig_dims[3]
+  if (is.null(z_set)) z_set       <- 1:orig_dims[4]
+  if (is.null(dyn_set)) dyn_set   <- 1:orig_dims[5]
+  if (is.null(coil_set)) coil_set <- 1:orig_dims[6]
+  
+  mrs_data$data <- mrs_data$data[, x_set, y_set, z_set, dyn_set, coil_set,
+                                 , drop = FALSE]
+  return(mrs_data)
+}
+
 #' Return the first half of a dynamic series.
 #' @param mrs_data dynamic MRS data.
 #' @return first half of the dynamic series.
@@ -1194,6 +1239,33 @@ bc <- function(mrs_data, lambda = 1e3, p = 0.1) {
   return(a)
 }
 
+#' Calculate the mean spectrum from an mrs_data object.
+#' @param x object of class mrs_data.
+#' @param ... other arguments to pass to the colMeans function.
+#' @return mean mrs_data object.
+#' @export
+mean.mrs_data <- function(x, ...) {
+  data_pts <- x$data
+  data_N <- N(x)
+  dim(data_pts) <- c(length(data_pts) / data_N, data_N)
+  x$data <- colMeans(data_pts, ...)
+  dim(x$data) <- c(1, 1, 1, 1, 1, 1, data_N)
+  x
+}
+
+#' Collapse MRS data by concatenating spectra along the dynamic dimension.
+#' @param mrs_data mrs_data object to be collapsed.
+#' @return collapsed data with spectra concatentated along the dynamic
+#' dimension.
+#' @export
+collapse_to_dyns <- function(mrs_data) {
+  data_pts <- mrs_data$data
+  data_N <- N(mrs_data)
+  dim(data_pts) <- c(1, 1, 1, 1, length(data_pts) / data_N, 1, data_N)
+  mrs_data$data <- data_pts
+  mrs_data
+}
+ 
 #' Calculate the mean dynamic data.
 #' @param mrs_data dynamic MRS data.
 #' @return mean dynamic data.
@@ -1472,21 +1544,45 @@ hsvd <- function(y, fs, K = 50, propack = TRUE, fast_hank = TRUE) {
   list(basis = basis, reson_table = reson_table)
 }
 
-auto_phase <- function(mrs_data) {
-  if (!is_fd(mrs_data)) {
-      mrs_data <- td2fd(mrs_data)
+#' Perform zeroth-order phase correction based on the minimisation of the
+#' squared difference between the real and magnitude components of the
+#' spectrum.
+#' @param mrs_data an object of class \code{mrs_data}.
+#' @param xlim frequency range (default units of PPM) to including in the phase
+#' @param ret_phase return phase values (logical).
+#' determination.
+#' @return MRS data object and phase values (optional).
+#' @export
+auto_phase <- function(mrs_data, xlim = NULL, ret_phase = FALSE) {
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  if (!is.null(xlim)) {
+    mrs_data_crop <- crop_spec(mrs_data, xlim)
+    phases <- apply_mrs(mrs_data_crop, 7, auto_phase_vec, data_only = TRUE)
+  } else {
+    phases <- apply_mrs(mrs_data, 7, auto_phase_vec, data_only = TRUE)
   }
-  apply_mrs(mrs_data, 7, auto_phase_vec)
+  
+  # TODO update phase function and remove drop
+  mrs_data <- phase(mrs_data, phases)
+  
+  if (ret_phase) {
+    return(list(mrs_data = mrs_data, phase = abind::adrop(phases, 7)))
+  } else {
+    return(mrs_data)
+  }
 }
 
 auto_phase_vec <- function(vec) {
   res <- stats::optim(0, phase_obj_fn, gr = NULL, vec, method = "Brent",
                       lower = -180, upper = 180)
-  vec * exp(1i * (res$par + 180) / 180 * pi)
+  #vec * exp(1i * res$par / 180 * pi)
+  res$par
 }
 
 phase_obj_fn <- function(phi, vec) {
-  sum(Re(vec * exp(1i * phi / 180 * pi)))
+  vec_adj <- vec * exp(1i * phi / 180 * pi)
+  sum((Mod(vec_adj) - Re(vec_adj)) ^ 2)
 }
 
 ecc_2d_array <- function(array) {
@@ -1752,7 +1848,7 @@ est_noise_sd <- function(mrs_data, n = 100, offset = 100, p_order = 2) {
 est_noise_sd_vec <- function(x, n = 100, offset = 100, p_order = 2) {
   N <- length(x)
   seg <- Re(x[(N - offset - n + 1):(N - offset)])
-  lm_res <- stats::lm(seg ~ poly(1:n, p_order))
+  lm_res <- stats::lm(seg ~ stats::poly(1:n, p_order))
   stats::sd(lm_res$residual)
 }
 
@@ -1818,7 +1914,12 @@ calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5),
   
   snr <- max_sig / (2 * noise_sd)
   
+  # drop the last dimension for plotting functions
+  snr <- abind::adrop(snr, 7)
+  
   if (full_output) {
+    max_sig  <- abind::adrop(max_sig, 7)
+    noise_sd <- abind::adrop(noise_sd, 7)
     return(list(snr = snr, max_sig = max_sig, noise_sd = noise_sd))
   } else {
     return(snr)
@@ -1899,7 +2000,7 @@ calc_peak_info_vec <- function(data_pts, interp_f) {
 #' @param mode spectral mode, can be : "re", "im" or "mod".
 #' @return an array of integral values.
 #' @export
-int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "real") {
+int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "re") {
   
   if (!is_fd(mrs_data)) {
     mrs_data <- td2fd(mrs_data)
@@ -1913,9 +2014,7 @@ int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "real") {
     x_scale <- pts(mrs_data)
   }
   
-  if (is.null(xlim)) {
-    xlim <- c(x_scale[1], x_scale[N(mrs_data)])
-  }
+  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[N(mrs_data)])
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   

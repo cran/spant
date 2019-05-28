@@ -4,13 +4,13 @@
 \alias{plot_fit_slice_inter}
 \title{Plot a 2D slice from an MRSI fit result object.}
 \usage{
-plot_fit_slice_inter(fit_res, name, slice = 1, zlim = NULL,
+plot_fit_slice_inter(fit_res, map = NULL, slice = 1, zlim = NULL,
   interp = 1)
 }
 \arguments{
 \item{fit_res}{\code{fit_result} object.}
 
-\item{name}{name of the quantity to plot, eg "TNAA".}
+\item{map}{array of values to be plotted, defaults to a "TNAA" map.}
 
 \item{slice}{slice to plot in the z direction.}
 

@@ -1,3 +1,14 @@
+# spant 0.14.0
+* Added options to omit basis signals, change labele names and combine lipid and
+MM signals from the stackplot of a fit object.
+* Added auto_phase function for zeroth order phase-correction of simple spectra.
+* Added get_subset function to aid MRSI slicing.
+* Added decimate_mrs function.
+* Added fit_amps function to quickly extract amplitude estimates from a fit
+object.
+* Bug fix for int_spec function.
+* sim_basis function arguments updated to accept acq_par objects.
+
 # spant 0.13.0
 * Various bug fixes for Siemens TWIX reader.
 * rats and tdsr functions now use the mean spectrum as the default reference.

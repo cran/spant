@@ -119,18 +119,16 @@ fit_mrs <- function(metab, basis = NULL, method = 'VARPRO_3P', w_ref = NULL, opt
                                .paropts = list(.inorder = TRUE),
                                .progress = "text", .inform = FALSE)
     
-    
   } else if (METHOD == "TARQUIN") {
     if (!is.null(w_ref)) { 
       if (dyns(w_ref) > 1) {
         w_ref <- mean_dyns(w_ref)
         warning("Using the mean reference signal for water scaling.")
       }
-    }
-    
-    # repeat the refernce signal to match the number of dynamics
-    if (dyns(metab) > 1) {
-      w_ref <- rep_dyn(w_ref, dyns(metab))
+      # repeat the refernce signal to match the number of dynamics
+      if (dyns(metab) > 1) {
+        w_ref <- rep_dyn(w_ref, dyns(metab))
+      }
     }
     
     # combine metab and w_ref data together
@@ -163,11 +161,11 @@ fit_mrs <- function(metab, basis = NULL, method = 'VARPRO_3P', w_ref = NULL, opt
         w_ref <- mean_dyns(w_ref)
         warning("Using the mean reference signal for water scaling.")
       }
-    }
-    
-    # repeat the reference signal to match the number of dynamics
-    if (dyns(metab) > 1) {
-      w_ref <- rep_dyn(w_ref, dyns(metab))
+      
+      # repeat the reference signal to match the number of dynamics
+      if (dyns(metab) > 1) {
+        w_ref <- rep_dyn(w_ref, dyns(metab))
+      }
     }
     
     # combine metab and w_ref data together
@@ -233,10 +231,10 @@ fit_mrs <- function(metab, basis = NULL, method = 'VARPRO_3P', w_ref = NULL, opt
     # check that all temp i/o files are unique
     file_list_vec <- stats::na.omit(file_list_vec)
     file_list_vec <- as.character(file_list_vec)
+    file_list_vec <- grep("NA", file_list_vec, value = TRUE, invert = TRUE)
     if (sum(duplicated(file_list_vec)) > 0 ) {
       stop("Error, duplicate temp file detected.")
     }
-    #print(file_list_vec)
   }
   
   df_list_amps <- result_list[seq(from = 1, by = res_n,length.out = fit_num)]
@@ -545,4 +543,55 @@ fit_diags <- function(x, amps = NULL) {
   } else {
     data.frame(duration = time, mean_iters = mean_iters, mean_res = mean_res)
   }
+}
+
+#' Extract the fit amplitues from an object of class \code{fit_result}.
+#' @param x \code{fit_result} object.
+#' @param inc_index include columns for the voxel index.
+#' @param sort_names sort the basis set names alphabetically.
+#' @param append_common_1h_comb append commonly used 1H metabolite combinations
+#' eg TNAA = NAA + NAAG.
+#' @return a dataframe of amplidudes.
+#' @export
+fit_amps <- function(x, inc_index = FALSE, sort_names = TRUE,
+                     append_common_1h_comb = TRUE) {
+  
+  basis_n <- length(x$basis$names)
+  out <- x$res_tab[, 6:(5 + basis_n)]
+  if (sort_names) out <- out[, order(colnames(out))]
+  if (inc_index)  out <- cbind(x$res_tab[, 1:5], out)
+  
+  if (append_common_1h_comb) {
+    # create some common metabolite combinations
+    if (("NAA" %in% colnames(out)) & ("NAAG" %in% colnames(out))) {
+      out['TNAA'] <- out['NAA'] + out['NAAG']
+    }
+    
+    if (("Cr" %in% colnames(out)) & ("PCr" %in% colnames(out))) {
+      out['TCr'] <- out['Cr'] + out['PCr']
+    }
+    
+    if (("PCh" %in% colnames(out)) & ("GPC" %in% colnames(out))) {
+      out['TCho'] <- out['PCh'] + out['GPC']
+    }
+    
+    if (("Glu" %in% colnames(out)) & ("Gln" %in% colnames(out))) {
+      out['Glx'] <- out['Glu'] + out['Gln']
+    }
+    
+    if (("Lip09" %in% colnames(out)) & ("MM09" %in% colnames(out))) {
+      out['TLM09'] <- out['Lip09'] + out['MM09']
+    }
+    
+    if (("Lip13a" %in% colnames(out)) & ("Lip13b" %in% colnames(out)) & 
+        ("MM12" %in% colnames(out)) & ("MM14" %in% colnames(out))) {
+      out["TLM13"] <- out["Lip13a"] + out["Lip13b"] + out["MM12"] + out["MM14"]
+    }
+    
+    if (("Lip20" %in% colnames(out)) & ("MM20" %in% colnames(out))) {
+      out['TLM20'] <- out['Lip20'] + out['MM20']
+    }
+  }
+  
+  out
 }
