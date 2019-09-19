@@ -17,6 +17,122 @@ get_svs_voi <- function(mrs_data, target_mri) {
   voi  
 }
 
+#' Generate a MRSI voxel from an \code{mrs_data} object.
+#' @param mrs_data MRS data.
+#' @param target_mri optional image data to match the intended volume space.
+#' @param x_pos x voxel coordinate.
+#' @param y_pos y voxel coordinate.
+#' @param z_pos z voxel coordinate.
+#' @return volume data as a nifti object.
+#' @export
+get_mrsi_voxel <- function(mrs_data, target_mri, x_pos, y_pos, z_pos) {
+  affine <- get_mrs_affine(mrs_data, x_pos, y_pos, z_pos)
+  raw_data <- array(1, c(mrs_data$resolution[2:4]))
+  voi <- RNifti::retrieveNifti(raw_data)
+  voi <- RNifti::`sform<-`(voi, structure(affine, code = 2L))
+  
+  if (missing(target_mri)) {
+    warning("Target MRI data has not been specified.")  
+  } else {
+    voi <- resample_voi(voi, target_mri)
+  }
+  voi  
+}
+
+# Generate a MRSI voxel PSF from an \code{mrs_data} object.
+# @param mrs_data MRS data.
+# @param target_mri optional image data to match the intended volume space.
+# @param x_pos x voxel coordinate.
+# @param y_pos y voxel coordinate.
+# @param z_pos z voxel coordinate.
+# @return volume data as a nifti object.
+# get_mrsi_voxel_xy_psf_old <- function(mrs_data, target_mri, x_pos, y_pos, z_pos) {
+#   affine <- get_mrs_affine(mrs_data, x_pos - 0.5, y_pos - 0.5, z_pos)
+#   nom_vox_res <- mrs_data$resolution[2:4]
+#   nom_vox_res[1:2] <- nom_vox_res[1:2] * 2 # double the size in x-y direction
+# 
+#   psf_mat <- pracma::repmat(signal::hamming(nom_vox_res[1]), nom_vox_res[1], 1)
+#   psf_mat <- psf_mat * t(psf_mat)
+#   psf_vec <- rep(psf_mat, nom_vox_res[3])
+#   vox_psf <- array(psf_vec, nom_vox_res)
+#   
+#   voi <- RNifti::retrieveNifti(vox_psf)
+#   voi <- RNifti::`sform<-`(voi, structure(affine, code = 2L))
+#   
+#   if (missing(target_mri)) {
+#     warning("Target MRI data has not been specified.")  
+#   } else {
+#     voi <- resample_voi(voi, target_mri)
+#   }
+#   voi  
+# }
+
+#' Generate a MRSI voxel PSF from an \code{mrs_data} object.
+#' @param mrs_data MRS data.
+#' @param target_mri optional image data to match the intended volume space.
+#' @param x_pos x voxel coordinate.
+#' @param y_pos y voxel coordinate.
+#' @param z_pos z voxel coordinate.
+#' @return volume data as a nifti object.
+#' @export
+get_mrsi_voxel_xy_psf <- function(mrs_data, target_mri, x_pos, y_pos, z_pos) {
+  FOV <- mrs_data$resolution[2] * Nx(mrs_data)
+  
+  psf_spatial_factor <- 8 # create a psf with spatial extent 8 times the nominal
+                          # voxel size
+  
+  aff_off <- psf_spatial_factor / 2 - 0.5 # affine position offset
+  affine <- get_mrs_affine(mrs_data, x_pos - aff_off, y_pos - aff_off, z_pos)
+  nom_vox_res <- mrs_data$resolution[2:4]
+  nom_vox_res[1:2] <- nom_vox_res[1:2] * psf_spatial_factor
+
+  start_pt <- FOV / 2 - nom_vox_res[1] / 2 + 1
+  subset <- seq(start_pt, by = 1, length.out = nom_vox_res[1])
+  
+  psf_mat <- Re(get_2d_psf(FOV = FOV, mat_size = Nx(mrs_data)))[subset, subset]
+  
+  psf_vec <- rep(psf_mat, nom_vox_res[3])
+  vox_psf <- array(psf_vec, nom_vox_res)
+  
+  voi <- RNifti::retrieveNifti(vox_psf)
+  voi <- RNifti::`sform<-`(voi, structure(affine, code = 2L))
+  
+  if (missing(target_mri)) {
+    warning("Target MRI data has not been specified.")  
+  } else {
+    voi <- resample_voi(voi, target_mri)
+  }
+  voi  
+}
+
+#' Generate a MRSI VOI from an \code{mrs_data} object.
+#' @param mrs_data MRS data.
+#' @param target_mri optional image data to match the intended volume space.
+#' @return volume data as a nifti object.
+#' @export
+get_mrsi_voi <- function(mrs_data, target_mri) {
+  affine <- get_mrs_affine(mrs_data)
+  
+  rows   <- dim(mrs_data$data)[2]
+  cols   <- dim(mrs_data$data)[3]
+  slices <- dim(mrs_data$data)[4]
+  
+  voi_dim <- c(rows * mrs_data$resolution[2],
+               cols * mrs_data$resolution[3],
+               slices * mrs_data$resolution[4])
+  
+  raw_data <- array(1, voi_dim)
+  voi <- RNifti::retrieveNifti(raw_data)
+  voi <- RNifti::`sform<-`(voi, structure(affine, code = 2L))
+  
+  if (missing(target_mri)) {
+    warning("Target MRI data has not been specified.")  
+  } else {
+    voi <- resample_voi(voi, target_mri)
+  }
+  voi  
+}
+
 #' Resample a VOI to match a target image space.
 #' @param voi volume data as a nifti object.
 #' @param mri image data as a nifti object.
@@ -31,9 +147,16 @@ resample_voi <- function(voi, mri) {
 #' @export
 #' @param voi volume data as a nifti object.
 #' @param mri image data as a nifti object.
-plot_voi_overlay <- function(voi, mri) {
+#' @param flip_lr flip the image in the left-right direction.
+plot_voi_overlay <- function(voi, mri, flip_lr = TRUE) {
   # check the image orientation etc is the same
   check_geom(voi, mri)
+ 
+  # swap L/R direction 
+  if (flip_lr) {
+    voi <- nifti_flip_lr(voi)
+    mri <- nifti_flip_lr(mri)
+  }
   
   # get the centre of gravity coords
   vox_inds <- get_voi_cog(voi)
@@ -46,10 +169,17 @@ plot_voi_overlay <- function(voi, mri) {
 #' Plot a volume as an overlay on a segmented brain volume.
 #' @param voi volume data as a nifti object.
 #' @param mri_seg segmented brain volume as a nifti object.
+#' @param flip_lr flip the image in the left-right direction.
 #' @export
-plot_voi_overlay_seg <- function(voi, mri_seg) {
+plot_voi_overlay_seg <- function(voi, mri_seg, flip_lr = TRUE) {
   # check the image orientation etc is the same
   check_geom(voi, mri_seg)
+  
+  # swap L/R direction 
+  if (flip_lr) {
+    voi     <- nifti_flip_lr(voi)
+    mri_seg <- nifti_flip_lr(mri_seg)
+  }
   
   # get the centre of gravity coords
   vox_inds <- get_voi_cog(voi)
@@ -81,6 +211,26 @@ get_voi_seg <- function(voi, mri_seg) {
   pvs <- summary(factor(vals, levels = c(0, 1, 2, 3), 
         labels = c("Other", "CSF", "GM", "WM"))) / sum(voi) * 100
   return(pvs)
+}
+
+#' Return the white matter, gray matter and CSF composition of a volume.
+#' @param psf volume data as a nifti object.
+#' @param mri_seg segmented brain volume as a nifti object.
+#' @return a vector of partial volumes expressed as percentages.
+#' @export
+get_voi_seg_psf <- function(psf, mri_seg) {
+  # check the image orientation etc is the same
+  check_geom(psf, mri_seg)
+  mask <- (psf > 0)
+  vals <- mri_seg[mask]
+  other <- sum(as.numeric(vals == 0) * psf[mask])
+  csf   <- sum(as.numeric(vals == 1) * psf[mask])
+  gm    <- sum(as.numeric(vals == 2) * psf[mask])
+  wm    <- sum(as.numeric(vals == 3) * psf[mask])
+  vec <- c(other, csf, gm, wm)
+  vec <- 100 * vec / sum(vec)  # normalise as a %
+  names(vec) <- c("Other", "CSF", "GM", "WM")
+  return(vec)
 }
 
 #' Convert SPM style segmentation files to a single categorical image where
@@ -150,7 +300,7 @@ spm_pve2categorical <- function(fname) {
 }
 
 # generate an sform affine for nifti generation
-get_mrs_affine <- function(mrs_data) {
+get_mrs_affine <- function(mrs_data, x_pos = 1, y_pos = 1, z_pos = 1) {
   # l1 norm
   col_vec <- mrs_data$col_vec/sqrt(sum(mrs_data$col_vec ^ 2))
   row_vec <- mrs_data$row_vec/sqrt(sum(mrs_data$row_vec ^ 2))
@@ -164,10 +314,14 @@ get_mrs_affine <- function(mrs_data) {
   affine[1:3, 1] <- col_vec
   affine[1:3, 2] <- row_vec
   affine[1:3, 3] <- slice_vec
-  affine[1:3, 4] <- pos_vec - mrs_data$resolution[2] / 2 * col_vec -
-                    mrs_data$resolution[3] / 2 * row_vec -
-                    mrs_data$resolution[4] / 2 * slice_vec 
+  rows <- dim(mrs_data$data)[2]
+  cols <- dim(mrs_data$data)[3]
+  slices <- dim(mrs_data$data)[4]
   
+  affine[1:3, 4] <- pos_vec -
+                    (mrs_data$resolution[2] * (-(x_pos - 1) + 0.5)) * row_vec -
+                    (mrs_data$resolution[3] * (-(y_pos - 1) + 0.5)) * col_vec -
+                    (mrs_data$resolution[4] * (-(z_pos - 1) + 0.5)) * slice_vec
   return(affine)
 }
 
@@ -185,4 +339,16 @@ check_geom <- function(a, b) {
 # VOI centre of gravity
 get_voi_cog <- function(voi) {
   as.integer(colMeans(which(voi == 1, arr.ind = TRUE)))
+}
+
+#' Flip the x data dimension order of a nifti image. This corresponds to
+#' flipping MRI data in the left-right direction, assuming the data in save in
+#' neurological format (can check with fslorient program).
+#' @param x nifti object to be processed.
+#' @return nifti object with reversed x data direction.
+#' @export
+nifti_flip_lr <- function(x) {
+  lr_dim <- dim(x)[1]
+  x[] <- x[lr_dim:1,,]
+  return(x)
 }

@@ -1,5 +1,14 @@
+# spant 0.15.0
+* Bug fix for using auto_phase function with a single spectrum.
+* Bug fix for comb_coils not returning unaveraged data when requested.
+* Added options to combine metabolite signals from the stackplot of a fit object
+and adjust the plot margins.
+* Added comb_fits function.
+* Added collapse_to_dyns function for mrs_fit objects.
+* RDA reader now extracts geometry information.
+
 # spant 0.14.0
-* Added options to omit basis signals, change labele names and combine lipid and
+* Added options to omit basis signals, change label names and combine lipid and
 MM signals from the stackplot of a fit object.
 * Added auto_phase function for zeroth order phase-correction of simple spectra.
 * Added get_subset function to aid MRSI slicing.

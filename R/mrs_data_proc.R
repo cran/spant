@@ -326,9 +326,10 @@ shift <- function(mrs_data, shift, units = "ppm") {
   if (length(shift_hz) == 1) {
     shift_array <- array(shift_hz, dim = dim(mrs_data$data))
   } else {
-    if (length(shift_hz) != dyns(mrs_data)) stop("Shift vector has an incorrect length.")
+    if (length(shift_hz) != Ndyns(mrs_data)) stop("Shift vector has an incorrect length.")
     # assume array should be applied in the dynamic dimension
-    shift_array <- array(shift_hz, dim = c(1,1,1,1,dyns(mrs_data),1,N(mrs_data)))
+    shift_array <- array(shift_hz, dim = c(1, 1, 1, 1, Ndyns(mrs_data), 1,
+                                           Npts(mrs_data)))
   }
   
   shift_array <- exp(2i * pi * t_array * shift_array)
@@ -343,12 +344,22 @@ shift <- function(mrs_data, shift, units = "ppm") {
 #' @return MRS data with applied phase parameters.
 #' @export
 phase <- function(mrs_data, zero_order, first_order = 0) {
-  if ((first_order == 0) && (length(zero_order) == 1)) {
-    mrs_data$data = mrs_data$data * exp(1i * zero_order * pi / 180)
-  } else if ((first_order == 0) && (dim(zero_order)[1:6] == dim(mrs_data$data)[1:6])) {
-    phase_array <- array(rep(zero_order,N(mrs_data)), 
-                         dim = dim(mrs_data$data))
+  if ((first_order == 0) && (length(zero_order) == 1)) { 
+    # single zero order phase term given
+    mrs_data$data <- mrs_data$data * exp(1i * zero_order * pi / 180)
+  } else if ((first_order == 0) && (is.null(dim(zero_order)))) { 
+    # array of zero order phase terms given
+    if (length(zero_order) != Ndyns(mrs_data)) {
+      stop("Shift vector has an incorrect length.")
+    }
+    # assume array should be applied in the dynamic dimension
+    phase_array <- array(zero_order, dim = c(1, 1, 1, 1, Ndyns(mrs_data), 1,
+                                             Npts(mrs_data)))
     mrs_data$data = mrs_data$data * exp(1i * phase_array * pi / 180)
+  } else if ((first_order == 0) && (dim(zero_order)[1:6] == dim(mrs_data$data)[1:6])) {
+    phase_array <- array(rep(zero_order, Npts(mrs_data)), 
+                         dim = dim(mrs_data$data))
+    mrs_data$data <- mrs_data$data * exp(1i * phase_array * pi / 180)
   } else if ((length(zero_order) == 1) && (first_order != 0)) {
     freq <- rep(hz(mrs_data), each = Nspec(mrs_data))
     freq_mat <- array(freq, dim = dim(mrs_data$data))
@@ -358,11 +369,6 @@ phase <- function(mrs_data, zero_order, first_order = 0) {
     }
     mrs_data$data = mrs_data$data * exp(2i * pi * (zero_order / 360 - freq_mat
                                                    * first_order / 1000))
-  } else if ((length(zero_order) > 0) && (first_order == 0)) {
-    if (length(zero_order) != dyns(mrs_data)) stop("Shift vector has an incorrect length.")
-    # assume array should be applied in the dynamic dimension
-    phase_array <- array(zero_order, dim = c(1,1,1,1,dyns(mrs_data),1,N(mrs_data)))
-    mrs_data$data = mrs_data$data * exp(1i * phase_array * pi / 180)
   } else {
     stop("Unsupported input options.")
   }
@@ -427,9 +433,9 @@ conv_mrs <- function(mrs_data, conv) {
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
   if (is_fd(conv)) conv <- fd2td(conv)
   
-  if (dyns(mrs_data) > 1) {
+  if (Ndyns(mrs_data) > 1) {
     warning("Repeating convolution data to match mrs_data dynamics.")
-    conv <- rep_dyn(conv, dyns(mrs_data))
+    conv <- rep_dyn(conv, Ndyns(mrs_data))
   }
   
   mrs_data * conv 
@@ -511,14 +517,14 @@ zf <- function(x, factor = 2) UseMethod("zf")
 #' @rdname zf
 #' @export
 zf.mrs_data <- function(x, factor = 2) {
-  set_td_pts(x, factor * N(x))
+  set_td_pts(x, factor * Npts(x))
 }
 
 #' @rdname zf
 #' @export
 zf.basis_set <- function(x, factor = 2) {
   x_mrs_data <- basis2mrs_data(x)
-  mrs_data2basis(set_td_pts(x_mrs_data, factor * N(x_mrs_data)), x$names)
+  mrs_data2basis(set_td_pts(x_mrs_data, factor * Npts(x_mrs_data)), x$names)
 }
 
 #' Set the number of time-domain data points, truncating or zero-filling as
@@ -609,7 +615,7 @@ recon_imag <- function(mrs_data) {
 #' @return list of acquisition parameters.
 #' @export
 get_acq_paras <- function(mrs_data) {
-  list(ft = mrs_data$ft, fs = fs(mrs_data), N = N(mrs_data), ref = mrs_data$ref)
+  list(ft = mrs_data$ft, fs = fs(mrs_data), N = Npts(mrs_data), ref = mrs_data$ref)
 }
 
 ft <- function(mrs_data, dims) {
@@ -716,6 +722,8 @@ dim.mrs_data <- function(x) {
 #' @return number of data points.
 #' @export
 N <- function(mrs_data) {
+  #stop("N function is depricated, use Npts instead.")
+  warning("N function is depricated, use Npts instead.")
   dim(mrs_data$data)[7]
 }
 
@@ -724,6 +732,7 @@ N <- function(mrs_data) {
 #' @return number of dynamic scans.
 #' @export
 dyns <- function(mrs_data) {
+  warning("dyns function is depricated, use Ndyns instead.")
   dim(mrs_data$data)[5]
 }
 
@@ -734,6 +743,49 @@ Nspec <- function(mrs_data) {
   mrs_dims <- dim(mrs_data$data)
   (mrs_dims[1] * mrs_dims[2] * mrs_dims[3] * mrs_dims[4] * mrs_dims[5] *
    mrs_dims[6])
+}
+
+#' Return the total number of x locations in an MRS dataset.
+#' @param mrs_data MRS data.
+#' @export
+Nx <- function(mrs_data) {
+  dim(mrs_data$data)[2]
+}
+
+#' Return the total number of y locations in an MRS dataset.
+#' @param mrs_data MRS data.
+#' @export
+Ny <- function(mrs_data) {
+  dim(mrs_data$data)[3]
+}
+
+#' Return the total number of z locations in an MRS dataset.
+#' @param mrs_data MRS data.
+#' @export
+Nz <- function(mrs_data) {
+  dim(mrs_data$data)[4]
+}
+
+#' Return the total number of dynamic scans in an MRS dataset.
+#' @param mrs_data MRS data.
+#' @export
+Ndyns <- function(mrs_data) {
+  dim(mrs_data$data)[5]
+}
+
+#' Return the total number of coil elements in an MRS dataset.
+#' @param mrs_data MRS data.
+#' @export
+Ncoils <- function(mrs_data) {
+  dim(mrs_data$data)[6]
+}
+
+#' Return the number of data points in an MRS dataset.
+#' @param mrs_data MRS data.
+#' @return number of data points.
+#' @export
+Npts <- function(mrs_data) {
+  dim(mrs_data$data)[7]
 }
 
 #' Return the sampling frequency in Hz of an MRS dataset.
@@ -750,7 +802,7 @@ hz <- function(mrs_data, fs = NULL, N = NULL) {
   }
   
   if (is.null(N)) {
-    N <- N(mrs_data)
+    N <- Npts(mrs_data)
   }
      
   seq(from = -fs / 2, to = fs / 2 - fs / N, length.out = N)
@@ -778,7 +830,7 @@ ppm <- function(mrs_data, ft = NULL, ref = NULL, fs= NULL, N = NULL) {
    }
    
    if (is.null(N)) {
-     N <- N(mrs_data)
+     N <- Npts(mrs_data)
    }
    
   -hz(fs = fs, N = N) / mrs_data$ft * 1e6 + mrs_data$ref
@@ -797,7 +849,7 @@ ppm2hz <- function(ppm_in, ft, ref) {
 }
 
 pts <- function(mrs_data) {
-  seq(from = 1, to = N(mrs_data))  
+  seq(from = 1, to = Npts(mrs_data))  
 }
 
 #' Return a time scale vector to match the FID of an MRS data object.
@@ -806,7 +858,7 @@ pts <- function(mrs_data) {
 #' @export
 seconds <- function(mrs_data) {
   fs <- fs(mrs_data)
-  seq(from = 0, to = (N(mrs_data) - 1) / fs, by = 1 / fs)
+  seq(from = 0, to = (Npts(mrs_data) - 1) / fs, by = 1 / fs)
 }
 
 #' Get the indices of data points lying between two values (end > x > start).
@@ -836,7 +888,7 @@ crop_td_pts <- function(mrs_data, start = NULL, end = NULL) {
   
   if (is.null(start)) start <- 1
   
-  if (is.null(end)) end <- N(mrs_data)
+  if (is.null(end)) end <- Npts(mrs_data)
   
   mrs_data$data <- mrs_data$data[,,,,,,start:end, drop = F]
   
@@ -868,7 +920,7 @@ crop_spec <- function(mrs_data, xlim = c(4,0.5), scale = "ppm") {
   }
   
   if (is.null(xlim)) {
-    xlim <- c(x_scale[1], x_scale[N(mrs_data)])
+    xlim <- c(x_scale[1], x_scale[Npts(mrs_data)])
   }
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
@@ -878,7 +930,7 @@ crop_spec <- function(mrs_data, xlim = c(4,0.5), scale = "ppm") {
   
   # update fs
   mrs_data$resolution[7] <- (mrs_data$resolution[7] / length(subset) *
-                             N(mrs_data))
+                             Npts(mrs_data))
   
   mrs_data$data <- mrs_data$data[,,,,,, subset, drop = F]
   #print(length(subset))
@@ -915,7 +967,7 @@ align <- function(mrs_data, ref_peak = 4.65, zf_factor = 2, lb = 2,
   t_zf <- seconds(mrs_data_zf)
   ref_data <- ft_shift(exp(2i * t_zf * pi * freq - lb * t_zf * pi))
   #plot(Re(ref_data_td),type="l")
-  window <- floor(max_shift * N(mrs_data_zf) * mrs_data$resolution[7])
+  window <- floor(max_shift * Npts(mrs_data_zf) * mrs_data$resolution[7])
   
   #plot(Re(ref_data[1000:1500])/1000,type="l")
   #lines(Re(mrs_data_zf$data[1,1,1,1,1,1,1000:1500]),type="l")
@@ -958,7 +1010,7 @@ get_td_amp <- function(mrs_data, nstart = 10, nend = 50) {
   
   amps <- apply_mrs(mrs_data, 7, measure_td_amp, nstart, nend)$data
  
-  abind::adrop(amps, 7)
+  amps <- abind::adrop(amps, 7)
   amps
 }
 
@@ -993,7 +1045,7 @@ get_dyns <- function(mrs_data, subset) {
 #' @return interleaved data.
 #' @export
 interleave_dyns <- function(mrs_data) {
-  total <- dyns(mrs_data)
+  total <- Ndyns(mrs_data)
   fh <- 1:(total / 2)
   sh <- (total / 2 + 1):total
   new_idx <- c(rbind(fh, sh))
@@ -1065,12 +1117,34 @@ get_subset <- function(mrs_data, x_set = NULL, y_set = NULL, z_set = NULL,
   return(mrs_data)
 }
 
+#' Crop an MRSI dataset in the x-y direction
+#' @param mrs_data MRS data object.
+#' @param x_dim x dimension output length.
+#' @param y_dim y dimension output length.
+#' @return selected subset of MRS data.
+#' @export
+crop_xy <- function(mrs_data, x_dim, y_dim) {
+  mid_pt_x <- Nx(mrs_data) / 2
+  mid_pt_y <- Ny(mrs_data) / 2
+  x_set <- seq(from = mid_pt_x - x_dim / 2 + 1, by = 1, length.out = x_dim)
+  y_set <- seq(from = mid_pt_y - y_dim / 2 + 1, by = 1, length.out = y_dim)
+  x_set <- floor(x_set) # could be floor or ceil, need to test
+  y_set <- floor(y_set) # could be floor or ceil, need to test
+  x_offset <- x_set[1] - 1
+  y_offset <- y_set[1] - 1
+  mrs_data$pos_vec <- mrs_data$pos_vec +
+                      x_offset * mrs_data$row_vec * mrs_data$resolution[2] +
+                      y_offset * mrs_data$col_vec * mrs_data$resolution[3]
+  
+  return(get_subset(mrs_data, x_set = x_set, y_set = y_set))
+}
+
 #' Return the first half of a dynamic series.
 #' @param mrs_data dynamic MRS data.
 #' @return first half of the dynamic series.
 #' @export
 get_fh_dyns <- function(mrs_data) {
-  fh <- 1:(dyns(mrs_data) / 2)
+  fh <- 1:(Ndyns(mrs_data) / 2)
   get_dyns(mrs_data, fh)
 }
 
@@ -1079,7 +1153,7 @@ get_fh_dyns <- function(mrs_data) {
 #' @return second half of the dynamic series.
 #' @export
 get_sh_dyns <- function(mrs_data) {
-  sh <- (dyns(mrs_data) / 2 + 1):dyns(mrs_data)
+  sh <- (Ndyns(mrs_data) / 2 + 1):Ndyns(mrs_data)
   get_dyns(mrs_data, sh)
 }
   
@@ -1088,7 +1162,7 @@ get_sh_dyns <- function(mrs_data) {
 #' @return dynamic MRS data containing odd numbered scans.
 #' @export
 get_odd_dyns <- function(mrs_data) {
-  subset <- seq(1, dyns(mrs_data), 2)
+  subset <- seq(1, Ndyns(mrs_data), 2)
   get_dyns(mrs_data, subset)
 }
 
@@ -1097,7 +1171,7 @@ get_odd_dyns <- function(mrs_data) {
 #' @return dynamic MRS data containing even numbered scans.
 #' @export
 get_even_dyns <- function(mrs_data) {
-  subset <- seq(2, dyns(mrs_data), 2)
+  subset <- seq(2, Ndyns(mrs_data), 2)
   get_dyns(mrs_data, subset)
 }
 
@@ -1106,7 +1180,7 @@ get_even_dyns <- function(mrs_data) {
 #' @return dynamic MRS data with inverted odd numbered scans.
 #' @export
 inv_odd_dyns <- function(mrs_data) {
-  subset <- seq(1, dyns(mrs_data), 2)
+  subset <- seq(1, Ndyns(mrs_data), 2)
   mrs_data$data[,,,, subset,,] <- -1 * mrs_data$data[,,,, subset,,]
   return(mrs_data)
 }
@@ -1116,7 +1190,7 @@ inv_odd_dyns <- function(mrs_data) {
 #' @return dynamic MRS data with inverted even numbered scans.
 #' @export
 inv_even_dyns <- function(mrs_data) {
-  subset <- seq(2, dyns(mrs_data), 2)
+  subset <- seq(2, Ndyns(mrs_data), 2)
   mrs_data$data[,,,, subset,,] <- -1 * mrs_data$data[,,,, subset,,]
   return(mrs_data)
 }
@@ -1246,7 +1320,7 @@ bc <- function(mrs_data, lambda = 1e3, p = 0.1) {
 #' @export
 mean.mrs_data <- function(x, ...) {
   data_pts <- x$data
-  data_N <- N(x)
+  data_N <- Npts(x)
   dim(data_pts) <- c(length(data_pts) / data_N, data_N)
   x$data <- colMeans(data_pts, ...)
   dim(x$data) <- c(1, 1, 1, 1, 1, 1, data_N)
@@ -1254,16 +1328,30 @@ mean.mrs_data <- function(x, ...) {
 }
 
 #' Collapse MRS data by concatenating spectra along the dynamic dimension.
-#' @param mrs_data mrs_data object to be collapsed.
-#' @return collapsed data with spectra concatentated along the dynamic
+#' @param x data object to be collapsed (mrs_data or fit_result object).
+#' @return collapsed data with spectra or fits concatenated along the dynamic
 #' dimension.
+#' @rdname collapse_to_dyns
 #' @export
-collapse_to_dyns <- function(mrs_data) {
-  data_pts <- mrs_data$data
-  data_N <- N(mrs_data)
+collapse_to_dyns <- function(x) UseMethod("collapse_to_dyns")
+
+#' @rdname collapse_to_dyns
+#' @export
+collapse_to_dyns.mrs_data <- function(x) {
+  data_pts <- x$data
+  data_N <- Npts(x)
   dim(data_pts) <- c(1, 1, 1, 1, length(data_pts) / data_N, 1, data_N)
-  mrs_data$data <- data_pts
-  mrs_data
+  x$data <- data_pts
+  x
+}
+
+#' @rdname collapse_to_dyns
+#' @export
+collapse_to_dyns.fit_result <- function(x) {
+  x$res_tab[c(1, 2, 3, 5)] <- 1
+  dyns <- nrow(x$res_tab)
+  x$res_tab[4] <- 1:dyns
+  x
 }
  
 #' Calculate the mean dynamic data.
@@ -1285,14 +1373,14 @@ mean_dyns <- function(mrs_data) {
 #' @export
 mean_dyn_blocks <- function(mrs_data, block_size) {
   
-  if ((dyns(mrs_data) %% block_size) != 0) {
+  if ((Ndyns(mrs_data) %% block_size) != 0) {
     warning("Block size does not fit into the number of dynamics without truncation.")
   }
   
-  new_dyns <-  floor(dyns(mrs_data) / block_size)
-  mrs_out <- get_dyns(mrs_data, seq(1,new_dyns*block_size, block_size))
+  new_dyns <-  floor(Ndyns(mrs_data) / block_size)
+  mrs_out <- get_dyns(mrs_data, seq(1, new_dyns * block_size, block_size))
   for (n in 2:block_size) {
-    mrs_out <- mrs_out + get_dyns(mrs_data, seq(n,new_dyns*block_size, block_size))
+    mrs_out <- mrs_out + get_dyns(mrs_data, seq(n, new_dyns * block_size, block_size))
   }
   
   mrs_out / block_size
@@ -1548,20 +1636,21 @@ hsvd <- function(y, fs, K = 50, propack = TRUE, fast_hank = TRUE) {
 #' squared difference between the real and magnitude components of the
 #' spectrum.
 #' @param mrs_data an object of class \code{mrs_data}.
-#' @param xlim frequency range (default units of PPM) to including in the phase
+#' @param xlim frequency range (default units of PPM) to including in the phase.
 #' @param ret_phase return phase values (logical).
-#' determination.
 #' @return MRS data object and phase values (optional).
 #' @export
 auto_phase <- function(mrs_data, xlim = NULL, ret_phase = FALSE) {
+  
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
-  if (!is.null(xlim)) {
-    mrs_data_crop <- crop_spec(mrs_data, xlim)
-    phases <- apply_mrs(mrs_data_crop, 7, auto_phase_vec, data_only = TRUE)
-  } else {
-    phases <- apply_mrs(mrs_data, 7, auto_phase_vec, data_only = TRUE)
-  }
+  mrs_data_proc <- mrs_data
+  
+  if (!is.null(xlim)) mrs_data_proc <- crop_spec(mrs_data_proc, xlim)
+    
+  phases <- apply_mrs(mrs_data_proc, 7, auto_phase_vec, data_only = TRUE)
+  
+  if (length(phases) == 1) phases <- as.numeric(phases)
   
   # TODO update phase function and remove drop
   mrs_data <- phase(mrs_data, phases)
@@ -1617,7 +1706,7 @@ ecc_ref <- function(mrs_data) {
 #' Magn Reson Med. 1990 Apr;14(1):26-30.
 #' 
 #' @param metab MRS data to be corrected.
-#' @param ref ceference dataset.
+#' @param ref reference dataset.
 #' @param rev reverse the correction.
 #' @return corrected data in the time domain.
 #' @export
@@ -1628,14 +1717,14 @@ ecc <- function(metab, ref, rev = FALSE) {
   
   if (rev) ref <- Conj(ref)
   
-  if (dyns(ref) > 1) {
+  if (Ndyns(ref) > 1) {
     ref <- mean_dyns(ref)
     warning("Using the mean reference signal for ECC.")
   }
   
   # repeat the refernce signal to match the number of dynamics
-  if (dyns(metab) > 1) {
-    ref <- rep_dyn(ref, dyns(metab))
+  if (Ndyns(metab) > 1) {
+    ref <- rep_dyn(ref, Ndyns(metab))
   }
   
   mrs_data <- comb_metab_ref(metab, ref)
@@ -1683,7 +1772,7 @@ zf_xy <- function(mrs_data, factor = 2) {
 }
 
 hamming_vec <- function(vector) {
-  vector*signal::hamming(length(vector))
+  vector * signal::hamming(length(vector))
 }
 
 # zero pad vector
@@ -1742,7 +1831,7 @@ comb_coils <- function(metab, ref = NULL, noise = NULL,
     # estimate noise from first FID of the metab data
     metab_first <- get_dyns(metab, 1)
     noise_data <- crop_spec(metab_first, c(-0.5, -2.5))
-    noise_sd <- est_noise_sd(noise_data, offset = 0, n = N(noise_data),
+    noise_sd <- est_noise_sd(noise_data, offset = 0, n = Npts(noise_data),
                              p_order = 2)
     
     amp <- amp / (noise_sd ^ 2)
@@ -1767,7 +1856,7 @@ comb_coils <- function(metab, ref = NULL, noise = NULL,
     ref_ps$data <- ref$data * exp(-1i * ang)
   }
   
-  ref_ps <- sum_coils(ref_ps)
+  if (sum_coils) ref_ps <- sum_coils(ref_ps)
   
   # phase and scale metab data
   metab_dims <- dim(metab$data)
@@ -1788,9 +1877,7 @@ comb_coils <- function(metab, ref = NULL, noise = NULL,
     metab_ps$data <- metab$data * exp(-1i * ang)
   }
   
-  if (sum_coils == TRUE) {
-    metab_ps <- sum_coils(metab_ps)
-  }
+  if (sum_coils) metab_ps <- sum_coils(metab_ps)
   
   if (metab_only) {
     return(metab_ps)
@@ -1892,7 +1979,7 @@ calc_coil_noise_sd <- function(noise_data) {
 #' the standard deviation.
 #' @param interp_f interpolation factor to improve detection of the highest
 #' signal value.
-#' @param full_output output signal, noise and SNR values separatly.
+#' @param full_output output signal, noise and SNR values separately.
 #' @return an array of SNR values.
 #' @export
 calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5), 
@@ -1909,7 +1996,7 @@ calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5),
   
   #noise_sd <- apply_mrs(noise_data, 7, re_sd, data_only = TRUE)
   
-  noise_sd <- est_noise_sd(noise_data, offset = 0, n = N(noise_data), 
+  noise_sd <- est_noise_sd(noise_data, offset = 0, n = Npts(noise_data), 
                            p_order = p_order)
   
   snr <- max_sig / (2 * noise_sd)
@@ -1951,18 +2038,31 @@ peak_info <- function(mrs_data, xlim = c(4,0.5), interp_f = 4,
     mrs_data_crop$data <- Mod(mrs_data_crop$data)
   }
   
-  res <- apply_mrs(mrs_data_crop, 7, calc_peak_info_vec, interp_f, data_only = TRUE)
+  res <- apply_mrs(mrs_data_crop, 7, calc_peak_info_vec, interp_f,
+                   data_only = TRUE)
+  
   pos_n <- res[,,,,,,1, drop = FALSE]
-  pos_hz <- n2hz(pos_n, N(mrs_data_crop), fs(mrs_data_crop))
+  pos_hz <- n2hz(pos_n, Npts(mrs_data_crop), fs(mrs_data_crop))
   pos_ppm <- hz2ppm(pos_hz, mrs_data_crop$ft, mrs_data_crop$ref)
   height <- res[,,,,,,2, drop = FALSE]
   fwhm_n <- res[,,,,,,3, drop = FALSE]
-  fwhm_hz <- fwhm_n * fs(mrs_data_crop) / N(mrs_data_crop)
+  fwhm_hz <- fwhm_n * fs(mrs_data_crop) / Npts(mrs_data_crop)
   fwhm_ppm <- fwhm_hz / mrs_data_crop$ft * 1e6 
+  pos_ppm <- abind::adrop(pos_ppm, 7)
+  pos_hz <- abind::adrop(pos_hz, 7)
+  height <- abind::adrop(height, 7)
+  fwhm_ppm <- abind::adrop(fwhm_ppm, 7)
+  fwhm_hz <- abind::adrop(fwhm_hz, 7)
   list(freq_ppm = pos_ppm, freq_hz = pos_hz, height = height,
        fwhm_ppm = fwhm_ppm, fwhm_hz = fwhm_hz)
 }
 
+#' Calculate the FWHM of a peak from a vector of intensity values.
+#' @param data_pts input vector.
+#' @param interp_f interpolation factor to improve the FWHM estimate.
+#' @return a vector of: x position of the highest data point, maximum peak
+#' value in the y axis, FWHM in the units of data points.
+#' @export
 calc_peak_info_vec <- function(data_pts, interp_f) {
   data_pts <- stats::spline(data_pts, n = interp_f * length(data_pts))
   data_pts_x <- data_pts$x
@@ -1985,17 +2085,12 @@ calc_peak_info_vec <- function(data_pts, interp_f) {
   
   fwhm <- (rs_x_hh - ls_x_hh) / interp_f
   
-  #plot(data_pts, xlim = c(ls,rs))
-  #abline(h = hh)
-  #abline(v = rs_x_hh)
-  #abline(v = ls_x_hh)
-  
   array(c(data_pts_x[peak_pos_n], peak_height, fwhm))
 }
 
 #' Integrate a spectral region.
 #' @param mrs_data MRS data.
-#' @param xlim spectral range to be integrated.
+#' @param xlim spectral range to be integrated (defaults to full range).
 #' @param scale units of xlim, can be : "ppm", "Hz" or "points".
 #' @param mode spectral mode, can be : "re", "im" or "mod".
 #' @return an array of integral values.
@@ -2014,7 +2109,7 @@ int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "re") {
     x_scale <- pts(mrs_data)
   }
   
-  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[N(mrs_data)])
+  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[Npts(mrs_data)])
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   

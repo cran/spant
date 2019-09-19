@@ -292,9 +292,7 @@ sim_brain_1h <- function(acq_paras = def_acq_paras(), type = "normal_v1",
     }
   }
   
-  basis <- sim_basis(brain_basis_paras, pul_seq, fs = acq_paras$fs,
-                 N = acq_paras$N, ref = acq_paras$ref, ft = acq_paras$ft, 
-                 xlim = xlim, ...)
+  basis <- sim_basis(brain_basis_paras, pul_seq, acq_paras, xlim = xlim, ...)
 
   mrs_data <- basis2mrs_data(basis, sum_elements = TRUE, amp = amps)
   
@@ -343,6 +341,48 @@ comb_csv_results <- function(pattern, supp_mess = TRUE, ...) {
   # add the filename
   res <- tibble::add_column(res, files, .before = 1)
   res
+}
+
+#' Get the point spread function (PSF) for a 2D phase encoded MRSI scan.
+#' @param FOV field of view in mm.
+#' @param mat_size acquisition matrix size (not interpolated).
+#' @param sampling can be eith "circ" for circular or "rect" for rectangular.
+#' @param hamming should Hamming k-space weighting be applied (default FALSE).
+#' @return A matrix of the PSF with 1mm resolution.
+#' @export
+get_2d_psf <- function(FOV = 160, mat_size = 16, sampling = "circ",
+                       hamming = FALSE) {
+  
+  if (sampling == "circ") {
+    g <- expand.grid(1:FOV, 1:FOV)
+    dist <- sqrt((g$Var1 - FOV / 2 - 0.5) ^ 2 + (g$Var2 - FOV / 2 - 0.5) ^ 2)
+    dist <- matrix(dist, FOV, FOV)
+    kspace <- 1 * (dist <= mat_size / 2)
+  } else if (sampling == "rect") {
+    kspace <- matrix(0, nrow = FOV, ncol = FOV)
+    start_ind <- FOV / 2 - mat_size / 2 + 1
+    inds <- seq(from = start_ind, by = 1, length.out = mat_size)
+    kspace[inds, inds] <- 1
+  } else {
+    stop("Incorrect sampling option.")
+  }
+  
+  if (hamming) {
+    ham_mat <- pracma::repmat(signal::hamming(mat_size), mat_size, 1)
+    ham_mat <- ham_mat * t(ham_mat)
+    inds <- seq(from = start_ind, by = 1, length.out = mat_size)
+    kspace[inds, inds] <- kspace[inds, inds] * ham_mat
+  }
+  
+  kspace_shift <- apply(kspace, 1, pracma::ifftshift)
+  kspace_shift <- apply(kspace_shift, 1, pracma::ifftshift)
+  imspace <- apply(kspace_shift, 1, stats::fft, FALSE)
+  imspace <- apply(imspace, 1, stats::fft, FALSE)
+  imspace <- apply(imspace, 1, pracma::fftshift)
+  imspace <- apply(imspace, 1, pracma::fftshift)
+  imspace <- imspace / max(Re(imspace))
+  
+  return(imspace)
 }
 
 #' @importFrom magrittr %>%

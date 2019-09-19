@@ -1,14 +1,14 @@
 #' Plot the fitting results of an object of class \code{fit_result}.
 #' @param x fit_result object.
-#' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
-#' @param data_only display only the processed data (logical).
-#' @param label character string to add to the top left of the plot window.
-#' @param plot_sigs a character vector of signal names to add to the plot.
 #' @param dyn the dynamic index to plot.
 #' @param x_pos the x index to plot.
 #' @param y_pos the y index to plot.
 #' @param z_pos the z index to plot.
 #' @param coil the coil element number to plot.
+#' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
+#' @param data_only display only the processed data (logical).
+#' @param label character string to add to the top left of the plot window.
+#' @param plot_sigs a character vector of signal names to add to the plot.
 #' @param n single index element to plot (overrides other indices when given).
 #' @param sub_bl subtract the baseline from the data and fit (logical).
 #' @param mar option to adjust the plot margins. See ?par.
@@ -18,11 +18,11 @@
 #' @param y_scale option to display the y-axis values (logical).
 #' @param ... further arguments to plot method.
 #' @export
-plot.fit_result <- function(x, xlim = NULL, data_only = FALSE, label = NULL, 
-                           plot_sigs = NULL, dyn = 1, x_pos = 1,
-                           y_pos = 1, z_pos = 1, coil = 1, n = NULL,
-                           sub_bl = FALSE, mar = NULL, restore_def_par = TRUE, 
-                           ylim = NULL, y_scale = FALSE, ...) {
+plot.fit_result <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1,
+                            coil = 1,xlim = NULL, data_only = FALSE,
+                            label = NULL, plot_sigs = NULL, n = NULL,
+                            sub_bl = FALSE, mar = NULL, restore_def_par = TRUE, 
+                            ylim = NULL, y_scale = FALSE, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -92,8 +92,8 @@ plot.fit_result <- function(x, xlim = NULL, data_only = FALSE, label = NULL,
     fit_line <- x$Fit + x$Baseline
     
     if (is.null(ylim)) {
-      max_dp <- max(x$Data[ind],fit_line[ind])
-      min_dp <- min(x$Data[ind],fit_line[ind],x$Baseline[ind])
+      max_dp <- max(x$Data[ind], fit_line[ind])
+      min_dp <- min(x$Data[ind], fit_line[ind], x$Baseline[ind])
     } else {
       max_dp <- ylim[2]
       min_dp <- ylim[1]
@@ -148,6 +148,9 @@ plot.fit_result <- function(x, xlim = NULL, data_only = FALSE, label = NULL,
 #' from the plot.
 #' @param combine_lipmm combine all basis signals with names starting with "Lip"
 #' or "MM".
+#' @param combine_metab combine all basis signals with names not starting with
+#' "Lip" or "MM".
+#' @param mar option to adjust the plot margins. See ?par.
 #' @param ... further arguments to plot method.
 #' @export
 stackplot.fit_result <- function(x, xlim = NULL, y_offset = 1, dyn = 1, 
@@ -155,8 +158,8 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 1, dyn = 1,
                                  n = NULL, sub_bl = FALSE, labels = FALSE,
                                  label_names = NULL, sig_col = "black",
                                  restore_def_par = TRUE, omit_signals = NULL,
-                                 combine_lipmm = FALSE, 
-                                 ...) {
+                                 combine_lipmm = FALSE, combine_metab = FALSE,
+                                 mar = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -179,6 +182,22 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 1, dyn = 1,
     new_col <- rowSums(x[indices])
     x <- x[, -indices]
     x$LipMM <- new_col
+    cols <- length(colnames(x))
+    reorder <- c(1:4, cols, 5:(cols-1))
+    x <- x[,reorder]
+  }
+  
+  if (combine_metab) {
+    # find lip/mm indices
+    matches <- grepl("^Lip", colnames(x)) | grepl("^MM", colnames(x))
+    matches <- !matches
+    indices <- which(matches)[-c(1:4)]
+    new_col <- rowSums(x[indices])
+    x <- x[, -indices]
+    x$Metabs <- new_col
+    cols <- length(colnames(x))
+    reorder <- c(1:4, cols, 5:(cols-1))
+    x <- x[,reorder]
   }
   
   # label names 
@@ -197,6 +216,8 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 1, dyn = 1,
   right_mar <- ifelse(labels, 4, 1.2)
   
   graphics::par(mar = c(3.5, 1.2, 1.2, right_mar)) # space around the plot
+  
+  if (!is.null(mar)) graphics::par(mar = mar)
   
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
   
@@ -299,7 +320,7 @@ fit_tab2csv <- function(x, fname, pvc = FALSE) {
 #' @param zlim range of values to plot.
 #' @param interp interpolation factor.
 #' @export
-plot_fit_slice <- function(fit_res, name, slice = 1, zlim = NULL, interp = 1) {
+plot_slice_fit <- function(fit_res, name, slice = 1, zlim = NULL, interp = 1) {
   result_map <- fit_res$res_tab[[name]]
   dim(result_map) <- dim(fit_res$data$data)[2:6]
   col <- viridisLite::viridis(64)

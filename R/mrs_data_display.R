@@ -1,11 +1,13 @@
 #' Print a summary of mrs_data parameters.
 #' @param x mrs_data object.
+#' @param full print all parameters (default FALSE).
 #' @param ... further arguments.
 #' @export
-print.mrs_data <- function(x, ...) {
+print.mrs_data <- function(x, full = FALSE, ...) {
   cat("MRS Data Parameters\n")
   cat("----------------------------------\n")
-  cat(paste(c("Trans. freq (MHz)       : ", round(x$ft * 1e-6, 4), "\n")), sep = "")
+  cat(paste(c("Trans. freq (MHz)       : ", round(x$ft * 1e-6, 4), "\n")),
+      sep = "")
   cat(paste(c("FID data points         : ", dim(x$data)[7], "\n")), sep = "")
   cat(paste(c("X,Y,Z dimensions        : ", dim(x$data)[2], "x", dim(x$data)[3],
               "x", dim(x$data)[4], "\n")), sep = "")
@@ -17,16 +19,20 @@ print.mrs_data <- function(x, ...) {
               1 / x$resolution[7], "\n")), sep = "")
   cat(paste(c("Reference freq. (ppm)   : ", x$ref, "\n")), sep = "")
   cat(paste(c("Spectral domain         : ", x$freq_domain[7], "\n")), sep = "")
-  
-  # next line only works for 1H, add nucleus option?
-  #cat(paste(c("Field strength (Tesla)  : ",
-  #             sprintf("%.1f",x$ft/42.58e6),"\n")),sep="")
-  #cat(paste(c("Contains referece data  : ",
-  #            dim(x$data)[1] == 2, "\n")), sep = "")
+  if (full) {
+    cat(paste(c("Row vector              :", x$row_vec, "\n")), sep = " ")
+    cat(paste(c("Column vector           :", x$col_vec, "\n")), sep = " ")
+    cat(paste(c("Position vector         :", x$pos_vec, "\n")), sep = " ")
+  }
 }
 
 #' Plotting method for objects of class mrs_data.
 #' @param x object of class mrs_data.
+#' @param dyn the dynamic index to plot.
+#' @param x_pos the x index to plot.
+#' @param y_pos the y index to plot.
+#' @param z_pos the z index to plot.
+#' @param coil the coil element number to plot.
 #' @param fd display data in the frequency-domain (default), or time-domain 
 #' (logical).
 #' @param x_units the units to use for the x-axis, can be one of: "ppm", "hz", 
@@ -36,11 +42,6 @@ print.mrs_data <- function(x, ...) {
 #' @param x_ax option to display the x-axis values (logical).
 #' @param mode representation of the complex numbers to be plotted, can be one
 #' of: "re", "im", "mod" or "arg".
-#' @param dyn the dynamic index to plot.
-#' @param x_pos the x index to plot.
-#' @param y_pos the y index to plot.
-#' @param z_pos the z index to plot.
-#' @param coil the coil element number to plot.
 #' @param lwd plot linewidth.
 #' @param bty option to draw a box around the plot. See ?par.
 #' @param label character string to add to the top left of the plot window.
@@ -50,11 +51,12 @@ print.mrs_data <- function(x, ...) {
 #' @param xaxis_lab x-axis label.
 #' @param ... other arguments to pass to the plot method.
 #' @export
-plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
-                          y_scale = FALSE, x_ax = TRUE, mode = "re", dyn = 1,
-                          x_pos = 1, y_pos = 1, z_pos = 1, coil = 1, lwd = NULL, 
-                          bty = NULL, label = "", restore_def_par = TRUE, 
-                          mar = NULL, xaxis_lab = NULL, ...) {
+plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
+                          fd = TRUE, x_units = NULL, xlim = NULL, 
+                          y_scale = FALSE, x_ax = TRUE, mode = "re",
+                          lwd = NULL, bty = NULL, label = "",
+                          restore_def_par = TRUE, mar = NULL,
+                          xaxis_lab = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -100,7 +102,7 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
   
   if (!is.null(xaxis_lab)) xlab <- xaxis_lab
   
-  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[N(x)])
+  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[Npts(x)])
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   
@@ -171,7 +173,7 @@ plot.mrs_data <- function(x, fd = TRUE, x_units = NULL, xlim = NULL,
 #' been made.
 #' @param y_ticks a vector of indices specifying where to place tick marks.
 #' @param vline draw a vertical line at the value of vline.
-#' @param hline draw a horizonal line at the value of hline.
+#' @param hline draw a horizontal line at the value of hline.
 #' @param ... other arguments to pass to the plot method.
 #' @export
 image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL, 
@@ -497,12 +499,12 @@ plot_slice_map <- function(data, zlim = NULL, mask_map = NULL,
                            horizontal = FALSE) {
   
   data <- data[ref,,, slice, dyn, coil]
-  data <- pracma::fliplr(data)
+  data <- pracma::fliplr(data) # ?
   data <- mmand::rescale(data, interp,mmand::mnKernel())
   
   if (!is.null(mask_map)) {
     mask_map <- mask_map[ref,,, slice, dyn, coil]
-    mask_map <- pracma::fliplr(mask_map)
+    mask_map <- pracma::fliplr(mask_map) # ?
     mask_map <- mmand::rescale(mask_map, interp, mmand::mnKernel())
     max_mask <- max(mask_map)
     data <- ifelse(mask_map < (max_mask * mask_cutoff / 100), NA, data)
@@ -510,7 +512,7 @@ plot_slice_map <- function(data, zlim = NULL, mask_map = NULL,
   
   if (!is.null(denom)) {
     denom <- denom[ref,,, slice, dyn, coil]
-    denom <- pracma::fliplr(denom)
+    denom <- pracma::fliplr(denom) # ?
     denom <- mmand::rescale(denom, interp,mmand::mnKernel())
     data <- data / denom
   }
