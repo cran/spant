@@ -59,6 +59,9 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
                           xaxis_lab = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
+ 
+  # remove data we don't need 
+  x <- get_voxel(x, x_pos, y_pos, z_pos, dyn, coil) 
   
   # convert to the correct domain for plotting
   if (fd & !is_fd(x)) {
@@ -108,7 +111,8 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
   
   #graphics::par("xaxs" = "i", "yaxs"="i") # tight axes limits
   graphics::par("xaxs" = "i") # tight axes limits
-  plot_data <- x$data[1, x_pos, y_pos, z_pos, dyn, coil,]
+  
+  plot_data <- x$data[1, 1, 1, 1, 1, 1,]
   
   if (mode == "re") {
     plot_data <- Re(plot_data)
@@ -160,8 +164,7 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
 #' @param xlim the range of values to display on the x-axis, eg xlim = c(4,1).
 #' @param mode representation of the complex numbers to be plotted, can be one
 #' of: "re", "im", "mod" or "arg".
-#' @param col Colour map to use, defaults to viridis if the package is 
-#' available.
+#' @param col Colour map to use, defaults to viridis.
 #' @param dim the dimension to display on the y-axis, can be one of: "dyn", "x",
 #' "y", "z" or "coil".
 #' @param x_pos the x index to plot.
@@ -191,7 +194,7 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
   x_scale <- ppm(x)
   
   if (is.null(xlim)) {
-    xlim <- c(x_scale[1], x_scale[N(x)])
+    xlim <- c(x_scale[1], x_scale[Npts(x)])
   }
   
   if (is.null(y_ticks)) {
@@ -254,15 +257,7 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
     stop("Invalid mode option, should be one of : 're', 'im', 'mod' or 'arg'") 
   }
   
-  if (is.null(col)) {
-    if (is.installed("viridis")) {
-      col <- viridis::viridis(64)
-    } else if (is.installed("viridisLite")) {
-      col <- viridisLite::viridis(64)
-    } else {
-     col <- grDevices::heat.colors(64)
-    }
-  }
+  col <- viridisLite::viridis(128)
   
   graphics::image(x_scale[subset][length(subset):1], (1:yN),
                   plot_data[length(subset):1,], xlim = xlim,
@@ -287,6 +282,13 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
 #' @export
 stackplot <- function(x, ...) {
   UseMethod("stackplot", x)
+}
+
+#' @export
+stackplot.list <- function(x, ...) {
+  # make them all td or fd
+  combined <- append_scan(x)
+  stackplot(combined, dim = "scan", ...)
 }
 
 #' Stackplot plotting method for objects of class mrs_data.
@@ -319,7 +321,7 @@ stackplot <- function(x, ...) {
 #' @export
 stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
                                fd = TRUE, col = NULL, x_offset = 0,
-                               y_offset = 5, dim = "dyn", x_pos = NULL, 
+                               y_offset = 0, dim = "dyn", x_pos = NULL, 
                                y_pos = NULL, z_pos = NULL, dyn = 1, coil = 1, 
                                bty = NULL, labels = NULL, lab_cex = 1, 
                                right_marg = NULL, restore_def_par = TRUE, ...) {
@@ -373,7 +375,7 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   }
   
   if (is.null(xlim)) {
-    xlim <- c(x_scale[1], x_scale[N(x)])
+    xlim <- c(x_scale[1], x_scale[Npts(x)])
   }
   xlim <- sort(xlim)
   
@@ -394,7 +396,7 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   
   if (dim == "dyn") {
-    plot_data <- t(x$data[1, x_pos, y_pos, y_pos, , coil, subset])
+    plot_data <- t(x$data[1, x_pos, y_pos, z_pos, , coil, subset])
     yN <- data_dim[5]
     y_title = "Dynamic"
   } else if (dim == "x") {
@@ -413,6 +415,10 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
     plot_data <- t(x$data[1, x_pos, y_pos, z_pos, dyn, , subset])
     yN <- data_dim[5]
     y_title = "Coil"
+  } else if (dim == "scan") {
+    plot_data <- t(x$data[, x_pos, y_pos, z_pos, dyn, coil, subset])
+    yN <- data_dim[1]
+    y_title = "Scan"
   } else {
     stop("Unrecognised dim value. Should be one of: dyn, x, y, z, coil")
   } 
@@ -455,6 +461,9 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   
   if ( x_units == "ppm" ) xlim <- rev(xlim)
   
+  #print(dim(x_scale_mat))
+  #print(length(subset))
+  
   graphics::matplot(x_scale_mat[length(subset):1,],
                     plot_data[length(subset):1,], type = "l", 
                     lty = 1, col = col, xlab = xlab, ylab = "",
@@ -479,6 +488,17 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   if (restore_def_par) graphics::par(.pardefault)
 }
 
+#' Convenience function to plot a baseline estimate with the original data.
+#' @param orig_data the original data.
+#' @param bc_data the baseline corrected data.
+#' @param ... other arguments to pass to the stackplot function.
+#' @export
+plot_bc <- function(orig_data, bc_data, ...) {
+  bl <- orig_data - bc_data
+  combined <- append_scan(orig_data, bl)
+  stackplot(combined, dim = "scan", ...)
+}
+
 #' Plot a slice from a 7 dimensional array.
 #' @param data 7d array of values to be plotted.
 #' @param zlim smallest and largest values to be plotted.
@@ -497,6 +517,8 @@ plot_slice_map <- function(data, zlim = NULL, mask_map = NULL,
                            mask_cutoff = 20, interp = 1, slice = 1, dyn = 1,
                            coil = 1, ref = 1, denom = NULL,
                            horizontal = FALSE) {
+  
+  graphics::par(mar = c(0, 0, 0, 2))
   
   data <- data[ref,,, slice, dyn, coil]
   data <- pracma::fliplr(data) # ?
@@ -522,16 +544,18 @@ plot_slice_map <- function(data, zlim = NULL, mask_map = NULL,
   if (!is.null(zlim)) {
     data <- crop_range(data, zlim[1], zlim[2])
     breaks <- seq(from = zlim[1], to = zlim[2], length.out = 129)
-    fields::image.plot(data, col = viridis::viridis(128), useRaster = T,
+    fields::image.plot(data, col = viridisLite::viridis(128), useRaster = T,
                        asp = asp, axes = F, breaks = breaks,
-                       horizontal = horizontal)
+                       horizontal = horizontal, legend.shrink = 0.5,
+                       legend.mar = 7)
     
-    #image(data, col=viridis::viridis(128), useRaster = T, asp = 1, axes = F,
+    #image(data, col=viridisLite::viridis(128), useRaster = T, asp = 1, axes = F,
     #      breaks = breaks)
   } else {
-    fields::image.plot(data, col = viridis::viridis(128), useRaster = T,
-                       asp = asp, axes = F, horizontal = horizontal)
+    fields::image.plot(data, col = viridisLite::viridis(128), useRaster = T,
+                       asp = asp, axes = F, horizontal = horizontal,
+                       legend.shrink = 0.5, legend.mar = 7)
     
-    #image(data, col = viridis::viridis(128), useRaster = T, asp = 1, axes = F)
+    #image(data, col = viridis::viridisLite(128), useRaster = T, asp = 1, axes = F)
   }
 }

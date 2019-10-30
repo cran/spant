@@ -204,13 +204,16 @@ array2mrs_data <- function(data_array, fs = def_fs(), ft = def_ft(),
   return(mrs_data)
 }
 
-#' Convert mrs_data object to a matrix, with spectral points in the row dimension
-#' and dynamics in the column dimension.
-#' @param mrs_data MRS data object.
+#' Convert mrs_data object to a matrix, with spectral points in the column
+#' dimension and dynamics in the row dimension.
+#' @param mrs_data MRS data object or list of MRS data objects.
 #' @return MRS data matrix.
 #' @export
 mrs_data2mat <- function(mrs_data) {
-  t(as.matrix(mrs_data$data[1,1,1,1,,1,]))
+  
+  if (class(mrs_data) == "list") mrs_data <- append_dyns(mrs_data)
+  
+  as.matrix(mrs_data$data[1,1,1,1,,1,])
 }
 
 #' Convert mrs_data object to a vector.
@@ -493,7 +496,9 @@ lb.mrs_data <- function(x, lb, lg = 1) {
   }
   
   if (lg > 0) {
-    x$data = x$data * exp((lg * lb ^ 2 * pi ^ 2 / 4 / log(0.5)) * (t ^ 2))
+    sign <- ifelse(lb > 0, 1, -1)
+    x$data = x$data * exp((sign * lg * lb ^ 2 * pi ^ 2 / 4 / log(0.5)) * 
+                          (t ^ 2))
   }
   
   return(x)
@@ -503,6 +508,24 @@ lb.mrs_data <- function(x, lb, lg = 1) {
 #' @export
 lb.basis_set <- function(x, lb, lg = 1) {
   mrs_data2basis(lb(basis2mrs_data(x), lb, lg), x$names)
+}
+
+#' Apply a weighting to the FID to enhance spectral resolution.
+#' @param mrs_data data to be enhanced.
+#' @param re resolution enhancement factor (rising exponential factor).
+#' @param alpha alpha factor (Guassian decay)
+#' @return resolution enhanced mrs_data.
+#' @export
+re_weighting <- function(mrs_data, re, alpha) {
+  
+  # needs to be a time-domain operation
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data) 
+  
+  t <- rep(seconds(mrs_data), each = Nspec(mrs_data))
+  
+  mrs_data$data = mrs_data$data * exp(re * t) * exp(-alpha * t ^ 2)
+  
+  return(mrs_data)
 }
 
 #' Zero-fill MRS data in the time domain.
@@ -1224,12 +1247,77 @@ get_metab <- function(mrs_data) {
   mrs_data
 }
 
+#' Append MRS data across the coil dimension, assumes they matched across the
+#' other dimensions.
+#' @param ... MRS data objects as arguments, or a list of MRS data objects.
+#' @return a single MRS data object with the input objects concatenated together.
+#' @export
+append_coils <- function(...) {
+  x <- list(...)
+  
+  # were the arguments a list already? 
+  if (depth(x) == 3) x <- x[[1]]
+  
+  first_dataset <- x[[1]]
+  
+  # data needs to be in the same domain
+  if (is_fd(first_dataset)) {
+    for (n in 1:length(x)) {
+      if (!is_fd(x[[n]])) {
+        x[[n]] <- td2fd(x[[n]])
+      }
+      x[[n]] <- x[[n]]$data
+    }
+  } else {
+    for (n in 1:length(x)) {
+      if (is_fd(x[[n]])) {
+        x[[n]] <- fd2td(x[[n]])
+      }
+      x[[n]] <- x[[n]]$data
+    }
+  }
+  
+  new_data <- abind::abind(x, along = 6)
+  first_dataset$data <- unname(new_data)
+  first_dataset
+}
+
 #' Append MRS data across the dynamic dimension, assumes they matched across the
 #' other dimensions.
 #' @param ... MRS data objects as arguments, or a list of MRS data objects.
 #' @return a single MRS data object with the input objects concatenated together.
 #' @export
 append_dyns <- function(...) {
+  x <- list(...)
+  
+  # were the arguments a list already? 
+  if (depth(x) == 3) x <- x[[1]]
+  
+  first_dataset <- x[[1]]
+  
+  # data needs to be in the same domain
+  if (is_fd(first_dataset)) {
+    for (n in 1:length(x)) {
+      if (!is_fd(x[[n]])) {
+        x[[n]] <- td2fd(x[[n]])
+      }
+      x[[n]] <- x[[n]]$data
+    }
+  } else {
+    for (n in 1:length(x)) {
+      if (is_fd(x[[n]])) {
+        x[[n]] <- fd2td(x[[n]])
+      }
+      x[[n]] <- x[[n]]$data
+    }
+  }
+  
+  new_data <- abind::abind(x, along = 5)
+  first_dataset$data <- unname(new_data)
+  first_dataset
+}
+
+append_scan <- function(...) {
   x <- list(...)
   
   # were the arguments a list already? 
@@ -1249,7 +1337,7 @@ append_dyns <- function(...) {
     x[[n]] <- x[[n]]$data
   }
   
-  new_data <- abind::abind(x, along = 5)
+  new_data <- abind::abind(x, along = 1)
   first_dataset$data <- unname(new_data)
   first_dataset
 }
@@ -1326,6 +1414,30 @@ mean.mrs_data <- function(x, ...) {
   dim(x$data) <- c(1, 1, 1, 1, 1, 1, data_N)
   x
 }
+
+#' Calculate the standard deviation spectrum from an mrs_data object.
+#' @param x object of class mrs_data.
+#' @param na.rm remove NA values.
+#' @return sd mrs_data object.
+#' @export
+sd.mrs_data <- function(x, na.rm = FALSE) {
+  data_pts <- x$data
+  data_N <- Npts(x)
+  dim(data_pts) <- c(length(data_pts) / data_N, data_N)
+  x$data <- colSdColMeans(data_pts, na.rm)
+  dim(x$data) <- c(1, 1, 1, 1, 1, 1, data_N)
+  x
+}
+
+## make an S3 generic for sd
+#' @inherit stats::sd
+#' @export
+sd <- function(x, na.rm) UseMethod("sd")
+
+## take the usual definition of sd,
+## and set it to be the default method
+#' @export
+sd.default <- stats::sd
 
 #' Collapse MRS data by concatenating spectra along the dynamic dimension.
 #' @param x data object to be collapsed (mrs_data or fit_result object).
@@ -1737,17 +1849,32 @@ ecc <- function(metab, ref, rev = FALSE) {
 #' @return apodised data.
 #' @export
 apodise_xy <- function(mrs_data) {
-  # TODO check data is 2D in xy dirn and make faster...
+  mrsi_dims <- dim(mrs_data$data)
+  x_dim <- mrsi_dims[2]
+  y_dim <- mrsi_dims[3]
+  N <- mrsi_dims[7]
   
-  # put xy dims into k-space
-  mrs_data <- apply_mrs(mrs_data, 2, ft_shift)
-  mrs_data <- apply_mrs(mrs_data, 3, ft_shift)
-  # apply filter
-  mrs_data <- apply_mrs(mrs_data, 2, hamming_vec)
-  mrs_data <- apply_mrs(mrs_data, 3, hamming_vec)
+  mrs_data <- mrsi2d_img2kspace(mrs_data)
+  
+  mat <- mrs_data$data
+  mat <- drop(mat)
+  dim(mat) <- c(x_dim, y_dim * N)
+  mat <- mat * signal::hamming(x_dim)
+  
+  dim(mat) <- c(x_dim, y_dim, N)
+  mat <- aperm(mat, c(2, 1, 3))
+  dim(mat) <- c(y_dim, x_dim * N)
+  
+  mat <- mat * signal::hamming(y_dim)
+  
+  dim(mat) <- c(y_dim, x_dim, N)
+  mat <- aperm(mat, c(2, 1, 3))
+  dim(mat) <- mrsi_dims
+  mrs_data$data <- mat
+  
   # put xy dims back to space
-  mrs_data <- apply_mrs(mrs_data, 2, ift_shift)
-  apply_mrs(mrs_data, 3, ift_shift)
+  mrs_data <- mrsi2d_kspace2img(mrs_data)
+  return(mrs_data)
 }
 
 #' Zero-fill MRSI data in the k-space x-y direction.
@@ -1781,6 +1908,39 @@ zp_vec <- function(vector, n) {
   start_pt <- pracma::ceil((n - length(vector)) / 2) + 1
   zp_vec[start_pt:(start_pt + length(vector) - 1)] <- vector
   zp_vec
+}
+
+#' Combine coil data following phase correction based on the first data point
+#' in the FID.
+#' @param metab MRS data containing metabolite data.
+#' @param ref MRS data containing reference data (optional).
+#' @param sum_coils sum the coil elements as a final step (logical).
+#' @param ret_ref return the reference data following correction.
+#' @return MRS data.
+#' @export
+comb_coils_fp_pc <- function(metab, ref = NULL, sum_coils = TRUE,
+                             ret_ref = FALSE) {
+  
+  if (is_fd(metab)) metab <- fd2td(metab)
+  
+  if (is.null(ref)) ref <- metab
+  
+  if (is_fd(ref)) ref <- fd2td(ref)
+  
+  fp <- get_fp(ref)
+  mult <- exp(-1i * Arg(fp))
+  mult_full <- rep_array_dim(mult, 7, Npts(metab))
+  
+  metab$data <- metab$data * mult_full 
+  if (sum_coils) metab <- sum_coils(metab)
+  
+  if (ret_ref) {
+    ref$data <- ref$data * mult_full 
+    if (sum_coils) ref <- sum_coils(ref)
+    return(list(metab = metab, ref = ref))
+  } else {
+    return(metab)
+  }
 }
 
 #' Combine coil data based on the first data point of a reference signal.
@@ -1824,17 +1984,19 @@ comb_coils <- function(metab, ref = NULL, noise = NULL,
   phi <- Arg(fp)
   amp <- Mod(fp)
   
-  if (!is.null(noise)) {
-    # estimate noise from noise data
-    amp <- amp / (calc_coil_noise_sd(noise) ^ 2)
-  } else {
-    # estimate noise from first FID of the metab data
-    metab_first <- get_dyns(metab, 1)
-    noise_data <- crop_spec(metab_first, c(-0.5, -2.5))
-    noise_sd <- est_noise_sd(noise_data, offset = 0, n = Npts(noise_data),
-                             p_order = 2)
-    
-    amp <- amp / (noise_sd ^ 2)
+  if (scale) {
+    if (!is.null(noise)) {
+      # estimate noise from noise data
+      amp <- amp / (calc_coil_noise_sd(noise) ^ 2)
+    } else {
+      # estimate noise from first FID of the metab data
+      metab_first <- get_dyns(metab, 1)
+      noise_data <- crop_spec(metab_first, c(-0.5, -2.5))
+      noise_sd <- est_noise_sd(noise_data, offset = 0, n = Npts(noise_data),
+                               p_order = 2)
+      
+      amp <- amp / (noise_sd ^ 2)
+    }
   }
   
   # phase and scale ref data
@@ -1963,8 +2125,8 @@ calc_coil_noise_sd <- function(noise_data) {
 
 #' Calculate the spectral SNR.
 #' 
-#' SNR is defined as the maximum signal value divided by 2 times the standard 
-#' deviation of the noise.
+#' SNR is defined as the maximum signal value divided by the standard deviation 
+#' of the noise.
 #' 
 #' The mean noise value is subtracted from the maximum signal value to reduce DC
 #' offset bias. A polynomial detrending fit (second order by default) is applied 
@@ -1999,7 +2161,7 @@ calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5),
   noise_sd <- est_noise_sd(noise_data, offset = 0, n = Npts(noise_data), 
                            p_order = p_order)
   
-  snr <- max_sig / (2 * noise_sd)
+  snr <- max_sig / noise_sd
   
   # drop the last dimension for plotting functions
   snr <- abind::adrop(snr, 7)
@@ -2088,14 +2250,51 @@ calc_peak_info_vec <- function(data_pts, interp_f) {
   array(c(data_pts_x[peak_pos_n], peak_height, fwhm))
 }
 
+#' Remove a constant baseline offset based on a reference spectral region.
+#' @param mrs_data MRS data.
+#' @param xlim spectral range containing a flat baseline region to measure the 
+#' offset.
+#' @return baseline corrected data.
+#' @export
+bc_constant <- function(mrs_data, xlim) {
+  
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  offsets <- int_spec(mrs_data, xlim = xlim, mode = "cplx", summation = "mean")
+  offsets_rep <- array(rep(offsets, Npts(mrs_data)), dim = dim(mrs_data$data))
+  mrs_data$data <- mrs_data$data - offsets_rep
+  return(mrs_data)
+}
+
+#' Normalise mrs_data to a spectral region.
+#' @param mrs_data MRS data.
+#' @param xlim spectral range to be integrated (defaults to full range).
+#' @param scale units of xlim, can be : "ppm", "Hz" or "points".
+#' @param mode spectral mode, can be : "re", "im", "mod" or "cplx".
+#' @param summation can be "sum", "mean" or "l2" (default).
+#' @return normalised data.
+#' @export
+norm_mrs <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "re",
+                     summation = "l2") {
+  
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  amps <- int_spec(mrs_data, xlim, scale, mode, summation)
+  amps_full <- array(rep(amps, Npts(mrs_data)), dim = dim(mrs_data$data))
+  mrs_data$data <- mrs_data$data / amps_full
+  return(mrs_data)
+}
+
 #' Integrate a spectral region.
 #' @param mrs_data MRS data.
 #' @param xlim spectral range to be integrated (defaults to full range).
 #' @param scale units of xlim, can be : "ppm", "Hz" or "points".
-#' @param mode spectral mode, can be : "re", "im" or "mod".
+#' @param mode spectral mode, can be : "re", "im", "mod" or "cplx".
+#' @param summation can be "sum" (default), "mean" or "l2".
 #' @return an array of integral values.
 #' @export
-int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "re") {
+int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "re",
+                     summation = "sum") {
   
   if (!is_fd(mrs_data)) {
     mrs_data <- td2fd(mrs_data)
@@ -2122,10 +2321,60 @@ int_spec <- function(mrs_data, xlim = NULL, scale = "ppm", mode = "re") {
   } else if (mode == "mod") {
     data_arr <- Mod(data_arr)
   }
+ 
+  if (summation == "l2") {
+    data_arr <- data_arr * data_arr
+    res <- apply(data_arr, c(1, 2, 3, 4, 5, 6), sum)
+    res <- res ^ 0.5
+  } else if (summation == "mean") {
+    res <- apply(data_arr, c(1, 2, 3, 4, 5, 6), mean)
+  } else {
+    res <- apply(data_arr, c(1, 2, 3, 4, 5, 6), sum)
+  }
   
-  apply(data_arr, c(1, 2, 3, 4, 5, 6), sum)
+  return(res) 
 }
 
+#' Baseline correction using the ALS method.
+#' @param mrs_data mrs_data object.
+#' @param lambda lambda parameter.
+#' @param p p parameter.
+#' @return baseline corrected data.
+#' @export
+bc_als <- function(mrs_data, lambda = 1e4, p = 0.001) {
+  
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  apply_mrs(mrs_data, 7, bc_als_vec, lambda, p)
+}
+
+bc_als_vec <- function(vec, lambda, p) {
+  ptw::baseline.corr(Re(vec), lambda = lambda, p = p) 
+}
+
+#' Back extrapolate time-domain points using the Burg autoregressive model
+#' @param mrs_data mrs_data object.
+#' @param n_pts number of points to extrapolate.
+#' @return back extrapolated data.
+#' @export
+back_extrap <- function(mrs_data, n_pts) {
+  
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  Np <- Npts(mrs_data) 
+  mrs_data$data <- mrs_data$data[,,,,,,Np:1, drop = FALSE]
+  mrs_data <- apply_mrs(mrs_data, 7, back_extrap_vec, n_pts)
+  mrs_data$data <- mrs_data$data[,,,,,,(Np + n_pts):1, drop = FALSE]
+  mrs_data
+}
+
+back_extrap_vec <- function(vec, n_pts) {
+  new_pts_re <- as.numeric(stats::predict(stats::ar.burg(Re(vec)),
+                                          se.fit = FALSE, n.ahead = n_pts))
+  new_pts_im <- as.numeric(stats::predict(stats::ar.burg(Im(vec)),
+                                          se.fit = FALSE, n.ahead = n_pts))
+  c(vec, new_pts_re + new_pts_im * 1i)
+}
 
 #' Calculate the sum of squares differences between two mrs_data objects.
 #' @param mrs_data mrs_data oject.
@@ -2146,4 +2395,108 @@ calc_spec_diff <- function(mrs_data, ref = NULL, xlim = c(4, 0.5)) {
   ref_crop <- rep_dyn(ref_crop, dyns(mrs_data))
   res <- mrs_data_crop - ref_crop
   apply_mrs(res, 7, cplx_sum_sq, data_only = TRUE)
+}
+
+#' Transform 2D MRSI data to k-space in the x-y direction.
+#' @param mrs_data 2D MRSI data.
+#' @return k-space data.
+#' @export
+mrsi2d_img2kspace <- function(mrs_data) {
+  mrsi_dims <- dim(mrs_data$data) 
+  x_dim <- mrsi_dims[2]
+  y_dim <- mrsi_dims[3]
+  N <- mrsi_dims[7]
+  mat <- mrs_data$data
+  mat <- drop(mat)
+  dim(mat) <- c(x_dim, y_dim * N)
+  mat <- ft_shift_mat(mat)
+  dim(mat) <- c(x_dim, y_dim, N)
+  mat <- aperm(mat, c(2, 1, 3))
+  dim(mat) <- c(y_dim, x_dim * N)
+  mat <- ft_shift_mat(mat)
+  dim(mat) <- c(y_dim, x_dim, N)
+  mat <- aperm(mat, c(2, 1, 3))
+  dim(mat) <- mrsi_dims
+  mrs_data$data <- mat
+  return(mrs_data)
+}
+
+#' Transform 2D MRSI data from k-space to image space in the x-y direction.
+#' @param mrs_data 2D MRSI data.
+#' @return MRSI data in image space.
+#' @export
+mrsi2d_kspace2img <- function(mrs_data) {
+  mrsi_dims <- dim(mrs_data$data) 
+  x_dim <- mrsi_dims[2]
+  y_dim <- mrsi_dims[3]
+  N <- mrsi_dims[7]
+  mat <- mrs_data$data
+  mat <- drop(mat)
+  dim(mat) <- c(x_dim, y_dim * N)
+  mat <- ift_shift_mat(mat)
+  dim(mat) <- c(x_dim, y_dim, N)
+  mat <- aperm(mat, c(2, 1, 3))
+  dim(mat) <- c(y_dim, x_dim * N)
+  mat <- ift_shift_mat(mat)
+  dim(mat) <- c(y_dim, x_dim, N)
+  mat <- aperm(mat, c(2, 1, 3))
+  dim(mat) <- mrsi_dims
+  mrs_data$data <- mat
+  return(mrs_data)
+}
+
+#' Apply line-broadening to an mrs_data object to achieve a specified linewidth.
+#' @param mrs_data data in.
+#' @param lw target linewidth in units of ppm.
+#' @param xlim region to search for peaks to obtain a linewidth estimate.
+#' @return line-broadened data.
+#' @export
+set_lw <- function(mrs_data, lw, xlim = c(4, 0.5)) {
+  
+  # measure current lw and check it is narrower than requested
+  init_lw <- peak_info(mrs_data, xlim)$fwhm_ppm[1]
+  
+  if (init_lw > lw) stop("Error, target linewidth is too narrow.")
+  
+  res <- stats::optim(0, lw_obj_fn, NULL, mrs_data, lw, lower = 0, upper = 50,
+         method = "Brent")
+  
+  return(lb(mrs_data, res$par[1]))
+}
+
+lw_obj_fn <- function(lb, mrs_data, lw) {
+  mrs_data <- lb(mrs_data, lb)
+  new_lw <- peak_info(mrs_data)$fwhm_ppm[1]
+  Mod(new_lw - lw)
+}
+
+#' Perform l2 regularisation artefact suppression using the method proposed by
+#' Bilgic et al. JMRI 40(1):181-91 2014.
+#' @param mrs_data input data for artefact suppression.
+#' @param A matrix of spectral data points containing the artifact basis 
+#' signals.
+#' @param b regularisation parameter.
+#' @return l2 reconstructed mrs_data object.
+#' @export
+l2_reg <- function(mrs_data, A, b) {
+  # generally done as a FD operation
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  A <- t(A)
+  if (nrow(A) != Npts(mrs_data)) stop("l2 reg. A matrix dimensions do not agree with the input data")
+  
+  orig_dim <- dim(mrs_data$data)
+  
+  # original data
+  x0 <- t(mrs_data2mat(collapse_to_dyns(mrs_data)))
+  
+  # recon. matrix 
+  recon_mat <- solve(diag(nrow(A)) + b * A %*% Conj(t(A)))
+  
+  # recon data
+  x <- recon_mat %*% x0
+  x <- t(x) 
+  dim(x) <- orig_dim
+  mrs_data$data <- x
+  return(mrs_data)
 }

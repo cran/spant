@@ -1,17 +1,21 @@
 read_rda <- function(fname) {
-  con = file(fname, "r")
-  n = 1
+  
+  # find out where the raw data points start by looking for
+  # ">>> End of header <<<"
+  con <- file(fname, "rb")
+  n <- 1
   while (TRUE) {
-    line = readLines(con, n = 1)
+    line <- scan(con, "character", nlines = 1, sep = "\n", quiet = TRUE)
     if (startsWith(line, ">>> End of header <<<")) {
       data_pos <- seek(con)
       break
     }
     n = n + 1
   }
+  close(con)
   
-  # go back to the start
-  seek(con, 0)
+  # go back to the start and read in the data parameters
+  con <- file(fname, "r")
   txt <- utils::read.delim(con, sep = ":", nrows = (n - 2), header = FALSE,
                     strip.white = TRUE, stringsAsFactors = FALSE,
                     comment.char = ">")

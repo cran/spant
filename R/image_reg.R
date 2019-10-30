@@ -108,9 +108,10 @@ get_mrsi_voxel_xy_psf <- function(mrs_data, target_mri, x_pos, y_pos, z_pos) {
 #' Generate a MRSI VOI from an \code{mrs_data} object.
 #' @param mrs_data MRS data.
 #' @param target_mri optional image data to match the intended volume space.
+#' @param map optional voi intensity map.
 #' @return volume data as a nifti object.
 #' @export
-get_mrsi_voi <- function(mrs_data, target_mri) {
+get_mrsi_voi <- function(mrs_data, target_mri = NULL, map = NULL) {
   affine <- get_mrs_affine(mrs_data)
   
   rows   <- dim(mrs_data$data)[2]
@@ -121,26 +122,47 @@ get_mrsi_voi <- function(mrs_data, target_mri) {
                cols * mrs_data$resolution[3],
                slices * mrs_data$resolution[4])
   
-  raw_data <- array(1, voi_dim)
+  if (is.null(map)) {
+    raw_data <- array(1, voi_dim)
+  } else {
+    # assume 2D xy map for now
+    resamp_map <- mmand::rescale(drop(map), 10, mmand::mnKernel())
+    resamp_map <- t(resamp_map)
+    raw_data <- array(resamp_map, voi_dim) 
+  }
+  
   voi <- RNifti::retrieveNifti(raw_data)
   voi <- RNifti::`sform<-`(voi, structure(affine, code = 2L))
   
-  if (missing(target_mri)) {
-    warning("Target MRI data has not been specified.")  
+  if (is.null(target_mri)) {
+    RNifti::orientation(voi) <- "RAS"
+    voi <- voi[]
   } else {
     voi <- resample_voi(voi, target_mri)
   }
-  voi  
+  voi
 }
 
-#' Resample a VOI to match a target image space.
+#' Resample a VOI to match a target image space using nearest-neighbour
+#' interpolation.
 #' @param voi volume data as a nifti object.
 #' @param mri image data as a nifti object.
 #' @return volume data as a nifti object.
 #' @export
 resample_voi <- function(voi, mri) {
-  reg_res <- RNiftyReg::niftyreg.linear(voi, mri, nLevels = 0, 
-                                        interpolation = 0, init = diag(4))$image
+  RNiftyReg::niftyreg.linear(voi, mri, nLevels = 0, interpolation = 0,
+                             init = diag(4))$image
+}
+
+#' Resample an image to match a target image space.
+#' @param source image data as a nifti object.
+#' @param target image data as a nifti object.
+#' @return resampled image data as a nifti object.
+#' @export
+resample_img <- function(source, target) {
+  res <- RNiftyReg::niftyreg.linear(source, target, nLevels = 0,
+                                    init = diag(4))$image
+  return(res)
 }
 
 #' Plot a volume as an image overlay.
@@ -240,23 +262,23 @@ get_voi_seg_psf <- function(psf, mri_seg) {
 #' @export
 spm_pve2categorical <- function(fname) {
   # check the file name makes sense
-  if (substr(basename(fname),1,1) != "c") stop("Error, filename does not begin with 'c'.")
+  if (substr(basename(fname), 1, 1) != "c") stop("Error, filename does not begin with 'c'.")
    
-  if (!(substr(basename(fname),2,2) %in% c("1","2","3","4","5","6"))) {
+  if (!(substr(basename(fname), 2, 2) %in% c("1","2","3","4","5","6"))) {
     stop("Error, filename does not follow expected pattern.")
   }
   
   # check all files are present and correct
   for (n in 1:6) {
     base <- basename(fname)
-    substr(base,2,2) <- as.character(n)
+    substr(base,2, 2) <- as.character(n)
     fname <- file.path(dirname(fname), base)
     if (!file.exists(fname)) stop(paste("Error, file does not exist :",fname))
   }
   
   cat("Reading segmentation images...\n")
   # read the first file 
-  substr(base,2,2) <- "1"
+  substr(base,2, 2) <- "1"
   fname <- file.path(dirname(fname), base)
   x <- RNifti::readNifti(fname)
   
@@ -327,7 +349,7 @@ get_mrs_affine <- function(mrs_data, x_pos = 1, y_pos = 1, z_pos = 1) {
 
 # check two nifti images are in the same space
 check_geom <- function(a, b) {
-  eq_xform <- identical(RNifti::xform(a), RNifti::xform(b))
+  eq_xform <- max(Mod(RNifti::xform(a) - RNifti::xform(b))) < 1e-6
   eq_dim <- identical(dim(a), dim(b))
   eq_pix_dim <- identical(RNifti::pixdim(a), RNifti::pixdim(b))
   
@@ -351,4 +373,27 @@ nifti_flip_lr <- function(x) {
   lr_dim <- dim(x)[1]
   x[] <- x[lr_dim:1,,]
   return(x)
+}
+
+#' Reslice a nifti object to match the orientation of mrs data.
+#' @param mri nifti object to be resliced.
+#' @param mrs mrs_data object for the target orientation.
+#' @return resliced imaging data.
+#' @export
+reslice_to_mrs <- function(mri, mrs) {
+  mrs_affine <- RNifti::xform(get_mrsi_voi(mrs))
+  dummy <- mri
+  new_affine <- RNifti::xform(mri)
+  new_affine[1:3, 1:3] <- mrs_affine[1:3, 1:3]
+  # find the central point in the mri
+  centre <- new_affine[1:3, 4] + RNifti::xform(mri)[1:3, 1:3] %*% 
+                                 (dim(mri)[1:3] * RNifti::pixdim(mri)[1:3]) / 2
+  
+  new_pos <- centre - new_affine[1:3, 1:3] %*% (dim(mri)[1:3] *
+                                                RNifti::pixdim(mri)[1:3]) / 2
+  
+  new_affine[1:3, 4] <- new_pos
+  #RNifti::sform(dummy) <- new_affine
+  dummy <- RNifti::`sform<-`(dummy, structure(new_affine, code = 2L))
+  resample_img(mri, dummy)
 }

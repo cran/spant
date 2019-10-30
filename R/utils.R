@@ -112,11 +112,18 @@ ift_shift <- function(vec_in) {pracma::ifft(pracma::ifftshift(vec_in))}
 #' @return output matrix.
 #' @export
 ft_shift_mat <- function(mat_in) {
-  mat_in_ft = stats::mvfft(mat_in) # 33s
-  #p <- fftw::planFFT(NROW(mat_in),effort=1)
-  #mat_in_ft = apply(mat_in,2,fftw::FFT,p) # 34s
-  #mat_in_ft = fftwtools::mvfftw(mat_in) # 35s
+  mat_in_ft <- stats::mvfft(mat_in)
   mvfftshift(mat_in_ft)
+}
+
+#' Perform an ifft and ifftshift on a matrix with each column replaced by its 
+#' shifted ifft.
+#' @param mat_in matrix input.
+#' @return output matrix.
+#' @export
+ift_shift_mat <- function(mat_in) {
+  mat_in_shift <- mvifftshift(mat_in)
+  stats::mvfft(mat_in_shift, inverse = TRUE) / NROW(mat_in)
 }
 
 #' Perform a fftshift on a matrix, with each column replaced by its shifted 
@@ -126,7 +133,19 @@ ft_shift_mat <- function(mat_in) {
 #' @export
 mvfftshift <- function(x) {
   m <- NROW(x)
-  p <- ceiling(m/2)
+  p <- ceiling(m / 2)
+  idx <- c((p + 1):m, 1:p)
+  x[idx,,drop = FALSE]
+}
+
+#' Perform an ifftshift on a matrix, with each column replaced by its shifted 
+#' result.
+#' @param x matrix input.
+#' @return output matrix.
+#' @export
+mvifftshift <- function(x) {
+  m <- NROW(x)
+  p <- floor(m / 2)
   idx <- c((p + 1):m, 1:p)
   x[idx,,drop = FALSE]
 }
@@ -165,22 +184,6 @@ is.installed <- function(mypkg) {
   is.element(mypkg, utils::installed.packages()[,1]) 
 }
 
-rotate_vec <- function(vec_in, ax, theta) {
-  ct <- cos(theta)
-  st <- sin(theta)
-  rotate_mat <- matrix(nrow = 3, ncol = 3)
-  rotate_mat[1, 1] = ct + ax[1] * ax[1] * (1 - ct)
-  rotate_mat[1, 2] = ax[1] * ax[2] * (1 - ct) - ax[3] * st
-  rotate_mat[1, 3] = ax[1] * ax[3] * (1 - ct) + ax[2] * st
-  rotate_mat[2, 1] = ax[2] * ax[1] * (1 - ct) + ax[3] * st
-  rotate_mat[2, 2] = ct + ax[1] * ax[1] * (1 - ct)
-  rotate_mat[2, 3] = ax[2] * ax[3] * (1 - ct) - ax[1] * st
-  rotate_mat[3, 1] = ax[3] * ax[1] * (1 - ct) - ax[2] * st
-  rotate_mat[3, 2] = ax[3] * ax[2] * (1 - ct) + ax[1] * st
-  rotate_mat[3, 3] = ct + ax[3] * ax[3] * (1 - ct)
-  vec_out <- rotate_mat %*% vec_in
-  as.numeric(vec_out / sum((vec_out) ^ 2))
-}
 
 # From : http://mathworld.wolfram.com/LeastSquaresFittingExponential.html
 measure_lorentz_amp <- function(y, t, start_pnt = 10, end_pnt = 50) {
@@ -346,7 +349,7 @@ comb_csv_results <- function(pattern, supp_mess = TRUE, ...) {
 #' Get the point spread function (PSF) for a 2D phase encoded MRSI scan.
 #' @param FOV field of view in mm.
 #' @param mat_size acquisition matrix size (not interpolated).
-#' @param sampling can be eith "circ" for circular or "rect" for rectangular.
+#' @param sampling can be either "circ" for circular or "rect" for rectangular.
 #' @param hamming should Hamming k-space weighting be applied (default FALSE).
 #' @return A matrix of the PSF with 1mm resolution.
 #' @export
@@ -392,3 +395,47 @@ magrittr::`%>%`
 #' @importFrom magrittr %$%
 #' @export
 magrittr::`%$%`
+
+#' @importFrom RNifti readNifti
+#' @export
+RNifti::readNifti
+
+# prob not as fast as functions in matrixStats but better than
+# apply
+colSdColMeans <- function(x, na.rm) {
+  if (na.rm) {
+    n <- colSums(!is.na(x)) # thanks @flodel
+  } else {
+    n <- nrow(x)
+  }
+  colVar <- colMeans(x * x, na.rm = na.rm) - (colMeans(x, na.rm = na.rm)) ^ 2
+  return(sqrt(colVar * n / (n - 1)))
+}
+
+# Rotation matrix from axis and angle
+# https://en.wikipedia.org/wiki/Rotation_matrix#cite_note-5
+rotate_vec <- function(vec_in, ax, theta) {
+  ct <- cos(theta)
+  st <- sin(theta)
+  rotate_mat <- matrix(nrow = 3, ncol = 3)
+  rotate_mat[1, 1] = ct + ax[1] * ax[1] * (1 - ct)
+  rotate_mat[1, 2] = ax[1] * ax[2] * (1 - ct) - ax[3] * st
+  rotate_mat[1, 3] = ax[1] * ax[3] * (1 - ct) + ax[2] * st
+  rotate_mat[2, 1] = ax[2] * ax[1] * (1 - ct) + ax[3] * st
+  rotate_mat[2, 2] = ct + ax[1] * ax[1] * (1 - ct)
+  rotate_mat[2, 3] = ax[2] * ax[3] * (1 - ct) - ax[1] * st
+  rotate_mat[3, 1] = ax[3] * ax[1] * (1 - ct) - ax[2] * st
+  rotate_mat[3, 2] = ax[3] * ax[2] * (1 - ct) + ax[1] * st
+  rotate_mat[3, 3] = ct + ax[3] * ax[3] * (1 - ct)
+  vec_out <- rotate_mat %*% vec_in
+  as.numeric(vec_out / sum((vec_out) ^ 2) ^ 0.5)
+}
+
+cross <- function(a, b) {
+  vec_out <- c(NA, NA, NA)
+  vec_out[1] <- a[2] * b[3] - a[3] * b[2]
+  vec_out[2] <- a[3] * b[1] - a[1] * b[3]
+  vec_out[3] <- a[1] * b[2] - a[2] * b[1]
+  vec_out <- vec_out / (sum(vec_out ^ 2) ^ 0.5)
+  vec_out
+}

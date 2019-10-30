@@ -1,3 +1,16 @@
+# spant 0.16.0
+* SNR is now defined as the max data point divided by the standard deviation of
+the noise (n.b. factor of two has been removed in-line with upcoming terminology
+paper).
+* Default rats method improved to work with multidimensional datasets.
+* Added norm_mrs function to normalise the intensity of spectral data.
+* Added bc_constant function to correct spectral baselines by a constant offset.
+* Added re_weighting function to apply a resolution enhancement weighting to the
+FID.
+* Performance improvement for apodise_xy function.
+* sd function now works for mrs_data.
+* Added 2D MRSI support for Siemens IMA format.
+
 # spant 0.15.0
 * Bug fix for using auto_phase function with a single spectrum.
 * Bug fix for comb_coils not returning unaveraged data when requested.
