@@ -2,6 +2,9 @@ varpro_3_para <- function(y, acq_paras, basis, opts = NULL) {
   mrs_data <- vec2mrs_data(y, fs = acq_paras$fs, ft = acq_paras$ft, 
                            ref = acq_paras$ref)
   
+  # has this data been masked?
+  if (is.na(y[1])) return(list(amps = NA, crlbs = NA, diags = NA, fit = NA))
+  
   # use default fitting opts if not specified 
   if (is.null(opts)) {
       opts <- varpro_3_para_opts()
@@ -74,8 +77,10 @@ varpro_3_para <- function(y, acq_paras, basis, opts = NULL) {
   Y <- ft_shift(y)
   resid <- Y - YHAT
   
+  suppressPackageStartupMessages(
   BL <- smoother::smth.gaussian(Re(resid), opts$bl_smth_pts, tails = TRUE) + 
         1i * smoother::smth.gaussian(Im(resid), opts$bl_smth_pts, tails = TRUE)
+  )
   
   RESID <- Y - YHAT
   

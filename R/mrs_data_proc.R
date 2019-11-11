@@ -1162,6 +1162,37 @@ crop_xy <- function(mrs_data, x_dim, y_dim) {
   return(get_subset(mrs_data, x_set = x_set, y_set = y_set))
 }
 
+#' Mask an MRSI dataset in the x-y direction
+#' @param mrs_data MRS data object.
+#' @param x_dim x dimension output length.
+#' @param y_dim y dimension output length.
+#' @return masked MRS data.
+#' @export
+mask_xy <- function(mrs_data, x_dim, y_dim) {
+  mid_pt_x <- Nx(mrs_data) / 2
+  mid_pt_y <- Ny(mrs_data) / 2
+  x_set <- seq(from = mid_pt_x - x_dim / 2 + 1, by = 1, length.out = x_dim)
+  y_set <- seq(from = mid_pt_y - y_dim / 2 + 1, by = 1, length.out = y_dim)
+  x_set <- floor(x_set) # could be floor or ceil, need to test
+  y_set <- floor(y_set) # could be floor or ceil, need to test
+  mask_mat <- matrix(TRUE, Nx(mrs_data), Ny(mrs_data))
+  mask_mat[x_set, y_set] <- FALSE
+  mrs_data <- mask_xy_mat(mrs_data, mask_mat)
+  return(mrs_data)
+}
+
+#' Mask a 2D MRSI dataset in the x-y dimension.
+#' @param mrs_data MRS data object.
+#' @param mask matrix of boolean values specifying the voxels to mask.
+#' @return masked dataset.
+#' @export
+mask_xy_mat <- function(mrs_data, mask) {
+  dim(mask) <- c(1, nrow(mask), ncol(mask), 1, 1, 1, 1)
+  mask <- rep_array_dim(mask, 7, Npts(mrs_data))
+  mrs_data$data[mask] <- NA
+  return(mrs_data)
+}
+
 #' Return the first half of a dynamic series.
 #' @param mrs_data dynamic MRS data.
 #' @return first half of the dynamic series.
@@ -1429,7 +1460,7 @@ sd.mrs_data <- function(x, na.rm = FALSE) {
   x
 }
 
-## make an S3 generic for sd
+## make an S3 generic for sd (cos R Core don't do this for some reason!)
 #' @inherit stats::sd
 #' @export
 sd <- function(x, na.rm) UseMethod("sd")
@@ -1866,6 +1897,45 @@ apodise_xy <- function(mrs_data) {
   dim(mat) <- c(y_dim, x_dim * N)
   
   mat <- mat * signal::hamming(y_dim)
+  
+  dim(mat) <- c(y_dim, x_dim, N)
+  mat <- aperm(mat, c(2, 1, 3))
+  dim(mat) <- mrsi_dims
+  mrs_data$data <- mat
+  
+  # put xy dims back to space
+  mrs_data <- mrsi2d_kspace2img(mrs_data)
+  return(mrs_data)
+}
+
+#' Grid shift MRSI data in the x/y dimension.
+#' @param mrs_data MRSI data in the spatial domain.
+#' @param x_shift shift to apply in the x-direction in units of voxels.
+#' @param y_shift shift to apply in the y-direction in units of voxels.
+#' @return shifted data.
+#' @export
+grid_shift_xy <- function(mrs_data, x_shift, y_shift) {
+  # TODO adjust pos vec to match
+  mrsi_dims <- dim(mrs_data$data)
+  x_dim <- mrsi_dims[2]
+  y_dim <- mrsi_dims[3]
+  N <- mrsi_dims[7]
+  
+  mrs_data <- mrsi2d_img2kspace(mrs_data)
+  
+  mat <- mrs_data$data
+  mat <- drop(mat)
+  dim(mat) <- c(x_dim, y_dim * N)
+  
+  mat <- mat * exp(1i * (seq(from = 0, to = (x_dim - 1) / x_dim,
+                            length.out = x_dim) - 0.5) * x_shift * 2 * pi)
+  
+  dim(mat) <- c(x_dim, y_dim, N)
+  mat <- aperm(mat, c(2, 1, 3))
+  dim(mat) <- c(y_dim, x_dim * N)
+  
+  mat <- mat * exp(1i * (seq(from = 0, to = (y_dim - 1) / y_dim,
+                            length.out = y_dim) - 0.5) * y_shift * 2 * pi)
   
   dim(mat) <- c(y_dim, x_dim, N)
   mat <- aperm(mat, c(2, 1, 3))

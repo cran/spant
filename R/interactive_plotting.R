@@ -4,14 +4,15 @@
 #' @param slice slice to plot in the z direction.
 #' @param zlim range of values to plot.
 #' @param interp interpolation factor.
+#' @param xlim spectral plot limits for the x axis.
 #' @export
 plot_slice_fit_inter <- function(fit_res, map = NULL, slice = 1, zlim = NULL, 
-                                 interp = 1) {
+                                 interp = 1, xlim = NULL) {
   
   if (is.null(map)) map <- get_fit_map(fit_res, "TNAA") 
   
   plot_slice_map_inter(mrs_data = fit_res, map = map, slice = slice, 
-                       interp = interp, zlim = zlim)
+                       interp = interp, zlim = zlim, xlim = xlim)
 }
 
 
@@ -44,7 +45,8 @@ plot_slice_map_inter <- function(mrs_data, map = NULL, xlim = NULL, slice = 1,
   if (class(mrs_data) == "mrs_data") {
     x_scale <- ppm(mrs_data)
   } else {
-    x_scale <- mrs_data$fits[[1]]$PPMScale
+    non_na_res <- which(!is.na(mrs_data$fits))[[1]]
+    x_scale <- mrs_data$fits[[non_na_res]]$PPMScale
   }
   
   if (is.null(xlim)) {
@@ -62,10 +64,10 @@ plot_slice_map_inter <- function(mrs_data, map = NULL, xlim = NULL, slice = 1,
   )
   
   server <- function(input, output, session) {
-    x_min <- - 1 / (Nx(mrs_data) * interp) / 2
-    x_max <- 1 + 1 / (Nx(mrs_data) * interp) / 2
-    y_min <- - 1 / (Ny(mrs_data) * interp) / 2
-    y_max <- 1 + 1 / (Ny(mrs_data) * interp) / 2
+    x_min <- - 1 / (Nx(mrs_data) * interp - 1) / 2
+    x_max <- 1 + 1 / (Nx(mrs_data) * interp - 1) / 2
+    y_min <- - 1 / (Ny(mrs_data) * interp - 1) / 2
+    y_max <- 1 + 1 / (Ny(mrs_data) * interp - 1) / 2
     
     x <- round(Nx(mrs_data) / 2)
     y <- round(Ny(mrs_data) / 2)
@@ -77,7 +79,7 @@ plot_slice_map_inter <- function(mrs_data, map = NULL, xlim = NULL, slice = 1,
                      denom = denom, mask_cutoff = mask_cutoff, interp = interp,
                      horizontal = FALSE, coil = coil)
       
-      graphics::points(xpos_round, ypos_round, pch = 1, col = "white", cex = 4,
+      graphics::points(xpos_round, ypos_round, pch = 1, col = "red", cex = 4,
                        lw = 3)
     })
     output$spec <- shiny::renderPlot({
@@ -104,6 +106,8 @@ plot_slice_map_inter <- function(mrs_data, map = NULL, xlim = NULL, slice = 1,
       x <- round(x_rescale)
       y <- round(y_rescale)
       
+      cat("x = ", x, ", y = ", Ny(mrs_data) + 1 - y, "\n", sep = "")
+      
       if (x > Nx(mrs_data)) x <- Nx(mrs_data)
       if (y > Ny(mrs_data)) y <- Ny(mrs_data)
       if (x < 1) x <- 1
@@ -122,11 +126,12 @@ plot_slice_map_inter <- function(mrs_data, map = NULL, xlim = NULL, slice = 1,
       
       output$map <- shiny::renderPlot({
         plot_slice_map(map, slice = slice, mask_map = mask_map, zlim = zlim,
-                       denom = denom, mask_cutoff = mask_cutoff, interp = interp,
-                       horizontal = FALSE, coil = coil)
+                       denom = denom, mask_cutoff = mask_cutoff, 
+                       interp = interp, horizontal = FALSE, coil = coil)
         xpos_round <- (x - 0.5) * (x_max - x_min) / Nx(mrs_data) + x_min
         ypos_round <- (y - 0.5) * (y_max - y_min) / Ny(mrs_data) + y_min
-        graphics::points(xpos_round, ypos_round, pch = 1, col = "white", cex = 4, lw = 3)})
+        graphics::points(xpos_round, ypos_round, pch = 1, col = "red", 
+                         cex = 4, lw = 3)})
     })
     
     # When the Done button is clicked, return a value
