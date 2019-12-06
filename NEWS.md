@@ -1,3 +1,9 @@
+# spant 0.19.0
+* Added Asc, BHB, Cho, PEth and Ser simulation parameters.
+* Added ker option to get_mrsi_voi function.
+* Added append_basis function to combine two basis sets objects.
+* The align function now accepts more than one reference frequency.
+
 # spant 0.17.0
 * Added a function to grid shift 2D MRSI data in the x/y direction.
 * Better plotting/fitting support for masking data by setting data points to NA.

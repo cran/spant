@@ -104,6 +104,28 @@ get_ala_paras <- function(lw = NULL, lg = 0) {
   paras
 }
 
+get_asc_paras <- function(lw = NULL, lg = 0) {
+  if (is.null(lw)) lw = 2
+  nucleus <- rep("1H", 4)
+  chem_shift <- c(4.4965, 4.0072, 3.7469, 3.7194)
+  j_coupling_mat <- matrix(0, 4, 4)
+  j_coupling_mat[2,1] <- 2.055
+  j_coupling_mat[3,2] <- 5.78
+  j_coupling_mat[4,2] <- 7.373
+  j_coupling_mat[4,3] <- -11.585
+  
+  spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
+                       j_coupling_mat = j_coupling_mat, scale_factor = 1,
+                       lw = lw, lg = lg)
+  
+  source <- "Detection of an antioxidant profile in the humain brain in vivo via
+             double editing with MEGA-PRESS. MRM. 2006; 56(6):1192-1199."
+  
+  paras <- list(spin_groups = list(spin_group_a), name = "Asc", source = source)
+  class(paras) <- "mol_parameters"
+  paras
+}
+
 get_asp_paras <- function(lw = NULL, lg = 0) {
   if (is.null(lw)) lw = 2
   nucleus <- rep("1H", 3)
@@ -121,6 +143,42 @@ get_asp_paras <- function(lw = NULL, lg = 0) {
               NMR Biomed. 2000; 13:129-153."
   
   paras <- list(spin_groups = list(spin_group_a), name = "Asp", source = source)
+  class(paras) <- "mol_parameters"
+  paras
+}
+
+get_cho_paras <- function(lw = NULL, lg = 0) {
+  if (is.null(lw)) lw = 2
+  nucleus <- c("1H", "14N")
+  chem_shift <- c(3.185, 0)
+  j_coupling_mat <- matrix(0, 2, 2)
+  j_coupling_mat[2,1] <- 0.57
+  spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
+                       j_coupling_mat = j_coupling_mat, scale_factor = 9,
+                       lw = lw, lg = lg)
+  
+  nucleus <- c("1H", "1H", "1H", "1H", "14N")
+  chem_shift <- c(4.054, 4.054, 3.501, 3.501, 0)
+  j_coupling_mat <- matrix(0, 5, 5)
+  j_coupling_mat[2,1] <- -14.1
+  j_coupling_mat[3,1] <- 3.14
+  j_coupling_mat[4,1] <- 6.979
+  j_coupling_mat[5,1] <- 2.572
+  j_coupling_mat[3,2] <- 7.011
+  j_coupling_mat[4,2] <- 3.168
+  j_coupling_mat[5,2] <- 2.681
+  j_coupling_mat[4,3] <- -14.07
+  
+  spin_group_b <- list(nucleus = nucleus, chem_shift = chem_shift, 
+                       j_coupling_mat = j_coupling_mat, scale_factor = 1,
+                       lw = lw, lg = lg)
+  
+  source <- "Corrigendum: Proton NMR chemical shifts and coupling constants for brain metabolites.
+              NMR Biomed. 2000; 13:129-153."
+  
+  paras <- list(spin_groups = list(spin_group_a, spin_group_b), name = "Cho",
+                source = source)
+  
   class(paras) <- "mol_parameters"
   paras
 }
@@ -275,6 +333,30 @@ get_gly_paras <- function(lw = NULL, lg = 0) {
               NMR Biomed. 2000; 13:129-153."
   
   paras$source <- source
+  paras
+}
+
+get_bhb_paras <- function(lw = NULL, lg = 0) {
+  if (is.null(lw)) lw = 0.5
+  nucleus <- rep("1H", 6)
+  chem_shift <- c(2.388, 2.294, 4.133, 1.186, 1.186, 1.186)
+  j_coupling_mat <- matrix(0, 6, 6)
+  j_coupling_mat[2,1] <- -14.5
+  j_coupling_mat[3,1] <- 7.3
+  j_coupling_mat[3,2] <- 6.3
+  j_coupling_mat[4,3] <- 6.3
+  j_coupling_mat[5,3] <- 6.3
+  j_coupling_mat[6,3] <- 6.3
+  
+  spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
+                       j_coupling_mat = j_coupling_mat, scale_factor = 1,
+                       lw = lw, lg = lg)
+  
+  source <- "In Vivo NMR Spectroscopy: Principles and Techniques,
+             Robin A. de Graaf"
+  
+  paras <- list(spin_groups = list(spin_group_a), name = "BHB", source = source)
+  class(paras) <- "mol_parameters"
   paras
 }
 
@@ -561,6 +643,54 @@ get_pcr_paras <- function(lw = NULL, lg = 0) {
   paras
 }
 
+get_peth_paras <- function(lw = NULL, lg = 0) {
+  if (is.null(lw)) lw = 2
+  nucleus <- c("1H", "1H", "1H", "1H", "31P", "14N")
+  chem_shift <- c(3.9765, 3.9765, 3.216, 3.216, 0, 0)
+  j_coupling_mat <- matrix(0, 6, 6)
+  j_coupling_mat[2,1] <- -14.56
+  j_coupling_mat[3,1] <- 3.182
+  j_coupling_mat[4,1] <- 6.716
+  j_coupling_mat[5,1] <- 7.288
+  j_coupling_mat[6,1] <- 0.464
+  j_coupling_mat[3,2] <- 7.204
+  j_coupling_mat[4,2] <- 2.98
+  j_coupling_mat[5,2] <- 7.088
+  j_coupling_mat[6,2] <- 0.588
+  j_coupling_mat[4,3] <- -14.71
+  spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
+                       j_coupling_mat = j_coupling_mat, scale_factor = 1,
+                       lw = lw, lg = lg)
+  
+  source <- "Corrigendum: Proton NMR chemical shifts and coupling constants for brain metabolites.
+              NMR Biomed. 2000; 13:129-153."
+  
+  paras <- list(spin_groups = list(spin_group_a), name = "PEth", source = source)
+  class(paras) <- "mol_parameters"
+  paras
+}
+
+get_ser_paras <- function(lw = NULL, lg = 0) {
+  if (is.null(lw)) lw = 2
+  nucleus <- rep("1H", 3)
+  chem_shift <- c(3.8347, 3.9379, 3.9764)
+  j_coupling_mat <- matrix(0, 3, 3)
+  j_coupling_mat[2,1] <- 5.979
+  j_coupling_mat[3,1] <- 3.561
+  j_coupling_mat[3,2] <- -12.254
+  
+  spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
+                       j_coupling_mat = j_coupling_mat, scale_factor = 1,
+                       lw = lw, lg = lg)
+  
+  source <- "Corrigendum: Proton NMR chemical shifts and coupling constants for brain metabolites.
+              NMR Biomed. 2000; 13:129-153."
+  
+  paras <- list(spin_groups = list(spin_group_a), name = "Ser", source = source)
+  class(paras) <- "mol_parameters"
+  paras
+}
+
 get_sins_paras <- function(lw = NULL, lg = 0) {
   if (is.null(lw)) lw = 2
   paras <- get_uncoupled_mol("sIns", 3.34, "1H", 6, lw, lg)
@@ -654,7 +784,7 @@ get_glu_paras <- function(lw = NULL, lg = 0) {
   paras
 }
 
-get_a_glc_paras <- function(lw = NULL, lg = 0) {
+  get_a_glc_paras <- function(lw = NULL, lg = 0) {
   if (is.null(lw)) lw = 2
   nucleus <- rep("1H", 7)
   chem_shift <- c(5.216, 3.519, 3.698, 3.395, 3.822, 3.826, 3.749)
