@@ -1,3 +1,13 @@
+# spant 1.0.0
+* ABfit analysis method has been added, and is now default for the mrs_fit
+function.
+* Added reader for LCModel RAW format data.
+* Added read_mri_dyn_dir function for reading dynamic MRS exported from Siemens
+scanners.
+* Bug fixes for 2D MRSI voxel segmentation calculation.
+* Bug fixes for Siemens IMA format reader for SVS data.
+* Optional colourbar added to ortho3 function.
+
 # spant 0.19.0
 * Added Asc, BHB, Cho, PEth and Ser simulation parameters.
 * Added ker option to get_mrsi_voi function.
@@ -8,7 +18,7 @@
 * Added a function to grid shift 2D MRSI data in the x/y direction.
 * Better plotting/fitting support for masking data by setting data points to NA.
 * Bug fix for interactive voxel selection position indicator.
-* Added mask_xy to mask voxels in a centered rectangular region.
+* Added mask_xy to mask voxels in a centred rectangular region.
 * Minor changes to improve parallel processing support.
 
 # spant 0.16.0

@@ -140,8 +140,9 @@ plot_slice_map_inter <- function(mrs_data, map = NULL, xlim = NULL, slice = 1,
     })
   }
   
-  shiny::runGadget(ui, server, viewer = shiny::dialogViewer("Plot slice map", width = 1200,
-                                              height = 600))
+  shiny::runGadget(ui, server, viewer = shiny::dialogViewer("Plot slice map",
+                                                            width = 1200,
+                                                            height = 600))
 }
 
 #' Display an orthographic projection plot of a nifti object.
@@ -155,24 +156,31 @@ plot_slice_map_inter <- function(mrs_data, map = NULL, xlim = NULL, slice = 1,
 #' @param orient_lab display orientation labels (default TRUE).
 #' @param rescale rescale factor for the underlay and overlay images.
 #' @param crosshairs display the crosshairs (default TRUE).
+#' @param ch_lwd crosshair linewidth.
+#' @param colourbar display a colourbar for the overlay (default TRUE).
+#' @param bg plot background colour.
+#' @param mar plot margins.
+#' @param smallplot smallplot option for positioning the colourbar.
 #' @export
 ortho3 <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
                    zlim_ol = NULL, alpha = 1, col_ol = viridisLite::viridis(64),
-                   orient_lab = TRUE, rescale = 1, crosshairs = TRUE) {
+                   orient_lab = TRUE, rescale = 1, crosshairs = TRUE,
+                   ch_lwd = 1, colourbar = TRUE, bg = "black",
+                   mar = c(0, 0, 0, 0), smallplot = c(0.50, 0.52, 0.1, 0.4)) {
   
   if ((RNifti::orientation(underlay) != "RAS") && (orient_lab)) {
     warning("Underlay image is not in RAS format, orientation labels may be incorrect.")
   }
   
-  graphics::par(bg = "black", mar = c(0,0,0,0))
-
+  graphics::par(bg = bg, fg = "white", col.axis = "white", mar = mar)
+  
   img_dim <- dim(underlay)[1:3]
 
   if (is.null(xyz)) xyz <- ceiling(img_dim / 2)
 
   cor <- underlay[img_dim[1]:1, xyz[2],]
   sag <- underlay[xyz[1], img_dim[2]:1,]
-  ax <-  underlay[img_dim[1]:1,, xyz[3]]
+  ax  <- underlay[img_dim[1]:1,, xyz[3]]
 
   xcutoff <- img_dim[1] / (img_dim[1] + img_dim[2])
   ycutoff <- img_dim[2] / (img_dim[2] + img_dim[3])
@@ -217,27 +225,34 @@ ortho3 <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
     
     col_ol <- add_alpha(col_ol, alpha)
     
-    graphics::image(full_y, useRaster = TRUE, col = col_ol, axes = FALSE, asp = asp,
-          add = TRUE, zlim = zlim_ol)
+    if (colourbar) {
+      fields::image.plot(full_y, useRaster = TRUE, col = col_ol, axes = FALSE,
+                         asp = asp, add = TRUE, zlim = zlim_ol,
+                         smallplot = smallplot)
+    } else {
+      graphics::image(full_y, useRaster = TRUE, col = col_ol, axes = FALSE,
+                      asp = asp, add = TRUE, zlim = zlim_ol)
+    }
   }
 
   if (crosshairs) {
     # top right verical
-    graphics::lines(rep(xcutoff + (img_dim[2] - xyz[2]) / img_dim[2] * (1 - xcutoff), 2),
-          c(ycutoff, 1), col = "red")
+    graphics::lines(rep(xcutoff + (img_dim[2] - xyz[2]) / img_dim[2] *
+                   (1 - xcutoff), 2), c(ycutoff, 1), col = "red",
+                   lwd = ch_lwd)
     
     # upper left horizonal
-    graphics::lines(c(0, 1), rep(ycutoff + xyz[3] / img_dim[3] * (1 - ycutoff), 2),
-          col = "red")
+    graphics::lines(c(0, 1), rep(ycutoff + xyz[3] / img_dim[3] *
+                                (1 - ycutoff), 2), col = "red", lwd = ch_lwd)
     
     # lower left horizontal
-    graphics::lines(c(0, xcutoff), rep(xyz[2] / img_dim[2] * ycutoff, 2), col = "red")
+    graphics::lines(c(0, xcutoff), rep(xyz[2] / img_dim[2] * ycutoff, 2),
+                    col = "red", lwd = ch_lwd)
     
     # lower left vertical
-    graphics::lines(rep((img_dim[1] - xyz[1]) / img_dim[1] * xcutoff, 2), c(0, 1),
-          col = "red")
+    graphics::lines(rep((img_dim[1] - xyz[1]) / img_dim[1] * xcutoff, 2),
+                    c(0, 1), col = "red", lwd = ch_lwd)
   }
-
 
   if (orient_lab) {
     cex_lab <- 0.8
@@ -246,33 +261,39 @@ ortho3 <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
     lm_pos <- 1 + lab_marg
     lm_neg <- -lab_marg
     
-    graphics::text(0.0, ycutoff / 2, "R", col = "white", cex = cex_lab, adj = lm_neg,
-         font = lab_font)
+    graphics::text(0.0, ycutoff / 2, "R", col = "white", cex = cex_lab,
+                   adj = lm_neg, font = lab_font)
+    
     #text(xcutoff, ycutoff / 2, "L", col = "white", cex = cex_lab, adj = lm_pos,
     #     font = lab_font)
     
-    graphics::text(0.0, ycutoff + (1 - ycutoff) / 2, "R", col = "white", cex = cex_lab,
-         adj = lm_neg, font = lab_font)
+    graphics::text(0.0, ycutoff + (1 - ycutoff) / 2, "R", col = "white",
+                   cex = cex_lab, adj = lm_neg, font = lab_font)
+    
     #text(xcutoff, ycutoff + (1 - ycutoff) / 2, "L", col = "white", cex = cex_lab,
     #     adj = lm_pos, font = lab_font)
     
-    graphics::text(xcutoff / 2, 0, "P", col = "white", cex = cex_lab, adj = c(1, lm_neg),
-         font = lab_font)
+    graphics::text(xcutoff / 2, 0, "P", col = "white", cex = cex_lab,
+                   adj = c(1, lm_neg), font = lab_font)
+    
     #text(xcutoff / 2, ycutoff, "A", col = "white", cex = cex_lab,
     #     adj = c(1, lm_pos), font = lab_font)
     
-    graphics::text(xcutoff / 2, 1, "S", col = "white", cex = cex_lab, adj = c(1, lm_pos),
-         font = lab_font)
+    graphics::text(xcutoff / 2, 1, "S", col = "white", cex = cex_lab,
+                   adj = c(1, lm_pos), font = lab_font)
+    
     #text(xcutoff / 2, ycutoff, "I", col = "white", cex = cex_lab,
     #     adj = c(1.7, lm_neg), font = lab_font)
     
-    graphics::text(1.0, ycutoff + (1 - ycutoff) / 2, "P", col = "white", cex = cex_lab,
-         adj = lm_pos, font = lab_font)
+    graphics::text(1.0, ycutoff + (1 - ycutoff) / 2, "P", col = "white",
+                   cex = cex_lab, adj = lm_pos, font = lab_font)
+    
     #text(xcutoff, ycutoff + (1 - ycutoff) / 2, "A", col = "white", cex = cex_lab,
     #     adj = lm_neg, font = lab_font)
     
-    graphics::text(xcutoff + (1 - xcutoff) / 2, 1, "S", col = "white", cex = cex_lab,
-                   adj = c(1, lm_pos), font = lab_font)
+    graphics::text(xcutoff + (1 - xcutoff) / 2, 1, "S", col = "white",
+                   cex = cex_lab, adj = c(1, lm_pos), font = lab_font)
+    
     # text(xcutoff + (1 - xcutoff) / 2, ycutoff, "I", col = "white", cex = cex_lab,
     #     adj = c(1.9, lm_neg), font = lab_font)
   }
@@ -293,14 +314,14 @@ ortho3_int <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
   img_dim <- dim(underlay)[1:3]
   if (is.null(xyz)) xyz <- ceiling(img_dim / 2)
   
-  mri_range <- signif(range(underlay), 3)
+  mri_range <- signif(range(underlay, na.rm = TRUE), 3)
   if (is.null(zlim)) zlim <- mri_range
   
   if (is.null(overlay)) {
     mri_range_y <- c(0, 1)
     zlim_ol <- c(0, 1)
   } else {
-    mri_range_y <- signif(range(overlay), 3)
+    mri_range_y <- signif(range(overlay, na.rm = TRUE), 3)
     if (is.null(zlim_ol)) zlim_ol <- mri_range_y
   }
   

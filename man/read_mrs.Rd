@@ -4,15 +4,23 @@
 \alias{read_mrs}
 \title{Read MRS data from a file.}
 \usage{
-read_mrs(fname, format, ft = NULL, fs = NULL, ref = NULL,
-  n_ref_scans = NULL, full_data = FALSE, verbose = FALSE)
+read_mrs(
+  fname,
+  format,
+  ft = NULL,
+  fs = NULL,
+  ref = NULL,
+  n_ref_scans = NULL,
+  full_data = FALSE,
+  verbose = FALSE
+)
 }
 \arguments{
 \item{fname}{filename of the dpt format MRS data.}
 
 \item{format}{string describing the data format. May be one of the
 following : "spar_sdat", "rda", "ima", "twix", "pfile", "list_data",
-"paravis", "dpt".}
+"paravis", "dpt", "lcm_raw".}
 
 \item{ft}{transmitter frequency in Hz (required for list_data format).}
 

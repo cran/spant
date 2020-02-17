@@ -8,7 +8,7 @@
 #' VARPRO
 #' van der Veen JW, de Beer R, Luyten PR, van Ormondt D. Accurate quantification
 #' of in vivo 31P NMR signals using the variable projection method and prior 
-#' knowledge. Magn Reson Med 1988;6:92-98
+#' knowledge. Magn Reson Med 1988;6:92-98.
 #' 
 #' TARQUIN
 #' Wilson, M., Reynolds, G., Kauppinen, R. A., Arvanitis, T. N. & Peet, A. C. 
@@ -22,10 +22,13 @@
 #' @param metab metabolite data.
 #' @param basis basis class object or character vector to basis file in 
 #' LCModel .basis format.
-#' @param method 'VARPRO', 'VARPRO_3P', 'TARQUIN' or 'LCMODEL'.
+#' @param method 'ABFIT' (default), 'VARPRO', 'VARPRO_3P', 'TARQUIN' or 
+#' 'LCMODEL'.
 #' @param w_ref water reference data for concentration scaling (optional).
 #' @param opts options to pass to the analysis method.
 #' @param parallel perform analyses in parallel (TRUE or FALSE).
+#' @param time measure the time taken for the analysis to complete
+#' (TRUE or FALSE).
 #' @return MRS analysis object.
 #' @examples
 #' fname <- system.file("extdata","philips_spar_sdat_WS.SDAT",package="spant")
@@ -35,11 +38,11 @@
 #' fit_result <- fit_mrs(svs, basis)
 #' }
 #' @export
-fit_mrs <- function(metab, basis = NULL, method = 'VARPRO_3P', w_ref = NULL,
-                    opts = NULL,  parallel = FALSE) {
+fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
+                    opts = NULL, parallel = FALSE, time = TRUE) {
   
   # start the clock
-  ptm <- proc.time()
+  if (time) ptm <- proc.time()
   
   # force uppercase for matching
   METHOD <- toupper(method)
@@ -78,27 +81,31 @@ fit_mrs <- function(metab, basis = NULL, method = 'VARPRO_3P', w_ref = NULL,
     }
   }
   
-  #if (parallel) {doSNOW::registerDoSNOW(makeCluster(cores, type = "SOCK"))}
-  #if (parallel) {doMC::registerDoMC(cores = cores)}
-  #doSNOW::registerDoSNOW(makeCluster(cores, type = "SOCK"))
- 
-  #if (parallel)  {
-  #  library(parallel)
-  #  parallel::makeCluster(cores, type = "SOCK")
-  #}
-  
-  if (METHOD == "VARPRO") {
+  if (METHOD == "ABFIT") {
     # read basis into memory if a file
     if (is.character(basis)) {
       basis <- read_basis(basis)
     }
     
-    #result_list <- apply(metab$data, c(2,3,4,5,6), varpro, acq_paras, 
-    #                     basis, opts)
     
     acq_paras <- get_acq_paras(metab)
     
-    result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), varpro, 
+    result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), abfit, 
+                               acq_paras, basis, opts, 
+                               .parallel = parallel, 
+                               .paropts = list(.inorder = TRUE,
+                                               .packages = "spant"),
+                               .progress = "text", .inform = FALSE)
+    
+  } else if (METHOD == "VARPRO") {
+    # read basis into memory if a file
+    if (is.character(basis)) {
+      basis <- read_basis(basis)
+    }
+    
+    acq_paras <- get_acq_paras(metab)
+    
+    result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), varpro,
                                acq_paras, basis, opts, 
                                .parallel = parallel, 
                                .paropts = list(.inorder = TRUE,
@@ -194,7 +201,7 @@ fit_mrs <- function(metab, basis = NULL, method = 'VARPRO_3P', w_ref = NULL,
                                                .packages = "spant"),
                                .progress = "text", .inform = FALSE)
   } else if (exists(method)) {
-    message(paste("Using custom fit method :", method))
+    message(paste("Using external fit method :", method))
     
     # read basis into memory if a file
     if (is.character(basis)) {
@@ -288,7 +295,11 @@ fit_mrs <- function(metab, basis = NULL, method = 'VARPRO_3P', w_ref = NULL,
   res_tab[, 1:5] <- sapply(res_tab[, 1:5], as.numeric)
   
   # stop the clock
-  proc_time <- proc.time() - ptm
+  if (time) {
+    proc_time <- proc.time() - ptm
+  } else {
+    proc_time <- NULL
+  }
   
   out <- list(res_tab = res_tab, fits = fits, 
               data = metab, basis = basis, amp_cols = ncol(amps), 

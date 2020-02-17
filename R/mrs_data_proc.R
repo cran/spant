@@ -819,14 +819,16 @@ fs <- function(mrs_data) {
   1 / mrs_data$resolution[7]
 }
 
+#' Return the frequency scale of an MRS dataset in Hz.
+#' @param mrs_data MRS data.
+#' @param fs sampling frequency in Hz.
+#' @param N number of data points in the spectral dimension.
+#' @return frequency scale.
+#' @export
 hz <- function(mrs_data, fs = NULL, N = NULL) {
-  if (is.null(fs)) {
-    fs <- fs(mrs_data)
-  }
+  if (is.null(fs)) fs <- fs(mrs_data)
   
-  if (is.null(N)) {
-    N <- Npts(mrs_data)
-  }
+  if (is.null(N)) N <- Npts(mrs_data)
      
   seq(from = -fs / 2, to = fs / 2 - fs / N, length.out = N)
 }
@@ -840,23 +842,15 @@ hz <- function(mrs_data, fs = NULL, N = NULL) {
 #' @return ppm scale.
 #' @export
 ppm <- function(mrs_data, ft = NULL, ref = NULL, fs= NULL, N = NULL) {
-   if (is.null(ft)) {
-     ft <- mrs_data$ft
-   }
+   if (is.null(ft)) ft <- mrs_data$ft
    
-   if (is.null(ref)) {
-    ref <- mrs_data$ref
-   }
+   if (is.null(ref)) ref <- mrs_data$ref
    
-   if (is.null(fs)) {
-     fs <- fs(mrs_data)
-   }
+   if (is.null(fs)) fs <- fs(mrs_data)
    
-   if (is.null(N)) {
-     N <- Npts(mrs_data)
-   }
+   if (is.null(N)) N <- Npts(mrs_data)
    
-  -hz(fs = fs, N = N) / mrs_data$ft * 1e6 + mrs_data$ref
+  -hz(fs = fs, N = N) / ft * 1e6 + ref
 }
 
 n2hz <- function(n, N, fs) {
@@ -1178,7 +1172,8 @@ mask_xy <- function(mrs_data, x_dim, y_dim) {
 
 #' Mask a 2D MRSI dataset in the x-y dimension.
 #' @param mrs_data MRS data object.
-#' @param mask matrix of boolean values specifying the voxels to mask.
+#' @param mask matrix of boolean values specifying the voxels to mask, where a
+#' value of TRUE indicates the voxel should be removed.
 #' @return masked dataset.
 #' @export
 mask_xy_mat <- function(mrs_data, mask) {

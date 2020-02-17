@@ -4,9 +4,23 @@
 \alias{ortho3}
 \title{Display an orthographic projection plot of a nifti object.}
 \usage{
-ortho3(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
-  zlim_ol = NULL, alpha = 1, col_ol = viridisLite::viridis(64),
-  orient_lab = TRUE, rescale = 1, crosshairs = TRUE)
+ortho3(
+  underlay,
+  overlay = NULL,
+  xyz = NULL,
+  zlim = NULL,
+  zlim_ol = NULL,
+  alpha = 1,
+  col_ol = viridisLite::viridis(64),
+  orient_lab = TRUE,
+  rescale = 1,
+  crosshairs = TRUE,
+  ch_lwd = 1,
+  colourbar = TRUE,
+  bg = "black",
+  mar = c(0, 0, 0, 0),
+  smallplot = c(0.5, 0.52, 0.1, 0.4)
+)
 }
 \arguments{
 \item{underlay}{underlay image to be shown in grayscale.}
@@ -28,6 +42,16 @@ ortho3(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
 \item{rescale}{rescale factor for the underlay and overlay images.}
 
 \item{crosshairs}{display the crosshairs (default TRUE).}
+
+\item{ch_lwd}{crosshair linewidth.}
+
+\item{colourbar}{display a colourbar for the overlay (default TRUE).}
+
+\item{bg}{plot background colour.}
+
+\item{mar}{plot margins.}
+
+\item{smallplot}{smallplot option for positioning the colourbar.}
 }
 \description{
 Display an orthographic projection plot of a nifti object.

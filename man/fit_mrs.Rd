@@ -4,8 +4,15 @@
 \alias{fit_mrs}
 \title{Perform a fit based analysis of MRS data.}
 \usage{
-fit_mrs(metab, basis = NULL, method = "VARPRO_3P", w_ref = NULL,
-  opts = NULL, parallel = FALSE)
+fit_mrs(
+  metab,
+  basis = NULL,
+  method = "ABFIT",
+  w_ref = NULL,
+  opts = NULL,
+  parallel = FALSE,
+  time = TRUE
+)
 }
 \arguments{
 \item{metab}{metabolite data.}
@@ -13,13 +20,17 @@ fit_mrs(metab, basis = NULL, method = "VARPRO_3P", w_ref = NULL,
 \item{basis}{basis class object or character vector to basis file in
 LCModel .basis format.}
 
-\item{method}{'VARPRO', 'VARPRO_3P', 'TARQUIN' or 'LCMODEL'.}
+\item{method}{'ABFIT' (default), 'VARPRO', 'VARPRO_3P', 'TARQUIN' or
+'LCMODEL'.}
 
 \item{w_ref}{water reference data for concentration scaling (optional).}
 
 \item{opts}{options to pass to the analysis method.}
 
 \item{parallel}{perform analyses in parallel (TRUE or FALSE).}
+
+\item{time}{measure the time taken for the analysis to complete
+(TRUE or FALSE).}
 }
 \value{
 MRS analysis object.
@@ -34,7 +45,7 @@ Fitting approaches described in the following references:
 VARPRO
 van der Veen JW, de Beer R, Luyten PR, van Ormondt D. Accurate quantification
 of in vivo 31P NMR signals using the variable projection method and prior
-knowledge. Magn Reson Med 1988;6:92-98
+knowledge. Magn Reson Med 1988;6:92-98.
 
 TARQUIN
 Wilson, M., Reynolds, G., Kauppinen, R. A., Arvanitis, T. N. & Peet, A. C.
