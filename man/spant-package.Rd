@@ -10,11 +10,21 @@ spant provides a set of tools for reading, visualising and processing
 Magnetic Resonance Spectroscopy (MRS) data.
 }
 \details{
-To learn more about spant, start with the vignettes:
+To get started with spant, take a look at the introduction vignette:
+
+\code{vignette("spant-intro", package="spant")}
+
+Full list of vignettes:
+
 \code{browseVignettes(package = "spant")}
 
-For a full list of functions:
-\code{help(package=spant,help_type="html")}
+Full list of functions:
+
+\code{help(package = spant, help_type = "html")}
+
+An online version of the documentation is available from:
+
+\url{https://martin3141.github.io/spant/}
 }
 \seealso{
 Useful links:

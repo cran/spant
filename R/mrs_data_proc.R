@@ -328,11 +328,14 @@ shift <- function(mrs_data, shift, units = "ppm") {
   
   if (length(shift_hz) == 1) {
     shift_array <- array(shift_hz, dim = dim(mrs_data$data))
-  } else {
-    if (length(shift_hz) != Ndyns(mrs_data)) stop("Shift vector has an incorrect length.")
+  } else if (length(shift_hz) == Ndyns(mrs_data)) {
     # assume array should be applied in the dynamic dimension
     shift_array <- array(shift_hz, dim = c(1, 1, 1, 1, Ndyns(mrs_data), 1,
                                            Npts(mrs_data)))
+  } else if (dim(shift_hz)[1:6] && dim(mrs_data$data)[1:6]) {
+    shift_array <- array(shift_hz, dim = dim(mrs_data$data))
+  } else {
+    stop("Shift vector has an incorrect dimensions.")
   }
   
   shift_array <- exp(2i * pi * t_array * shift_array)
@@ -1493,7 +1496,7 @@ collapse_to_dyns.fit_result <- function(x) {
 #' @export
 mean_dyns <- function(mrs_data) {
   mrs_data$data <- aperm(mrs_data$data, c(5,1,2,3,4,6,7))
-  mrs_data$data <- colMeans(mrs_data$data)
+  mrs_data$data <- colMeans(mrs_data$data, na.rm = TRUE)
   new_dim <- dim(mrs_data$data)
   dim(mrs_data$data) <- c(new_dim[1:4],1,new_dim[5:6])
   mrs_data
@@ -1534,7 +1537,7 @@ mean_dyn_pairs <- function(mrs_data) {
 #' @export
 sum_dyns <- function(mrs_data) {
   mrs_data$data <- aperm(mrs_data$data, c(5,1,2,3,4,6,7))
-  mrs_data$data <- colSums(mrs_data$data)
+  mrs_data$data <- colSums(mrs_data$data, na.rm = TRUE)
   new_dim <- dim(mrs_data$data)
   dim(mrs_data$data) <- c(new_dim[1:4],1,new_dim[5:6])
   mrs_data
@@ -1573,8 +1576,7 @@ recon_imag_vec <- function(data) {
   data <- fh + Conj(rev(sh))
 }
 
-conv_filt_vec <- function(fid, K = 25, ext = 1)
-{
+conv_filt_vec <- function(fid, K = 25, ext = 1) {
   k = -K:K
   filt_fun = exp(-4 * k ^ 2 / K ^ 2)
   filt_fun = filt_fun / sum(filt_fun)
@@ -2437,7 +2439,7 @@ back_extrap_vec <- function(vec, n_pts) {
 }
 
 #' Calculate the sum of squares differences between two mrs_data objects.
-#' @param mrs_data mrs_data oject.
+#' @param mrs_data mrs_data object.
 #' @param ref reference mrs_data object to calculate differences.
 #' @param xlim spectral limits to perform calculation.
 #' @return an array of the sum of squared difference values.

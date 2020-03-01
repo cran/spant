@@ -4,7 +4,12 @@
 \alias{fit_amps}
 \title{Extract the fit amplitudes from an object of class \code{fit_result}.}
 \usage{
-fit_amps(x, inc_index = FALSE, sort_names = TRUE, append_common_1h_comb = TRUE)
+fit_amps(
+  x,
+  inc_index = FALSE,
+  sort_names = FALSE,
+  append_common_1h_comb = TRUE
+)
 }
 \arguments{
 \item{x}{\code{fit_result} object.}
@@ -14,7 +19,7 @@ fit_amps(x, inc_index = FALSE, sort_names = TRUE, append_common_1h_comb = TRUE)
 \item{sort_names}{sort the basis set names alphabetically.}
 
 \item{append_common_1h_comb}{append commonly used 1H metabolite combinations
-eg TNAA = NAA + NAAG.}
+eg tNAA = NAA + NAAG.}
 }
 \value{
 a dataframe of amplitudes.

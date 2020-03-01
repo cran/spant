@@ -129,7 +129,8 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
                                           2.01)
     } else {
       lambda_end   <- calc_lambda_from_ed(sp_bas_ab$bl_bas, sp_bas_ab$deriv_mat,
-                                          opts$min_bl_ed_pppm * sp_bas_ab$ppm_range)
+                                          opts$min_bl_ed_pppm *
+                                          sp_bas_ab$ppm_range)
     }
     
     lambda_vec   <- 10 ^ (seq(log10(lambda_start), log10(lambda_end),
@@ -302,7 +303,7 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   diags <- data.frame(phase = res$par[1] * 180 / pi, lw = res$par[2],
                       shift = res$par[3], asym = res$par[4],
                       res$deviance, res$niter, res$info, res$message,
-                      bl_ed_pppm = opts$bl_ed_pppm)
+                      bl_ed_pppm = opts$bl_ed_pppm, stringsAsFactors = TRUE)
   
   if (opts$auto_bl_flex) diags$max_bl_flex_used <- max_bl_flex_used
   
@@ -358,7 +359,6 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   # augment metabolite basis with zeros to match spline basis dimensions 
   metab_basis_fd_aug <- rbind(metab_basis_fd_cut,
                               matrix(0, sp_bas_final$bl_comps - 2, metab_comps))
-  
   
   bl_basis_final <- rbind(sp_bas_final$bl_bas, sp_bas_final$deriv_mat *
                     (lambda ^ 0.5))
@@ -443,7 +443,8 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
     spline_frame <- as.data.frame(Re(sp_bas_final$bl_bas) * spline_amp_mat, 
                                   row.names = NA)
     
-    colnames(spline_frame) <- paste("SP_", as.character(1:ncol(sp_bas_final$bl_bas)),
+    colnames(spline_frame) <- paste("SP_",
+                                    as.character(1:ncol(sp_bas_final$bl_bas)),
                                     sep = "")
     
     fit_frame <- cbind(fit_frame, spline_frame)
@@ -453,23 +454,38 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   amps <- data.frame(t(fit$x[(sp_bas_final$bl_comps + 1):length(fit$x)]))
   colnames(amps) <- basis$names
   
-  # TNAA_lw calc 
+  # tNAA_lw calc 
   if (("NAA" %in% colnames(amps)) & ("NAAG" %in% colnames(amps))) {
     tnaa_sig_pts <- basis_frame$NAA + basis_frame$NAAG
-    diags$TNAA_lw <- calc_peak_info_vec(tnaa_sig_pts, 2)[3] * 
+    diags$tNAA_lw <- calc_peak_info_vec(tnaa_sig_pts, 2)[3] * 
                      (sp_bas_final$x_scale[1] - sp_bas_final$x_scale[2])
   }
   
+  
   #### crlb calc ####
+  
+  # calculate the analytical jacobian for the non-linear parameters
   para_crlb     <- abfit_full_anal_jac(final_par, y, raw_metab_basis,
                                        bl_basis_final, t, f, sp_bas_final$inds,
                                        sp_bas_final$bl_comps, FALSE, NULL,
                                        opts$phi1_optim)
-  
+   
   bl_comps_crlb <- sp_bas_final$bl_comps
   para_crlb     <- rbind(Re(para_crlb), matrix(0, nrow = bl_comps_crlb - 2,
                                                ncol = ncol(para_crlb)))
   amp_crlb      <- Re(full_bas)
+  
+  ## alternate method by generating spline basis with ED components in place of
+  ## the penatly matrix. Gives similar numbers to above method, so kept here as
+  ## a reference example for validation.
+  ##
+  ## ppm_range   <- opts$ppm_left - opts$ppm_right
+  ## crlb_comps  <- round(opts$bl_ed_pppm * ppm_range) - 2
+  ## sp_bas_crlb <- generate_sp_basis(mrs_data, opts$ppm_right, opts$ppm_left,
+  ##                                  crlb_comps / ppm_range)
+  ## 
+  ## bl_comps_crlb <- sp_bas_crlb$bl_comps
+  ## amp_crlb      <- cbind(sp_bas_crlb$bl_bas, Re(metab_basis_fd_cut))
   
   # remove any zero columns from para_crlb
   para_crlb <- para_crlb[,!(colSums(abs(para_crlb)) == 0)] 
@@ -478,7 +494,7 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   
   D <- cbind(para_crlb, amp_crlb)
   F <- t(D) %*% D / (res_sd ^ 2)
-  # F_inv <- inv(F) # sometimes F becomes singular and inv fails
+  #F_inv <- pracma::inv(F) # sometimes F becomes singular and inv fails
   F_inv <- pracma::pinv(F)
   crlbs <- diag(F_inv) ^ 0.5
   crlbs_out <- crlbs[(bl_comps_crlb + nz_paras + 1):length(crlbs)]
@@ -493,25 +509,25 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   
   # create some common metabolite combinations
   if (("NAA" %in% colnames(amps)) & ("NAAG" %in% colnames(amps))) {
-    amps['TNAA'] <- amps['NAA'] + amps['NAAG']
+    amps['tNAA'] <- amps['NAA'] + amps['NAAG']
     comb_sigs <- comb_sigs + 1
-    D_cut$TNAA <- D_cut$NAA + D_cut$NAAG
+    D_cut$tNAA <- D_cut$NAA + D_cut$NAAG
     D_cut$NAA <- NULL
     D_cut$NAAG <- NULL
   }
   
   if (("Cr" %in% colnames(amps)) & ("PCr" %in% colnames(amps))) {
-    amps['TCr'] <- amps['Cr'] + amps['PCr']
+    amps['tCr'] <- amps['Cr'] + amps['PCr']
     comb_sigs <- comb_sigs + 1
-    D_cut$TCr <- D_cut$Cr + D_cut$PCr
+    D_cut$tCr <- D_cut$Cr + D_cut$PCr
     D_cut$Cr <- NULL
     D_cut$PCr <- NULL
   }
   
   if (("PCh" %in% colnames(amps)) & ("GPC" %in% colnames(amps))) {
-    amps['TCho'] <- amps['PCh'] + amps['GPC']
+    amps['tCho'] <- amps['PCh'] + amps['GPC']
     comb_sigs <- comb_sigs + 1
-    D_cut$TCho <- D_cut$PCh + D_cut$GPC
+    D_cut$tCho <- D_cut$PCh + D_cut$GPC
     D_cut$PCh <- NULL
     D_cut$GPC <- NULL
   }
@@ -525,19 +541,19 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   }
   
   if (("Lip09" %in% colnames(amps)) & ("MM09" %in% colnames(amps))) {
-    amps['TLM09'] <- amps['Lip09'] + amps['MM09']
+    amps['tLM09'] <- amps['Lip09'] + amps['MM09']
     comb_sigs <- comb_sigs + 1
-    D_cut$TLM09 <- D_cut$Lip09 + D_cut$MM09
+    D_cut$tLM09 <- D_cut$Lip09 + D_cut$MM09
     D_cut$Lip09 <- NULL
     D_cut$MM09 <- NULL
   }
   
   if (("Lip13a" %in% colnames(amps)) & ("Lip13b" %in% colnames(amps)) & 
         ("MM12" %in% colnames(amps)) & ("MM14" %in% colnames(amps))) {
-    amps["TLM13"] <- amps["Lip13a"] + amps["Lip13b"] + amps["MM12"] + 
+    amps["tLM13"] <- amps["Lip13a"] + amps["Lip13b"] + amps["MM12"] + 
                      amps["MM14"]
     comb_sigs <- comb_sigs + 1
-    D_cut$TLM13 <- D_cut$Lip13a + D_cut$Lip13b + D_cut$MM12 + D_cut$MM14
+    D_cut$tLM13 <- D_cut$Lip13a + D_cut$Lip13b + D_cut$MM12 + D_cut$MM14
     D_cut$Lip13a <- NULL
     D_cut$Lip13b <- NULL
     D_cut$MM12 <- NULL
@@ -545,9 +561,9 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   }
   
   if (("Lip20" %in% colnames(amps)) & ("MM20" %in% colnames(amps))) {
-    amps['TLM20'] <- amps['Lip20'] + amps['MM20']
+    amps['tLM20'] <- amps['Lip20'] + amps['MM20']
     comb_sigs <- comb_sigs + 1
-    D_cut$TLM20 <- D_cut$Lip20 + D_cut$MM20
+    D_cut$tLM20 <- D_cut$Lip20 + D_cut$MM20
     D_cut$Lip20 <- NULL
     D_cut$MM20  <- NULL
   }
@@ -574,7 +590,7 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
 # abfit tips
 # NLOPT_GN_DIRECT_L is perhaps more robust for algo_pre - but slower
 
-#' Return a list of options for an ABFit analysis.
+#' Return a list of options for an ABfit analysis.
 #' 
 #' @param init_damping initial value of the Gaussian global damping parameter
 #' (Hz). Very poorly shimmed or high field data may benefit from a larger value.
@@ -594,7 +610,7 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
 #' @param auto_bl_flex automatically determine the level of baseline smoothness.
 #' @param bl_comps_pppm spline basis density (signals per ppm).
 #' @param export_sp_fit add the fitted spline functions to the fit result.
-#' @param max_asym maximum allowable value of the asymetry parameter.
+#' @param max_asym maximum allowable value of the asymmetry parameter.
 #' @param max_basis_shift maximum allowable frequency shift for individual basis
 #' signals (Hz).
 #' @param max_basis_damping maximum allowable Lorentzian damping factor for
@@ -610,11 +626,11 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
 #' fitting stage of the algorithm (ED per ppm).
 #' @param remove_lip_mm_prefit remove broad signals in the coarse fitting stage
 #' of the algorithm.
-#' @param pre_align perform a pre-alignment setep before coarse fitting.
+#' @param pre_align perform a pre-alignment step before coarse fitting.
 #' @param max_pre_align_shift maximum allowable shift in the pre-alignment step
 #' (ppm).
 #' @param pre_align_ref_freqs a vector of prominent spectral frequencies used in
-#' the pre-aligment step (ppm).
+#' the pre-alignment step (ppm).
 #' @param noise_region spectral region to estimate the noise level (ppm).
 #' @param optimal_smooth_criterion method to determine the optimal smoothness.
 #' @param aic_smoothing_factor modification factor for the AIC calculation.

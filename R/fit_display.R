@@ -19,7 +19,7 @@
 #' @param ... further arguments to plot method.
 #' @export
 plot.fit_result <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1,
-                            coil = 1,xlim = NULL, data_only = FALSE,
+                            coil = 1, xlim = NULL, data_only = FALSE,
                             label = NULL, plot_sigs = NULL, n = NULL,
                             sub_bl = FALSE, mar = NULL, restore_def_par = TRUE, 
                             ylim = NULL, y_scale = FALSE, ...) {
@@ -34,6 +34,7 @@ plot.fit_result <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1,
     n <- which(ind)
   }
   
+  opts <- x$opts
   x <- x$fits[[n]]
   
   if (anyNA(x)) { 
@@ -42,7 +43,11 @@ plot.fit_result <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1,
   }
   
   if (is.null(xlim)) {
-    xlim <- rev(range(x$PPMScale))
+    if ((!is.null(opts$ppm_left)) & (!is.null(opts$ppm_right))) {
+      xlim <- c(opts$ppm_left, opts$ppm_right)
+    } else {
+      xlim <- rev(range(x$PPMScale))
+    }
   }
   
   graphics::par("xaxs" = "i", "yaxs" = "i") # tight axes limits
@@ -139,10 +144,10 @@ summary.fit_result <- function(object, ...) {
   spectra <- nrow(stats::na.omit(x$res_tab))
   cat("Spectra analysed : ", spectra, "\n\n", sep = "")
   
-  mean_lw <- sprintf("%.4f", mean(x$res_tab$TNAA_lw, na.rm = TRUE))
-  sd_lw <-   sprintf("%.4f", sd(x$res_tab$TNAA_lw, na.rm = TRUE))
-  max_lw <-  sprintf("%.4f", max(x$res_tab$TNAA_lw, na.rm = TRUE))
-  min_lw <-  sprintf("%.4f", min(x$res_tab$TNAA_lw, na.rm = TRUE))
+  mean_lw <- sprintf("%.4f", mean(x$res_tab$tNAA_lw, na.rm = TRUE))
+  sd_lw <-   sprintf("%.4f", sd(x$res_tab$tNAA_lw, na.rm = TRUE))
+  max_lw <-  sprintf("%.4f", max(x$res_tab$tNAA_lw, na.rm = TRUE))
+  min_lw <-  sprintf("%.4f", min(x$res_tab$tNAA_lw, na.rm = TRUE))
   
   cat("Mean FWHM : ", mean_lw, " ppm\n", sep = "")
   cat("SD   FWHM : ", sd_lw, " ppm\n", sep = "")
@@ -197,7 +202,7 @@ summary.fit_result <- function(object, ...) {
 #' @param mar option to adjust the plot margins. See ?par.
 #' @param ... further arguments to plot method.
 #' @export
-stackplot.fit_result <- function(x, xlim = NULL, y_offset = 1, dyn = 1, 
+stackplot.fit_result <- function(x, xlim = NULL, y_offset = 0, dyn = 1, 
                                  x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
                                  n = NULL, sub_bl = FALSE, labels = FALSE,
                                  label_names = NULL, sig_col = "black",
@@ -215,6 +220,7 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 1, dyn = 1,
     n <- which(ind)
   }
   
+  opts <- x$opts
   x <- x$fits[[n]]
   
   # remove any signals that were requested
@@ -252,7 +258,11 @@ stackplot.fit_result <- function(x, xlim = NULL, y_offset = 1, dyn = 1,
   }
   
   if (is.null(xlim)) {
-    xlim <- rev(range(x$PPMScale))
+    if ((!is.null(opts$ppm_left)) & (!is.null(opts$ppm_right))) {
+      xlim <- c(opts$ppm_left, opts$ppm_right)
+    } else {
+      xlim <- rev(range(x$PPMScale))
+    }
   }
   
   graphics::par("xaxs" = "i", "yaxs" = "i") # tight axes limits
@@ -357,7 +367,7 @@ fit_tab2csv <- function(x, fname, pvc = FALSE) {
 
 #' Plot a 2D slice from an MRSI fit result object.
 #' @param fit_res \code{fit_result} object.
-#' @param name name of the quantity to plot, eg "TNAA".
+#' @param name name of the quantity to plot, eg "tNAA".
 #' @param slice slice to plot in the z direction.
 #' @param zlim range of values to plot.
 #' @param interp interpolation factor.
@@ -368,7 +378,10 @@ plot_slice_fit <- function(fit_res, name, slice = 1, zlim = NULL, interp = 1) {
   col <- viridisLite::viridis(64)
   plot_map <- result_map[,, slice, 1, 1]
   plot_map <- pracma::fliplr(plot_map)
-  plot_map <- mmand::rescale(plot_map, interp, mmand::mnKernel())
+  
+  if (interp != 1) {
+    plot_map <- mmand::rescale(plot_map, interp, mmand::mnKernel())
+  }
   
   if (is.null(zlim)) { 
     fields::image.plot(plot_map, col = col, useRaster = TRUE, 
@@ -377,13 +390,14 @@ plot_slice_fit <- function(fit_res, name, slice = 1, zlim = NULL, interp = 1) {
     plot_map <- crop_range(plot_map, zlim[1], zlim[2])
     breaks <- seq(from = zlim[1], to = zlim[2], length.out = 65)
     fields::image.plot(plot_map, col = col, useRaster = TRUE, 
-                       asp = 1, axes = FALSE, legend.shrink = 0.8, breaks = breaks)
+                       asp = 1, axes = FALSE, legend.shrink = 0.8,
+                       breaks = breaks)
   }
 }
 
 #' Get a data array from a fit result.
 #' @param fit_res \code{fit_result} object.
-#' @param name name of the quantity to plot, eg "TNAA".
+#' @param name name of the quantity to plot, eg "tNAA".
 #' @export
 get_fit_map <- function(fit_res, name) {
   result_map <- fit_res$res_tab[[name]]

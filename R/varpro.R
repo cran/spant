@@ -96,19 +96,19 @@ varpro <- function(y, acq_paras, basis, opts = NULL) {
   class(fit) <- c("fit_table", "data.frame")
   
   diags <- data.frame(res$deviance, res$niter, res$info, res$deviance,
-                      res$message)
+                      res$message, stringsAsFactors = TRUE)
   
   # create some common metabolite combinations
   if (("NAA" %in% colnames(amps)) & ("NAAG" %in% colnames(amps))) {
-    amps['TNAA'] <- amps['NAA'] + amps['NAAG']
+    amps['tNAA'] <- amps['NAA'] + amps['NAAG']
   }
   
   if (("PCh" %in% colnames(amps)) & ("GPC" %in% colnames(amps))) {
-    amps['TCho'] <- amps['PCh'] + amps['GPC']
+    amps['tCho'] <- amps['PCh'] + amps['GPC']
   }
   
   if (("Cr" %in% colnames(amps)) & ("PCr" %in% colnames(amps))) {
-    amps['TCr'] <- amps['Cr'] + amps['PCr']
+    amps['tCr'] <- amps['Cr'] + amps['PCr']
   }
   
   if (("Glu" %in% colnames(amps)) & ("Gln" %in% colnames(amps))) {
@@ -116,16 +116,16 @@ varpro <- function(y, acq_paras, basis, opts = NULL) {
   }
   
   if (("Lip09" %in% colnames(amps)) & ("MM09" %in% colnames(amps))) {
-    amps['TLM09'] <- amps['Lip09'] + amps['MM09']
+    amps['tLM09'] <- amps['Lip09'] + amps['MM09']
   }
   
   if (("Lip13a" %in% colnames(amps)) & ("Lip13b" %in% colnames(amps)) & 
         ("MM12" %in% colnames(amps)) & ("MM14" %in% colnames(amps))) {
-    amps["TLM13"] <- amps["Lip13a"] + amps["Lip13b"] + amps["MM12"] + amps["MM14"]
+    amps["tLM13"] <- amps["Lip13a"] + amps["Lip13b"] + amps["MM12"] + amps["MM14"]
   }
   
   if (("Lip20" %in% colnames(amps)) & ("MM20" %in% colnames(amps))) {
-    amps['TLM20'] <- amps['Lip20'] + amps['MM20']
+    amps['tLM20'] <- amps['Lip20'] + amps['MM20']
   }
   
   list(amps = amps, crlbs = t(rep(NA, length(amps))), diags = diags, fit = fit)

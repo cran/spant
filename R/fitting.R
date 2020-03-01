@@ -87,6 +87,8 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
       basis <- read_basis(basis)
     }
     
+    # use default fitting opts if not specified 
+    if (is.null(opts)) opts <- abfit_opts()
     
     acq_paras <- get_acq_paras(metab)
     
@@ -303,7 +305,7 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
   
   out <- list(res_tab = res_tab, fits = fits, 
               data = metab, basis = basis, amp_cols = ncol(amps), 
-              proc_time = proc_time)
+              proc_time = proc_time, method = method, opts = opts)
   
   class(out) <- "fit_result"
   return(out)
@@ -599,10 +601,10 @@ fit_diags <- function(x, amps = NULL) {
 #' @param inc_index include columns for the voxel index.
 #' @param sort_names sort the basis set names alphabetically.
 #' @param append_common_1h_comb append commonly used 1H metabolite combinations
-#' eg TNAA = NAA + NAAG.
+#' eg tNAA = NAA + NAAG.
 #' @return a dataframe of amplitudes.
 #' @export
-fit_amps <- function(x, inc_index = FALSE, sort_names = TRUE,
+fit_amps <- function(x, inc_index = FALSE, sort_names = FALSE,
                      append_common_1h_comb = TRUE) {
   
   basis_n <- length(x$basis$names)
@@ -613,15 +615,15 @@ fit_amps <- function(x, inc_index = FALSE, sort_names = TRUE,
   if (append_common_1h_comb) {
     # create some common metabolite combinations
     if (("NAA" %in% colnames(out)) & ("NAAG" %in% colnames(out))) {
-      out['TNAA'] <- out['NAA'] + out['NAAG']
+      out['tNAA'] <- out['NAA'] + out['NAAG']
     }
     
     if (("Cr" %in% colnames(out)) & ("PCr" %in% colnames(out))) {
-      out['TCr'] <- out['Cr'] + out['PCr']
+      out['tCr'] <- out['Cr'] + out['PCr']
     }
     
     if (("PCh" %in% colnames(out)) & ("GPC" %in% colnames(out))) {
-      out['TCho'] <- out['PCh'] + out['GPC']
+      out['tCho'] <- out['PCh'] + out['GPC']
     }
     
     if (("Glu" %in% colnames(out)) & ("Gln" %in% colnames(out))) {
@@ -629,19 +631,18 @@ fit_amps <- function(x, inc_index = FALSE, sort_names = TRUE,
     }
     
     if (("Lip09" %in% colnames(out)) & ("MM09" %in% colnames(out))) {
-      out['TLM09'] <- out['Lip09'] + out['MM09']
+      out['tLM09'] <- out['Lip09'] + out['MM09']
     }
     
     if (("Lip13a" %in% colnames(out)) & ("Lip13b" %in% colnames(out)) & 
         ("MM12" %in% colnames(out)) & ("MM14" %in% colnames(out))) {
-      out["TLM13"] <- out["Lip13a"] + out["Lip13b"] + out["MM12"] + out["MM14"]
+      out["tLM13"] <- out["Lip13a"] + out["Lip13b"] + out["MM12"] + out["MM14"]
     }
     
     if (("Lip20" %in% colnames(out)) & ("MM20" %in% colnames(out))) {
-      out['TLM20'] <- out['Lip20'] + out['MM20']
+      out['tLM20'] <- out['Lip20'] + out['MM20']
     }
   }
-  
   out
 }
 

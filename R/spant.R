@@ -2,12 +2,22 @@
 #'
 #' spant provides a set of tools for reading, visualising and processing 
 #' Magnetic Resonance Spectroscopy (MRS) data.
-#'
-#' To learn more about spant, start with the vignettes:
+#' 
+#' To get started with spant, take a look at the introduction vignette:
+#' 
+#' `vignette("spant-intro", package="spant")`
+#' 
+#' Full list of vignettes:
+#' 
 #' `browseVignettes(package = "spant")`
 #' 
-#' For a full list of functions:
-#' `help(package=spant,help_type="html")`
+#' Full list of functions:
+#' 
+#' `help(package = spant, help_type = "html")`
+#' 
+#' An online version of the documentation is available from:
+#' 
+#' \url{https://martin3141.github.io/spant/}
 #' 
 "_PACKAGE"
 
