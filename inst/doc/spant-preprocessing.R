@@ -11,33 +11,34 @@ library(spant)
 
 ## -----------------------------------------------------------------------------
 fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT", package = "spant")
-
-## -----------------------------------------------------------------------------
 mrs_data <- read_mrs(fname, format = "spar_sdat")
 
 ## -----------------------------------------------------------------------------
-print(mrs_data)
+plot(mrs_data, xlim = c(4, 0.5))
 
 ## -----------------------------------------------------------------------------
-plot(mrs_data, xlim = c(5, 0.5))
+mrs_data_p180 <- phase(mrs_data, 180)
+plot(mrs_data_p180, xlim = c(4, 0.5))
 
 ## -----------------------------------------------------------------------------
-mrs_proc <- hsvd_filt(mrs_data)
-mrs_proc <- align(mrs_proc, 2.01)
-plot(mrs_proc, xlim = c(5, 0.5))
-
-## ---- fig.height=9------------------------------------------------------------
-basis <- sim_basis_1h_brain_press(mrs_proc)
-print(basis)
-stackplot(basis, xlim = c(4, 0.5), labels = basis$names, y_offset = 5)
-
-## ---- results = "hide"--------------------------------------------------------
-fit_res <- fit_mrs(mrs_proc, basis)
+mrs_data_lb <- lb(mrs_data, 3)
+plot(mrs_data_lb, xlim = c(4, 0.5))
 
 ## -----------------------------------------------------------------------------
-plot(fit_res)
+mrs_data_zf <- zf(mrs_data, 2)
+plot(mrs_data_zf, xlim = c(4, 0.5))
 
 ## -----------------------------------------------------------------------------
-amps <- fit_amps(fit_res)
-print(t(amps / amps$tCr))
+mrs_data_filt <- hsvd_filt(mrs_data)
+stackplot(append_dyns(mrs_data, mrs_data_filt), xlim = c(5, 0.5), y_offset = 10,
+          col = c("black", "red"), labels = c("original", "filtered"))
+
+## -----------------------------------------------------------------------------
+mrs_data_shift <- shift(mrs_data, 0.1, "ppm")
+stackplot(append_dyns(mrs_data, mrs_data_shift), xlim = c(4, 0.5), y_offset = 10,
+          col = c("black", "red"), labels = c("original", "shifted"))
+
+## -----------------------------------------------------------------------------
+mrs_data_proc <- mrs_data %>% hsvd_filt %>% lb(2) %>% zf
+plot(mrs_data_proc, xlim = c(5, 0.5))
 
