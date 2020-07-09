@@ -207,6 +207,15 @@ vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
   return(mrs_data)
 }
 
+#' Convert a 7 dimensional array in into a mrs_data object. The array dimensions
+#' should be ordered as : dummy, X, Y, Z, dynamic, coil, FID.
+#' @param data_array 7d data array.
+#' @param fs sampling frequency in Hz.
+#' @param ft transmitter frequency in Hz.
+#' @param ref reference value for ppm scale.
+#' @param fd flag to indicate if the matrix is in the frequency domain (logical).
+#' @return mrs_data object.
+#' @export
 array2mrs_data <- function(data_array, fs = def_fs(), ft = def_ft(),
                            ref = def_ref(), fd = FALSE) {
   
@@ -1013,12 +1022,12 @@ crop_td_pts <- function(mrs_data, start = NULL, end = NULL) {
 #' Crop \code{mrs_data} object based on a frequency range.
 #' @param mrs_data MRS data.
 #' @param xlim range of values to crop in the spectral dimension eg 
-#' xlim = c(4,0.5).
+#' xlim = c(4, 0.2).
 #' @param scale the units to use for the frequency scale, can be one of: "ppm", 
 #' "hz" or "points".
 #' @return cropped \code{mrs_data} object.
 #' @export
-crop_spec <- function(mrs_data, xlim = c(4,0.5), scale = "ppm") {
+crop_spec <- function(mrs_data, xlim = c(4, 0.2), scale = "ppm") {
   
   # needs to be a FD operation
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
@@ -1588,14 +1597,19 @@ sd.mrs_data <- function(x, na.rm = FALSE) {
 }
 
 ## make an S3 generic for sd (cos R Core don't do this for some reason!)
-#' @inherit stats::sd
+## see https://cran.r-project.org/doc/manuals/R-exts.html#Adding-new-generics
+
+#' Calculate the standard deviation spectrum from an mrs_data object.
+#' @param x object of class mrs_data.
+#' @param na.rm remove NA values.
+#' @return sd mrs_data object.
 #' @export
 sd <- function(x, na.rm) UseMethod("sd")
 
 ## take the usual definition of sd,
 ## and set it to be the default method
 #' @export
-sd.default <- stats::sd
+sd.default <- function(x, na.rm = FALSE) stats::sd(x, na.rm)
 
 #' Collapse MRS data by concatenating spectra along the dynamic dimension.
 #' @param x data object to be collapsed (mrs_data or fit_result object).

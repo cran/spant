@@ -1,8 +1,9 @@
 #' Read MRS data from a file.
 #' @param fname filename of the dpt format MRS data.
-#' @param format string describing the data format. May be one of the 
+#' @param format string describing the data format. Must be one of the 
 #' following : "spar_sdat", "rda", "ima", "twix", "pfile", "list_data",
-#' "paravis", "dpt", "lcm_raw", "rds".
+#' "paravis", "dpt", "lcm_raw", "rds", "nifti". If not specified, the format
+#' will be guessed from the filename extension.
 #' @param ft transmitter frequency in Hz (required for list_data format).
 #' @param fs sampling frequency in Hz (required for list_data format).
 #' @param ref reference value for ppm scale (required for list_data format).
@@ -14,11 +15,14 @@
 #' @return MRS data object.
 #' @examples
 #' fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT", package = "spant")
-#' mrs_data <- read_mrs(fname, format = "spar_sdat")
+#' mrs_data <- read_mrs(fname)
 #' print(mrs_data)
 #' @export
-read_mrs <- function(fname, format, ft = NULL, fs = NULL, ref = NULL,
+read_mrs <- function(fname, format = NULL, ft = NULL, fs = NULL, ref = NULL,
                      n_ref_scans = NULL, full_data = FALSE, verbose = FALSE) {
+  
+  # try and guess the format from the filename extension
+  if (is.null(format)) format <- guess_mrs_format(fname) 
   
   if (format == "spar_sdat") {
     return(read_spar_sdat(fname))
@@ -48,11 +52,73 @@ read_mrs <- function(fname, format, ft = NULL, fs = NULL, ref = NULL,
     mrs_data <- readRDS(fname)
     if (class(mrs_data) != "mrs_data") stop("rds file is not mrs_data format")
     return(mrs_data)
+  } else if (format == "nifti") {
+    return(read_mrs_nifti(fname))
   } else {
     stop("Unrecognised file format.")
   }
 }
 
+# try and guess the format from the filename extension
+guess_mrs_format <- function(fname) {
+  fname_low <- tolower(fname)
+  if (stringr::str_ends(fname_low, ".nii.gz")) {
+    format <- "nifti"
+  } else if (stringr::str_ends(fname_low, ".rda")) {
+    format <- "rda"
+  } else if (stringr::str_ends(fname_low, ".ima")) {
+    format <- "ima"
+  } else if (stringr::str_ends(fname_low, ".spar")) {
+    format <- "spar_sdat"
+  } else if (stringr::str_ends(fname_low, ".sdat")) {
+    format <- "spar_sdat"
+  } else if (stringr::str_ends(fname_low, ".7")) {
+    format <- "pfile"
+  } else if (stringr::str_ends(fname_low, ".list")) {
+    format <- "list_data"
+  } else if (stringr::str_ends(fname_low, ".data")) {
+    format <- "list_data"
+  } else if (stringr::str_ends(fname_low, ".dat")) {
+    format <- "twix"
+  } else if (stringr::str_ends(fname_low, ".dpt")) {
+    format <- "dpt"
+  } else if (stringr::str_ends(fname_low, ".rds")) {
+    format <- "rds"
+  } else if (stringr::str_ends(fname_low, ".raw")) {
+    format <- "lcm_raw"
+  } else {
+    stop("Could not guess the MRS format, please specify the format argument.")
+  }
+  return(format)
+}
+
+#' Write MRS data object to file.
+#' @param fname the filename of the output.
+#' @param mrs_data object to be written to file.
+#' @param format string describing the data format. Must be one of the 
+#' following : "nifti", "dpt", "lcm_raw", "rds". If not specified, the format
+#' will be guessed from the filename extension.
+#' @export
+write_mrs <- function(fname, mrs_data, format = NULL) {
+  
+  if (class(mrs_data) != "mrs_data") stop("data object is not mrs_data format")
+  
+  # try and guess the format from the filename extension
+  if (is.null(format)) format <- guess_mrs_format(fname) 
+  
+  if (format == "dpt") {
+    write_mrs_dpt_v2(fname, mrs_data)
+  } else if (format == "lcm_raw") {
+    write_mrs_lcm_raw(fname, mrs_data)
+  } else if (format == "nifti") {
+    write_mrs_nifti(fname, mrs_data)
+  } else if (format == "rds") {
+    write_mrs_rds(fname, mrs_data)
+  } else {
+    stop("Unrecognised file format.")
+  }
+}
+ 
 #' Read MRS data stored in dangerplot (dpt) v3 format.
 #' @param fname filename of the dpt format MRS data.
 #' @return MRS data object.
@@ -217,14 +283,6 @@ read_mrs_tqn <- function(fname, fname_ref = NA, format, id = NA, group = NA) {
   }
 }
 
-#' Write MRS data object to file in dangerplot (dpt) v2 format.
-#' @param fname the filename of the output dpt format MRS data.
-#' @param mrs_data object to be written to file.
-#' @examples
-#' \dontrun{
-#' mrs_data <- write_mrs_dpt_v2("my_mrs_data.dpt", my_mrs_data)
-#' }
-#' @export
 write_mrs_dpt_v2 <- function(fname, mrs_data) {
   sig <- mrs_data$data[1, 1, 1, 1, 1, 1,]
   N <- length(sig)
@@ -249,15 +307,6 @@ write_mrs_dpt_v2 <- function(fname, mrs_data) {
   sink()
 }
 
-#' Write MRS data object to file in a RAW format compatible with LCModel.
-#' @param fname the filename of the output RAW format MRS data.
-#' @param mrs_data object to be written to file.
-#' @param id text string to identify the data.
-#' @examples
-#' \dontrun{
-#' mrs_data <- write_mrs_lcm_raw("my_mrs_data.RAW", my_mrs_data)
-#' }
-#' @export
 write_mrs_lcm_raw <- function(fname, mrs_data, id = NA) {
   sig <- mrs_data$data[1, 1, 1, 1, 1, 1,]
   N <- length(sig)
@@ -277,48 +326,7 @@ write_mrs_lcm_raw <- function(fname, mrs_data, id = NA) {
   sink()
 }
 
-#' Write MRS data object to file in rds format.
-#' @param fname the filename of the output rds MRS data.
-#' @param mrs_data object to be written to file.
-#' @export
 write_mrs_rds <- function(fname, mrs_data) {
   if (class(mrs_data) != "mrs_data") stop("data object is not mrs_data format")
   saveRDS(mrs_data, fname)
-}
-
-#' Write MRS data object to file in NIFTI format.
-#' @param fname the filename of the output NIFTI MRS data.
-#' @param mrs_data object to be written to file.
-#' @export
-write_mrs_nifti <- function(fname, mrs_data) {
-  if (class(mrs_data) != "mrs_data") stop("data object is not mrs_data format")
-  
-  # convert to nii
-  data_points <- mrs_data$data
-  
-  # drop the first dummy dimension
-  data_points <- abind::adrop(data_points, 1)
-  
-  # reorder the dimensions to x, y, z, t, dynamics, coil 
-  data_points <- aperm(data_points, c(1, 2, 3, 6, 4, 5))
-  
-  # add a 7th dimension
-  dim(data_points) <- c(dim(data_points), 1)
-  
-  # convert to nii
-  mrs_nii <- RNifti::asNifti(data_points)
-  
-  # get the geometry information
-  affine  <- get_mrs_affine(mrs_data, 1.5, 1.5, 1.5)
-  
-  # voxel dimensions
-  mrs_pixdim <- mrs_data$resolution[2:4]
-  mrs_nii$pixdim <- c(0, mrs_pixdim, 1, 0, 0, 0)
-  
-  # set the qform
-  mrs_nii <- RNifti::`qform<-`(mrs_nii, structure(affine, code = 2L))
-  mrs_nii$qform_code <- 1
-  
-  # write to disk
-  RNifti::writeNifti(mrs_nii, fname)
 }

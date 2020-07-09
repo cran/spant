@@ -6,7 +6,7 @@
 \usage{
 read_mrs(
   fname,
-  format,
+  format = NULL,
   ft = NULL,
   fs = NULL,
   ref = NULL,
@@ -18,9 +18,10 @@ read_mrs(
 \arguments{
 \item{fname}{filename of the dpt format MRS data.}
 
-\item{format}{string describing the data format. May be one of the
+\item{format}{string describing the data format. Must be one of the
 following : "spar_sdat", "rda", "ima", "twix", "pfile", "list_data",
-"paravis", "dpt", "lcm_raw", "rds".}
+"paravis", "dpt", "lcm_raw", "rds", "nifti". If not specified, the format
+will be guessed from the filename extension.}
 
 \item{ft}{transmitter frequency in Hz (required for list_data format).}
 
@@ -44,6 +45,6 @@ Read MRS data from a file.
 }
 \examples{
 fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT", package = "spant")
-mrs_data <- read_mrs(fname, format = "spar_sdat")
+mrs_data <- read_mrs(fname)
 print(mrs_data)
 }
