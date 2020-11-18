@@ -18,10 +18,13 @@ print.mrs_data <- function(x, full = FALSE, ...) {
   cat(paste(c("Sampling frequency (Hz) : ",
               1 / x$resolution[7], "\n")), sep = "")
   cat(paste(c("Reference freq. (ppm)   : ", x$ref, "\n")), sep = "")
+  cat(paste(c("Nucleus                 : ", x$nuc, "\n")), sep = "")
   cat(paste(c("Spectral domain         : ", x$freq_domain[7], "\n")), sep = "")
   if (full) {
+    cat(paste(c("Echo time (s)           :", x$te, "\n")), sep = " ")
     cat(paste(c("Row vector              :", x$row_vec, "\n")), sep = " ")
     cat(paste(c("Column vector           :", x$col_vec, "\n")), sep = " ")
+    cat(paste(c("Slice vector            :", x$sli_vec, "\n")), sep = " ")
     cat(paste(c("Position vector         :", x$pos_vec, "\n")), sep = " ")
   }
 }
@@ -49,6 +52,10 @@ print.mrs_data <- function(x, full = FALSE, ...) {
 #' been made.
 #' @param mar option to adjust the plot margins. See ?par.
 #' @param xaxis_lab x-axis label.
+#' @param xat x-axis tick label values.
+#' @param xlabs x-axis tick labels.
+#' @param yat y-axis tick label values.
+#' @param ylabs y-axis tick labels.
 #' @param ... other arguments to pass to the plot method.
 #' @export
 plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
@@ -56,12 +63,14 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
                           y_scale = FALSE, x_ax = TRUE, mode = "re",
                           lwd = NULL, bty = NULL, label = "",
                           restore_def_par = TRUE, mar = NULL,
-                          xaxis_lab = NULL, ...) {
+                          xaxis_lab = NULL, xat = NULL, xlabs = TRUE,
+                          yat = NULL, ylabs = TRUE, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
  
   # remove data we don't need 
-  x <- get_voxel(x, x_pos, y_pos, z_pos, dyn, coil) 
+  x <- get_subset(x, x_set = x_pos, y_set = y_pos, z_set = z_pos, dyn_set = dyn,
+                  coil_set = coil) 
  
   # has this data element been masked? 
   if (anyNA(x$data)) {
@@ -141,7 +150,7 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
     graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim, 
                    xlab = xlab, ylab = "Intensity (au)", lwd = lwd, bty = bty, 
                    xaxt = "n", yaxt = "n", ...)
-    graphics::axis(2, lwd = 0, lwd.ticks = 1)
+    graphics::axis(2, lwd = 0, lwd.ticks = 1, at = yat, labels = ylabs)
   } else {
     if (is.null(mar)) graphics::par(mar = c(3.5, 1, 1, 1))
     graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim,
@@ -149,11 +158,9 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
          ...)
   }
   
-  if (x_ax) graphics::axis(1, lwd = 0, lwd.ticks = 1)
+  if (x_ax) graphics::axis(1, lwd = 0, lwd.ticks = 1, at = xat, labels = xlabs)
   
-  if (bty == "n") {
-    graphics::abline(h = graphics::par("usr")[3]) 
-  }
+  if (bty == "n") graphics::abline(h = graphics::par("usr")[3]) 
   
   if (!is.null(label)) {
     max_dp <- max(plot_data[subset])
@@ -171,8 +178,9 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
 #' @param mode representation of the complex numbers to be plotted, can be one
 #' of: "re", "im", "mod" or "arg".
 #' @param col Colour map to use, defaults to viridis.
-#' @param dim the dimension to display on the y-axis, can be one of: "dyn", "x",
-#' "y", "z" or "coil".
+#' @param plot_dim the dimension to display on the y-axis, can be one of: "dyn", 
+#' "x", "y", "z", "coil" or NULL. If NULL (the default) all spectra will be
+#' collapsed into the dynamic dimension and displayed.
 #' @param x_pos the x index to plot.
 #' @param y_pos the y index to plot.
 #' @param z_pos the z index to plot.
@@ -186,7 +194,7 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
 #' @param ... other arguments to pass to the plot method.
 #' @export
 image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL, 
-                           dim = "dyn", x_pos = NULL, y_pos = NULL,
+                           plot_dim = NULL, x_pos = NULL, y_pos = NULL,
                            z_pos = NULL, dyn = 1, coil = 1,
                            restore_def_par = TRUE, y_ticks = NULL, 
                            vline = NULL, hline = NULL, ...) { 
@@ -209,31 +217,36 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   
+  if (is.null(plot_dim)) {
+    x <- collapse_to_dyns(x)
+    plot_dim = "dyn"
+  }
+  
   data_dim <- dim(x$data)
   
-  if (is.null(x_pos))  x_pos <- as.integer(data_dim[2] / 2) + 1
+  if (is.null(x_pos)) x_pos <- as.integer(data_dim[2] / 2) + 1
   
   if (is.null(y_pos)) y_pos <- as.integer(data_dim[3] / 2) + 1
   
   if (is.null(z_pos)) z_pos <- as.integer(data_dim[4] / 2) + 1
   
-  if (dim == "dyn") {
+  if (plot_dim == "dyn") {
     plot_data <- t(x$data[1, x_pos, y_pos, y_pos, , coil, subset])
     yN <- data_dim[5]
     y_title = "Dynamic"
-  } else if (dim == "x") {
+  } else if (plot_dim == "x") {
     plot_data <- t(x$data[1, , y_pos, z_pos, dyn, coil, subset])
     yN <- data_dim[2]
     y_title = "x position"
-  } else if (dim == "y") {
+  } else if (plot_dim == "y") {
     plot_data <- t(x$data[1, x_pos, , z_pos, dyn, coil, subset])
     yN <- data_dim[3]
     y_title = "y position"
-  } else if (dim == "z") {
+  } else if (plot_dim == "z") {
     plot_data <- t(x$data[1, x_pos, y_pos, , dyn, coil, subset])
     yN <- data_dim[4]
     y_title = "z position"
-  } else if (dim == "coil") {
+  } else if (plot_dim == "coil") {
     plot_data <- t(x$data[1, x_pos, y_pos, z_pos, dyn, , subset])
     yN <- data_dim[6]
     y_title = "Coil"
@@ -304,8 +317,9 @@ stackplot.list <- function(x, ...) {
 #' @param x_offset separate plots in the x-axis direction by this value. 
 #' Default value is 0.
 #' @param y_offset separate plots in the y-axis direction by this value.
-#' @param dim the dimension to stack in the y-axis direction, can be one of: 
-#' "dyn", "x", "y", "z" or "coil".
+#' @param plot_dim the dimension to display on the y-axis, can be one of: "dyn", 
+#' "x", "y", "z", "coil" or NULL. If NULL (the default) all spectra will be
+#' collapsed into the dynamic dimension and displayed.
 #' @param x_pos the x index to plot.
 #' @param y_pos the y index to plot.
 #' @param z_pos the z index to plot.
@@ -323,7 +337,7 @@ stackplot.list <- function(x, ...) {
 #' @export
 stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
                                fd = TRUE, col = NULL, x_offset = 0,
-                               y_offset = 0, dim = "dyn", x_pos = NULL, 
+                               y_offset = 0, plot_dim = NULL, x_pos = NULL, 
                                y_pos = NULL, z_pos = NULL, dyn = 1, coil = 1, 
                                bty = NULL, labels = NULL, lab_cex = 1, 
                                right_marg = NULL, bl_lty = NULL,
@@ -377,48 +391,46 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
     stop("Invalid x_units option, should be one of : 'ppm', 'hz', 'points' or 'seconds'") 
   }
   
-  if (is.null(xlim)) {
-    xlim <- c(x_scale[1], x_scale[Npts(x)])
-  }
+  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[Npts(x)])
+  
   xlim <- sort(xlim)
+  
+  if (is.null(plot_dim)) {
+    x <- collapse_to_dyns(x)
+    plot_dim = "dyn"
+  }
   
   data_dim <- dim(x$data)
   
-  if (is.null(x_pos)) {
-    x_pos <- as.integer(data_dim[2] / 2) + 1
-  }
+  if (is.null(x_pos)) x_pos <- as.integer(data_dim[2] / 2) + 1
   
-  if (is.null(y_pos)) {
-    y_pos <- as.integer(data_dim[3] / 2) + 1
-  }
+  if (is.null(y_pos)) y_pos <- as.integer(data_dim[3] / 2) + 1
   
-  if (is.null(z_pos)) {
-    z_pos <- as.integer(data_dim[4] / 2) + 1
-  }
+  if (is.null(z_pos)) z_pos <- as.integer(data_dim[4] / 2) + 1
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   
-  if (dim == "dyn") {
+  if (plot_dim == "dyn") {
     plot_data <- t(x$data[1, x_pos, y_pos, z_pos, , coil, subset])
     yN <- data_dim[5]
     y_title = "Dynamic"
-  } else if (dim == "x") {
+  } else if (plot_dim == "x") {
     plot_data <- t(x$data[1, , y_pos, z_pos, dyn, coil, subset])
     yN <- data_dim[2]
     y_title = "x position"
-  } else if (dim == "y") {
+  } else if (plot_dim == "y") {
     plot_data <- t(x$data[1, x_pos, , z_pos, dyn, coil, subset])
     yN <- data_dim[3]
     y_title = "y position"
-  } else if (dim == "z") {
+  } else if (plot_dim == "z") {
     plot_data <- t(x$data[1, x_pos, y_pos, , dyn, coil, subset])
     yN <- data_dim[4]
     y_title = "z position"
-  } else if (dim == "coil") {
+  } else if (plot_dim == "coil") {
     plot_data <- t(x$data[1, x_pos, y_pos, z_pos, dyn, , subset])
     yN <- data_dim[5]
     y_title = "Coil"
-  } else if (dim == "scan") {
+  } else if (plot_dim == "scan") {
     plot_data <- t(x$data[, x_pos, y_pos, z_pos, dyn, coil, subset])
     yN <- data_dim[1]
     y_title = "Scan"
@@ -538,6 +550,11 @@ plot_slice_map <- function(data, zlim = NULL, mask_map = NULL,
                            coil = 1, ref = 1, denom = NULL,
                            horizontal = FALSE) {
   
+  if (class(data) == "mrs_data") {
+    data <- get_subset(data, coil_set = coil) # speeds things up
+    data <- int_spec(data, mode = "mod")
+  }
+  
   graphics::par(mar = c(0, 0, 0, 2))
   
   data_mask <- is.na(data)
@@ -592,4 +609,66 @@ plot_slice_map <- function(data, zlim = NULL, mask_map = NULL,
     
     #image(data, col = viridis::viridisLite(128), useRaster = T, asp = 1, axes = F)
   }
+}
+
+#' Arrange spectral plots in a grid.
+#' @param x object for plotting.
+#' @param ... arguments to be passed to methods.
+#' @export
+gridplot <- function(x, ...) {
+  UseMethod("gridplot", x)
+}
+
+#' Arrange spectral plots in a grid.
+#' @param x object of class mrs_data.
+#' @param rows number of grid rows.
+#' @param cols number of grid columns.
+#' @param mar option to adjust the plot margins. See ?par.
+#' @param oma outer margin area.
+#' @param bty option to draw a box around the plot. See ?par.
+#' @param restore_def_par restore default plotting par values after the plot has 
+#' been made.
+#' @param ... other arguments to pass to the plot method.
+#' @export
+gridplot.mrs_data <- function(x, rows = NA, cols = NA, mar = c(0, 0, 0, 0),
+                              oma = c(3.5, 1, 1, 1), bty = "o",
+                              restore_def_par = TRUE, ...) {
+  
+  .pardefault <- graphics::par(no.readonly = T)
+  
+  mrs_data_dyns <- collapse_to_dyns(x)
+  Nspec <- Ndyns(mrs_data_dyns)
+  
+  # set to rows and cols to be squareish if not specified
+  if (is.na(rows) & is.na(cols)) {
+    rows <- ceiling(Nspec ^ 0.5)
+    cols <- ceiling(Nspec / rows)
+  } else if (is.na(rows)) {
+    rows <- ceiling(Nspec / cols)
+  } else if (is.na(cols)) {
+    cols <- ceiling(Nspec / rows)
+  }
+  
+  graphics::par(mfrow = c(rows, cols), oma = oma)
+  
+  if (Ndyns(mrs_data_dyns) > rows * cols) {
+    warning("not enough rows and columns to show all spectra")
+    mrs_data_dyns <- get_dyns(mrs_data_dyns, 1:(rows*cols))
+  }
+  
+  for (n in 1:Ndyns(mrs_data_dyns)) {
+    if (n > (rows*cols - cols)) {
+      x_ax = TRUE
+    } else {
+      x_ax = FALSE
+    }
+      
+    graphics::plot(mrs_data_dyns, restore_def_par = FALSE, dyn = n, mar = mar,
+                   bty = bty, x_ax = x_ax, ...)
+  }
+  
+  graphics::mtext(text="Chemical shift (ppm)", side=1, line=1.8, outer=TRUE,
+                  cex = 0.8)
+  
+  if (restore_def_par) graphics::par(.pardefault)
 }

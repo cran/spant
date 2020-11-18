@@ -34,7 +34,9 @@
     spant.def_ref = 4.65,
     spant.def_nuc = "1H",
     spant.tqn_cmd = "tarquin",
-    spant.lcm_cmd = file.path(Sys.getenv("HOME"), ".lcmodel", "bin", "lcmodel") 
+    spant.lcm_cmd = file.path(Sys.getenv("HOME"), ".lcmodel", "bin", "lcmodel"), 
+    spant.precomp_verbose = TRUE,
+    spant.precomp_mode = "default"
   )
   toset <- !(names(op.spant) %in% names(op))
   if (any(toset)) options(op.spant[toset])
@@ -101,17 +103,20 @@ set_lcm_cmd <- function(cmd) {
 #' @param fs specify the sampling frequency in Hz.
 #' @param N specify the number of data points in the spectral dimension.
 #' @param ref specify the reference value for ppm scale.
+#' @param nuc specify the resonant nucleus.
 #' @return A list containing the following elements:
 #' * ft transmitter frequency in Hz.
 #' * fs sampling frequency in Hz.
 #' * N number of data points in the spectral dimension.
 #' * ref reference value for ppm scale.
+#' * nuc resonant nucleus.
 #' @export
 def_acq_paras <- function(ft  = getOption("spant.def_ft"),
                           fs  = getOption("spant.def_fs"),
                           N   = getOption("spant.def_N"),
-                          ref = getOption("spant.def_ref")) {
-  list(ft = ft, fs = fs, N = N, ref = ref)
+                          ref = getOption("spant.def_ref"),
+                          nuc = getOption("spant.def_nuc")) {
+  list(ft = ft, fs = fs, N = N, ref = ref, nuc = nuc)
 }
 
 #' Return the default reference value for ppm scale.
@@ -154,14 +159,17 @@ def_nuc <- function() {
 #' @param fs sampling frequency in Hz.
 #' @param N number of data points in the spectral dimension.
 #' @param ref reference value for ppm scale.
+#' @param nuc resonant nucleus.
 #' @export
 set_def_acq_paras <- function(ft  = getOption("spant.def_ft"),
                               fs  = getOption("spant.def_fs"),
                               N   = getOption("spant.def_N"),
-                              ref = getOption("spant.def_ref")) {
+                              ref = getOption("spant.def_ref"),
+                              nuc = getOption("spant.nuc")) {
   
   options(spant.def_ft  = ft)
   options(spant.def_fs  = fs)
   options(spant.def_N   = N)
   options(spant.def_ref = ref)
+  options(spant.nuc     = nuc)
 }

@@ -2,10 +2,17 @@
 % Please edit documentation in R/mrs_data_proc.R
 \name{mat2mrs_data}
 \alias{mat2mrs_data}
-\title{Convert a matrix (with spectral points in the row dimension and dynamics in
-the column dimensions) into a mrs_data object.}
+\title{Convert a matrix (with spectral points in the column dimension and dynamics
+in the row dimensions) into a mrs_data object.}
 \usage{
-mat2mrs_data(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(), fd = FALSE)
+mat2mrs_data(
+  mat,
+  fs = def_fs(),
+  ft = def_ft(),
+  ref = def_ref(),
+  nuc = def_nuc(),
+  fd = FALSE
+)
 }
 \arguments{
 \item{mat}{data matrix.}
@@ -16,12 +23,14 @@ mat2mrs_data(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(), fd = FALSE)
 
 \item{ref}{reference value for ppm scale.}
 
+\item{nuc}{resonant nucleus.}
+
 \item{fd}{flag to indicate if the matrix is in the frequency domain (logical).}
 }
 \value{
 mrs_data object.
 }
 \description{
-Convert a matrix (with spectral points in the row dimension and dynamics in
-the column dimensions) into a mrs_data object.
+Convert a matrix (with spectral points in the column dimension and dynamics
+in the row dimensions) into a mrs_data object.
 }

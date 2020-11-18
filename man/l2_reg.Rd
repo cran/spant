@@ -2,18 +2,23 @@
 % Please edit documentation in R/mrs_data_proc.R
 \name{l2_reg}
 \alias{l2_reg}
-\title{Perform l2 regularisation artefact suppression using the method proposed by
-Bilgic et al. JMRI 40(1):181-91 2014.}
+\title{Perform l2 regularisation artefact suppression.}
 \usage{
-l2_reg(mrs_data, A, b)
+l2_reg(mrs_data, thresh = 0.05, b = 1e-11, A = NA, xlim = NA)
 }
 \arguments{
 \item{mrs_data}{input data for artefact suppression.}
 
-\item{A}{matrix of spectral data points containing the artefact basis
-signals.}
+\item{thresh}{threshold parameter to extract lipid signals from mrs_data
+based on the integration of the full spectral width in magnitude mode.}
 
 \item{b}{regularisation parameter.}
+
+\item{A}{set of spectra containing the artefact basis signals. The thresh
+parameter is ignored when A is specified.}
+
+\item{xlim}{spectral limits in ppm to restrict the reconstruction range.
+Defaults to the full spectral width.}
 }
 \value{
 l2 reconstructed mrs_data object.

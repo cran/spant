@@ -1,3 +1,15 @@
+# spant 1.8.0
+* Added gridplot function.
+* New functions added for down sampling.
+* Added signal space projection method for MRSI.
+* Geometry information is now read from Siemens twix files.
+* GitHub actions are now used for continuous integration instead of Travis and
+AppVeyor.
+* Added precomp function to avoid repeated computation.
+* mrs_data2mat function now collapses all dimensions to dynamics by default.
+* mrs_data objects now store the nucleus.
+* Added a reader for old Varian format (fid/procpar) data.
+
 # spant 1.7.0
 * Added write_mrs function which guesses the output format from the file
 extension or can be specified as an argument. write_mrs_XXX functions have been

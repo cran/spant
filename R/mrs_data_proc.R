@@ -25,12 +25,15 @@ check_mrs_data <- function(mrs_data) {
 #' Hz are assumed.
 #' @param acq_paras list of acquisition parameters. See
 #' \code{\link{def_acq_paras}}
+#' @param fp_scale multiply the first data point by 0.5.
+#' @param back_extrap_pts number of data points to back extrapolate.
 #' @return MRS data object.
 #' @examples
 #' sim_data <- sim_resonances(freq = 2, lw = 5)
 #' @export
 sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0, 
-                           freq_ppm = TRUE, acq_paras = def_acq_paras()) {
+                           freq_ppm = TRUE, acq_paras = def_acq_paras(),
+                           fp_scale = TRUE, back_extrap_pts = 0) {
   
   # TODO check this works for vectors
   #if ((sum(lg > 1) + sum(lg < 0)) > 0) {
@@ -56,8 +59,8 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
   }
   
   # generate data in TD
-  t <- seq(from = 0, to = (acq_paras$N - 1) / acq_paras$fs,
-           by = 1 / acq_paras$fs)
+  t <- seq(from = -back_extrap_pts / acq_paras$fs,
+           to = (acq_paras$N - 1) / acq_paras$fs, by = 1 / acq_paras$fs)
   
   # covert freqs to Hz
   if (freq_ppm) {
@@ -66,7 +69,7 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
     f_hz <- freq
   }
   
-  data <- rep(0, acq_paras$N)
+  data <- rep(0, acq_paras$N + back_extrap_pts)
   for (n in 1:sig_n) {
     temp_data <- amp[n] * exp(1i * pi * phase[n] / 180 + 2i * pi * f_hz[n] * t)
     
@@ -78,7 +81,7 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
   }
   
   # first point correction
-  data[1] <- data[1] * 0.5
+  if (fp_scale) data[1] <- data[1] * 0.5
   
   #if (lg < 1) {
   #  mrs_data$data = mrs_data$data*exp(-(1-lg)*lb*t*pi)
@@ -88,11 +91,13 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
   #  mrs_data$data = mrs_data$data*exp(((lg*lb)^2*pi^2/4/log(0.5))*(t^2))
   #}
   
-  data <- array(data,dim = c(1, 1, 1, 1, 1, 1, acq_paras$N))
+  data <- array(data,dim = c(1, 1, 1, 1, 1, 1, acq_paras$N + back_extrap_pts))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / acq_paras$fs)
   mrs_data <- list(ft = acq_paras$ft, data = data, resolution = res, te = 0, 
-                   ref = acq_paras$ref, row_vec = c(1,0,0), col_vec = c(0,1,0),
-                   pos_vec = c(0,0,0), freq_domain = rep(FALSE, 7))
+                   ref = acq_paras$ref, nuc = acq_paras$nuc,
+                   row_vec = c(1, 0, 0), col_vec = c(0, 1, 0),
+                   sli_vec = c(0, 0, 1), pos_vec = c(0, 0, 0),
+                   freq_domain = rep(FALSE, 7))
   
   class(mrs_data) <- "mrs_data"
   return(mrs_data)
@@ -100,7 +105,7 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
 
 sim_resonances_fast <- function(freq = 0, amp = 1, freq_ppm = TRUE,
                                 N = def_N(), fs = def_fs(), ft = def_ft(),
-                                ref = def_ref()) {
+                                ref = def_ref(), nuc = def_nuc()) {
   
   sig_n <- length(freq)
   if (sig_n != length(amp)) {
@@ -128,9 +133,10 @@ sim_resonances_fast <- function(freq = 0, amp = 1, freq_ppm = TRUE,
   
   data <- array(data,dim = c(1, 1, 1, 1, 1, 1, N))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
-  mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref, 
-                  row_vec = c(1,0,0), col_vec = c(0,1,0), pos_vec = c(0,0,0), 
-                  freq_domain = rep(FALSE, 7))
+  mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref,
+                   nuc = nuc, row_vec = c(1, 0, 0), col_vec = c(0, 1, 0),
+                   sli_vec = c(0, 0, 1), pos_vec = c(0,0,0), 
+                   freq_domain = rep(FALSE, 7))
   
   class(mrs_data) <- "mrs_data"
   
@@ -139,7 +145,7 @@ sim_resonances_fast <- function(freq = 0, amp = 1, freq_ppm = TRUE,
 
 sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
                                  N = def_N(), fs = def_fs(), ft = def_ft(), 
-                                 ref = def_ref()) {
+                                 ref = def_ref(), nuc = def_nuc()) {
   
   sig_n <- length(freq)
   if (sig_n != length(amp)) {
@@ -174,7 +180,8 @@ sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
   data <- array(data, dim = c(1, 1, 1, 1, 1, 1, N))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
   mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref, 
-                   row_vec = c(1,0,0), col_vec = c(0,1,0), pos_vec = c(0,0,0), 
+                   nuc = nuc, row_vec = c(1, 0, 0), col_vec = c(0, 1, 0), 
+                   sli_vec = c(0, 0, 1), pos_vec = c(0,0,0), 
                    freq_domain = rep(FALSE, 7))
   
   print(res$par)
@@ -188,20 +195,22 @@ sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
 #' @param fs sampling frequency in Hz.
 #' @param ft transmitter frequency in Hz.
 #' @param ref reference value for ppm scale.
+#' @param nuc resonant nucleus.
 #' @param dyns replicate the data across the dynamic dimension.
 #' @param fd flag to indicate if the matrix is in the frequency domain (logical).
 #' @return mrs_data object.
 #' @export
 vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
-                         dyns = 1, fd = FALSE) {
+                         nuc = def_nuc(), dyns = 1, fd = FALSE) {
   
   data <- array(vec, dim = c(length(vec), dyns))
   data <- aperm(data,c(2, 1))
   dim(data) <- c(1, 1, 1, 1, dyns, 1, length(vec))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
   mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref, 
-                  row_vec = c(1,0,0), col_vec = c(0,1,0), pos_vec = c(0,0,0), 
-                  freq_domain = c(rep(FALSE, 6), fd))
+                   nuc = nuc, row_vec = c(1, 0, 0), col_vec = c(0, 1, 0),
+                   sli_vec = c(0, 0, 1), pos_vec = c(0, 0, 0), 
+                   freq_domain = c(rep(FALSE, 6), fd))
   
   class(mrs_data) <- "mrs_data"
   return(mrs_data)
@@ -213,18 +222,20 @@ vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
 #' @param fs sampling frequency in Hz.
 #' @param ft transmitter frequency in Hz.
 #' @param ref reference value for ppm scale.
+#' @param nuc nucleus that is resonant at the transmitter frequency.
 #' @param fd flag to indicate if the matrix is in the frequency domain (logical).
 #' @return mrs_data object.
 #' @export
 array2mrs_data <- function(data_array, fs = def_fs(), ft = def_ft(),
-                           ref = def_ref(), fd = FALSE) {
+                           ref = def_ref(), nuc = def_nuc(), fd = FALSE) {
   
   if (length(dim(data_array)) != 7) stop("Incorrect number of dimensions.")
   
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
   mrs_data <- list(ft = ft, data = data_array, resolution = res, te = 0,
-                   ref = ref, row_vec = c(1,0,0), col_vec = c(0,1,0),
-                   pos_vec = c(0,0,0), freq_domain = c(rep(FALSE, 6), fd))
+                   ref = ref, nuc = nuc, row_vec = c(1, 0, 0),
+                   col_vec = c(0, 1, 0), sli_vec = c(0, 0, 1),
+                   pos_vec = c(0, 0, 0), freq_domain = c(rep(FALSE, 6), fd))
   
   class(mrs_data) <- "mrs_data"
   return(mrs_data)
@@ -233,10 +244,14 @@ array2mrs_data <- function(data_array, fs = def_fs(), ft = def_ft(),
 #' Convert mrs_data object to a matrix, with spectral points in the column
 #' dimension and dynamics in the row dimension.
 #' @param mrs_data MRS data object or list of MRS data objects.
+#' @param collapse collapse all other dimensions along the dynamic dimension, eg
+#' a 16x16 MRSI grid would be first collapsed across 256 dynamic scans.
 #' @return MRS data matrix.
 #' @export
-mrs_data2mat <- function(mrs_data) {
+mrs_data2mat <- function(mrs_data, collapse = TRUE) {
   if (class(mrs_data) == "list") mrs_data <- append_dyns(mrs_data)
+  
+  if (collapse) mrs_data <- collapse_to_dyns(mrs_data)
   
   as.matrix(mrs_data$data[1,1,1,1,,1,])
 }
@@ -259,22 +274,24 @@ mrs_data2vec <- function(mrs_data, dyn = 1, x_pos = 1,
   as.vector(mrs_data$data[1, x_pos, y_pos, z_pos, dyn, coil,])
 }
 
-#' Convert a matrix (with spectral points in the row dimension and dynamics in
-#' the column dimensions) into a mrs_data object.
+#' Convert a matrix (with spectral points in the column dimension and dynamics
+#' in the row dimensions) into a mrs_data object.
 #' @param mat data matrix.
 #' @param fs sampling frequency in Hz.
 #' @param ft transmitter frequency in Hz.
 #' @param ref reference value for ppm scale.
+#' @param nuc resonant nucleus.
 #' @param fd flag to indicate if the matrix is in the frequency domain (logical).
 #' @return mrs_data object.
 #' @export
 mat2mrs_data <- function(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(),
-                         fd = FALSE) {
+                         nuc = def_nuc(), fd = FALSE) {
   
-  data <- array(t(mat), dim = c(1, 1, 1, 1, ncol(mat), 1, nrow(mat)))
+  data <- array(mat, dim = c(1, 1, 1, 1, nrow(mat), 1, ncol(mat)))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
   mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref, 
-                   row_vec = c(1,0,0), col_vec = c(0,1,0), pos_vec = c(0,0,0), 
+                   nuc = nuc, row_vec = c(1, 0, 0), col_vec = c(0, 1, 0),
+                   sli_vec = c(0, 0, 1), pos_vec = c(0, 0, 0), 
                    freq_domain = c(rep(FALSE, 6), fd))
   
   class(mrs_data) <- "mrs_data"
@@ -297,7 +314,7 @@ sim_noise <- function(sd = 0.1, fs = def_fs(), ft = def_ft(), N = def_N(),
   data_pts <- dyns * N 
   vec <- stats::rnorm(data_pts, 0, sd) + 1i*stats::rnorm(data_pts, 0, sd)
   data_array <- array(vec, dim = c(1, 1, 1, 1, dyns, 1, N))
-  array2mrs_data(data_array, fs = fs, ft = ft, ref = ref, fd)
+  array2mrs_data(data_array, fs = fs, ft = ft, ref = ref, fd = fd)
 }
 
 sim_zeros <- function(fs = def_fs(), ft = def_ft(), N = def_N(),
@@ -331,7 +348,7 @@ apply_mrs <- function(mrs_data, dims, fun, ..., data_only = FALSE) {
   
   #print(perm_vec)
   mrs_data$data <- aperm(mrs_data$data, perm_vec)
-  if ( data_only == FALSE ) {
+  if (data_only == FALSE) {
     return(mrs_data)
   } else {
     return(mrs_data$data)
@@ -454,6 +471,22 @@ get_fp <- function(mrs_data) {
   mrs_data$data[,,,,,, 1, drop = F]
 }
 
+#' Scale the first time-domain data point in an mrs_data object.
+#' @param mrs_data MRS data.
+#' @param scale scaling value, defaults to 0.5.
+#' @return scaled mrs_data object.
+#' @export
+fp_scale <- function(mrs_data, scale = 0.5) {
+  
+  # needs to be a time-domain operation
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  # drop the chem shift dimension
+  mrs_data$data[,,,,,, 1] <- mrs_data$data[,,,,,, 1] * scale
+  
+  return(mrs_data)
+}
+
 fp_mag <- function(mrs_data) {
   
   # needs to be a time-domain operation
@@ -512,6 +545,13 @@ lb.mrs_data <- function(x, lb, lg = 1) {
     stop()
   }
   
+  # collapse to simplify 
+  lb <- as.vector(drop(lb))
+  lg <- as.vector(drop(lg))
+  orig_dim <- dim(x$data)
+  orig_dimnames <- dimnames(x$data)
+  x <- collapse_to_dyns(x)
+  
   # needs to be a time-domain operation
   if (is_fd(x)) {
     x <- fd2td(x)
@@ -527,6 +567,9 @@ lb.mrs_data <- function(x, lb, lg = 1) {
     x$data = x$data * exp((sign * lg * lb ^ 2 * pi ^ 2 / 4 / log(0.5)) * 
                           (t ^ 2))
   }
+  
+  # revert back to original dims and unname
+  dim(x$data) <- orig_dim
   
   return(x)
 }
@@ -638,8 +681,13 @@ td2fd <- function(mrs_data) {
     warning("Data is alread in the frequency-domain.")
   }
   
-  mrs_data <- ft(mrs_data, 7)
-  mrs_data$freq_domain[7] = TRUE
+  freq <- matrix(mrs_data$data, ncol = Npts(mrs_data))
+  freq <- t(ft_shift_mat(t(freq)))
+  dim(freq) <- dim(mrs_data$data)
+  mrs_data$data <- freq
+  
+  mrs_data$freq_domain[7] <- TRUE
+  unname(mrs_data$data)
   return(mrs_data)
 }
 
@@ -652,8 +700,13 @@ fd2td <- function(mrs_data) {
     warning("Data is alread in the time-domain.")
   }
   
-  mrs_data <- ift(mrs_data, 7)
-  mrs_data$freq_domain[7] = FALSE
+  time <- matrix(mrs_data$data, ncol = Npts(mrs_data))
+  time <- t(ift_shift_mat(t(time)))
+  dim(time) <- dim(mrs_data$data)
+  mrs_data$data <- time
+  
+  mrs_data$freq_domain[7] <- FALSE
+  dimnames(mrs_data$data) <- NULL
   return(mrs_data)
 }
 
@@ -663,7 +716,7 @@ recon_imag <- function(mrs_data) {
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
   mrs_data <- apply_mrs(mrs_data, 7, recon_imag_vec)
-  mrs_data$freq_domain[7] = FALSE
+  mrs_data$freq_domain[7] <- FALSE
   return(mrs_data)
 }
 
@@ -676,7 +729,8 @@ get_acq_paras <- function(mrs_data) {
   # check the input is an mrs_data object
   check_mrs_data(mrs_data)
   
-  list(ft = mrs_data$ft, fs = fs(mrs_data), N = Npts(mrs_data), ref = mrs_data$ref)
+  list(ft = mrs_data$ft, fs = fs(mrs_data), N = Npts(mrs_data),
+       ref = mrs_data$ref, nuc = mrs_data$nuc)
 }
 
 ft <- function(mrs_data, dims) {
@@ -754,33 +808,83 @@ Conj.mrs_data <- function(z) {
   z
 }
 
-#' Decimate an MRS signal by a factor.
-#' @param mrs_data MRS data object.
-#' @param q integer factor to downsample by (default = 2).
-#' @return decimated data.
-#' @export
-decimate_mrs <- function(mrs_data, q = 2) {
-  # needs to be a TD operation
-  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
-  
-  mrs_data_re <- apply_mrs(Re(mrs_data), 7, fun = signal::decimate, q)
-  mrs_data_im <- apply_mrs(Im(mrs_data), 7, fun = signal::decimate, q)
-  mrs_data$data <- (mrs_data_re$data + 1i * mrs_data_im$data) * q
-  mrs_data$resolution <- mrs_data$resolution * q
-  mrs_data
-}
-
 #' Downsample an MRS signal by a factor of 2 using an FFT "brick-wall" filter.
 #' @param mrs_data MRS data object.
 #' @return downsampled data.
 #' @export
-downsample_mrs <- function(mrs_data) {
+downsample_mrs_fd <- function(mrs_data) {
   # needs to be a FD operation
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   N <- Npts(mrs_data)
   mrs_data <- crop_spec(mrs_data, xlim = c(N / 2 - N / 4 + 1, N / 2 + N / 4),
                         scale = "points")
   mrs_data
+}
+
+#' Downsample an MRS signal by a factor of 2 by removing every other data point
+#' in the time-domain. Note, signals outside the new sampling frequency will be
+#' aliased.
+#' @param mrs_data MRS data object.
+#' @return downsampled data.
+#' @export
+downsample_mrs_td <- function(mrs_data) {
+  # needs to be a TD operation
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  mrs_data <- get_subset(mrs_data, td_set = seq(1, Npts(mrs_data), 2))
+  mrs_data$resolution[7] <- mrs_data$resolution[7] * 2
+  return(mrs_data)
+}
+
+#' Decimate an MRS signal by filtering in the time domain before downsampling.
+#' @param mrs_data MRS data object.
+#' @param q integer factor to downsample by (default = 2).
+#' @param n filter order used in the downsampling.
+#' @param ftype	filter type, "iir" or "fir".
+#' @return decimated data.
+#' @export
+decimate_mrs_td <- function(mrs_data, q = 2, n = 4, ftype = "iir") {
+  # needs to be a TD operation
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  mrs_data_re <- apply_mrs(Re(mrs_data), 7, fun = signal::decimate, q, n, ftype)
+  mrs_data_im <- apply_mrs(Im(mrs_data), 7, fun = signal::decimate, q, n, ftype)
+  mrs_data$data <- (mrs_data_re$data + 1i * mrs_data_im$data) * q
+  mrs_data$resolution[7] <- mrs_data$resolution[7] * q
+  dimnames(mrs_data$data) <- NULL
+  mrs_data
+}
+
+#' Decimate an MRS signal to half the original sampling frequency by filtering
+#' in the frequency domain before down sampling.
+#' @param mrs_data MRS data object.
+#' @return decimated data at half the original sampling frequency.
+#' @export
+decimate_mrs_fd <- function(mrs_data) {
+  # needs to be a FD operation initially
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  mrs_data <- apply_mrs(mrs_data, 7, smooth_high_freq_vec)
+  dimnames(mrs_data$data) <- NULL
+  mrs_data <- fd2td(mrs_data)
+  mrs_data <- downsample_mrs_td(mrs_data)
+  return(mrs_data)
+}
+
+smooth_high_freq_vec <- function(vec) {
+  vec <- pracma::ifftshift(vec) 
+  # smooth the central portion
+  N <- length(vec)
+  inds <- (N / 4 + 1):(N - N / 4)
+  vec_smooth_re <- stats::predict(stats::smooth.spline(Re(vec[inds])),
+                                  1:length(inds))$y
+  
+  vec_smooth_im <- stats::predict(stats::smooth.spline(Im(vec[inds])),
+                                  1:length(inds))$y
+  
+  vec[inds] <- vec_smooth_re + 1i * vec_smooth_im
+  vec <- pracma::fftshift(vec) 
+  return(vec)
 }
 
 # alternate TD method that might cause a bit of phase distortion
@@ -1061,6 +1165,8 @@ crop_spec <- function(mrs_data, xlim = c(4, 0.2), scale = "ppm") {
   # not sure why subset[2] works better than subset[1]
   new_ppm = (old_ppm[subset[length(subset)]] + old_ppm[subset[2]])/2
   mrs_data$ref <- new_ppm
+  
+  dimnames(mrs_data$data) <- NULL
     
   mrs_data
 }
@@ -1199,12 +1305,15 @@ rm_dyns <- function(mrs_data, subset) {
 #' @param coil the coil element number to plot.
 #' @return MRS data.
 #' @export
-get_voxel <- function(mrs_data, x_pos = 1, y_pos = 1, z_pos = 1, dyn = 1, coil = 1) {
+get_voxel <- function(mrs_data, x_pos = 1, y_pos = 1, z_pos = 1, dyn = 1,
+                      coil = 1) {
   
   # check the input
   check_mrs_data(mrs_data) 
   
-  mrs_data$data <- mrs_data$data[1, x_pos, y_pos, z_pos, dyn, coil, , drop = FALSE]
+  mrs_data$data <- mrs_data$data[1, x_pos, y_pos, z_pos, dyn, coil, , 
+                                 drop = FALSE]
+  
   return(mrs_data)
 }
 
@@ -1229,13 +1338,21 @@ get_slice <- function(mrs_data, z_pos) {
 #' @param z_set z indices to include in the output (default all). 
 #' @param dyn_set dynamic indices to include in the output (default all). 
 #' @param coil_set coil indices to include in the output (default all). 
+#' @param fd_set frequency domain data indices to include in the output (default
+#' all). 
+#' @param td_set time-domain indices to include in the output (default all). 
 #' @return selected subset of MRS data.
 #' @export
 get_subset <- function(mrs_data, x_set = NULL, y_set = NULL, z_set = NULL,
-                       dyn_set = NULL, coil_set = NULL) {
+                       dyn_set = NULL, coil_set = NULL, fd_set = NULL,
+                       td_set = NULL) {
   
   # check the input
   check_mrs_data(mrs_data) 
+  
+  if (!is.null(td_set) && !is.null(fd_set)) {
+    stop("td_set OR fd_set should be specified - not both.")
+  }
   
   orig_dims <- dim(mrs_data$data)
   
@@ -1244,9 +1361,25 @@ get_subset <- function(mrs_data, x_set = NULL, y_set = NULL, z_set = NULL,
   if (is.null(z_set)) z_set       <- 1:orig_dims[4]
   if (is.null(dyn_set)) dyn_set   <- 1:orig_dims[5]
   if (is.null(coil_set)) coil_set <- 1:orig_dims[6]
+  n_set <- 1:orig_dims[7]
+  
+  if (!is.null(fd_set)) {
+    # needs to be a FD operation
+    if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+    n_set <- fd_set
+  }
+  
+  if (!is.null(td_set)) {
+    # needs to be a TD operation
+    if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+    n_set <- td_set
+  }
   
   mrs_data$data <- mrs_data$data[, x_set, y_set, z_set, dyn_set, coil_set,
-                                 , drop = FALSE]
+                                 n_set, drop = FALSE]
+  
+  dimnames(mrs_data$data) <- NULL
+  
   return(mrs_data)
 }
 
@@ -1303,14 +1436,32 @@ mask_xy <- function(mrs_data, x_dim, y_dim) {
 #' @param mrs_data MRS data object.
 #' @param mask matrix of boolean values specifying the voxels to mask, where a
 #' value of TRUE indicates the voxel should be removed.
+#' @param value the value to set masked data to (usually NA or 0).
 #' @return masked dataset.
 #' @export
-mask_xy_mat <- function(mrs_data, mask) {
+mask_xy_mat <- function(mrs_data, mask, value = NA) {
+  
+  # check the input
+  check_mrs_data(mrs_data)
+  
+  dim(mask) <- c(1, nrow(mask), ncol(mask), 1, 1, 1, 1)
+  mask <- rep_array_dim(mask, 7, Npts(mrs_data))
+  mrs_data$data[mask] <- value
+  return(mrs_data)
+}
+
+#' Mask an MRS dataset in the dynamic dimension.
+#' @param mrs_data MRS data object.
+#' @param mask vector of boolean values specifying the dynamics to mask, where a
+#' value of TRUE indicates the spectrum should be removed.
+#' @return masked dataset.
+#' @export
+mask_dyns <- function(mrs_data, mask) {
   
   # check the input
   check_mrs_data(mrs_data) 
   
-  dim(mask) <- c(1, nrow(mask), ncol(mask), 1, 1, 1, 1)
+  dim(mask) <- c(1, 1, 1, 1, length(mask), 1, 1)
   mask <- rep_array_dim(mask, 7, Npts(mrs_data))
   mrs_data$data[mask] <- NA
   return(mrs_data)
@@ -1613,25 +1764,32 @@ sd.default <- function(x, na.rm = FALSE) stats::sd(x, na.rm)
 
 #' Collapse MRS data by concatenating spectra along the dynamic dimension.
 #' @param x data object to be collapsed (mrs_data or fit_result object).
+#' @param rm_masked remove masked dynamics from the output.
 #' @return collapsed data with spectra or fits concatenated along the dynamic
 #' dimension.
 #' @rdname collapse_to_dyns
 #' @export
-collapse_to_dyns <- function(x) UseMethod("collapse_to_dyns")
+collapse_to_dyns <- function(x, rm_masked = FALSE) UseMethod("collapse_to_dyns")
 
 #' @rdname collapse_to_dyns
 #' @export
-collapse_to_dyns.mrs_data <- function(x) {
+collapse_to_dyns.mrs_data <- function(x, rm_masked = FALSE) {
   data_pts <- x$data
   data_N <- Npts(x)
   dim(data_pts) <- c(1, 1, 1, 1, length(data_pts) / data_N, 1, data_N)
   x$data <- data_pts
-  x
+  
+  if (rm_masked) {
+    keepers <- !is.na(x$data[,,,,,,1])
+    x$data <- x$data[,,,,keepers,,,drop = FALSE]
+  }
+  
+  return(x)
 }
 
 #' @rdname collapse_to_dyns
 #' @export
-collapse_to_dyns.fit_result <- function(x) {
+collapse_to_dyns.fit_result <- function(x, rm_masked = FALSE) {
   x$res_tab[c(1, 2, 3, 5)] <- 1
   dyns <- nrow(x$res_tab)
   x$res_tab[4] <- 1:dyns
@@ -1716,7 +1874,8 @@ sum_coils <- function(mrs_data) {
 }
 
 cplx_median <- function(input) {
-  stats::median(Re(input)) + stats::median(Im(input)) * 1i
+  stats::median(Re(input), na.rm = TRUE) +
+    stats::median(Im(input), na.rm = TRUE) * 1i
 }
 
 #' Calculate the median dynamic data.
@@ -1826,29 +1985,69 @@ fd_conv_filt <- function(mrs_data, K = 25, ext = 1) {
 #' @param xlim frequency range in Hz to filter.
 #' @param comps number of Lorentzian components to use for modelling.
 #' @param irlba option to use irlba SVD (logical).
+#' @param max_damp maximum allowable damping factor.
+#' @return filtered data.
 #' @export
-hsvd_filt <- function(mrs_data, xlim = c(-30, 30), comps = 40, irlba = TRUE) {
+hsvd_filt <- function(mrs_data, xlim = c(-30, 30), comps = 40, irlba = TRUE,
+                      max_damp = 10) {
   
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
   
   apply_mrs(mrs_data, 7, hsvd_filt_vec, fs = fs(mrs_data), region = xlim,
-            comps = comps, irlba)
+            comps = comps, irlba, max_damp = max_damp)
 }
 
 hsvd_filt_vec <- function(fid, fs, region = c(-30, 30), comps = 40, 
-                          irlba = TRUE) {
+                          irlba = TRUE, max_damp = 10) {
   
-  hsvd_res <- hsvd(fid, fs, K = comps, irlba)  
-  idx <- (hsvd_res$reson_table$frequency < region[2]) &
-         (hsvd_res$reson_table$frequency > region[1] )
+  hsvd_res <- hsvd_vec(fid, fs, comps = comps, irlba)  
+  idx <- (hsvd_res$reson_table$frequency_hz < region[2]) &
+         (hsvd_res$reson_table$frequency_hz > region[1] )
   model <- rowSums(hsvd_res$basis[,idx])
   fid - model
 }
 
-hsvd <- function(y, fs, K = 40, irlba = TRUE) {
+
+#' HSVD of an mrs_data object.
+#' 
+#' HSVD method as described in:
+#' Barkhuijsen H, de Beer R, van Ormondt D. Improved algorithm for noniterative 
+#' and timedomain model fitting to exponentially damped magnetic resonance
+#' signals. J Magn Reson 1987;73:553-557.
+#' 
+#' @param mrs_data mrs_data object to be decomposed.
+#' @param comps number of Lorentzian components to use for modelling.
+#' @param irlba option to use irlba SVD (logical).
+#' @param max_damp maximum allowable damping factor.
+#' @return basis matrix and signal table.
+#' @export
+hsvd <- function(mrs_data, comps = 40, irlba = TRUE, max_damp = 10) {
+  res <- hsvd_vec(mrs_data2vec(mrs_data), fs = fs(mrs_data), comps = comps,
+                  irlba = irlba, max_damp = max_damp)
+  res$reson_table$frequency_ppm <- hz2ppm(res$reson_table$frequency,
+                                          mrs_data$ft, mrs_data$ref)
+  res$reson_table$lw_hz <- -res$reson_table$damping / pi
+  return(res)
+}
+
+#' HSVD of a complex vector.
+#' 
+#' HSVD method as described in:
+#' Barkhuijsen H, de Beer R, van Ormondt D. Improved algorithm for noniterative 
+#' and timedomain model fitting to exponentially damped magnetic resonance
+#' signals. J Magn Reson 1987;73:553-557.
+#' 
+#' @param y time domain signal to be filtered as a vector.
+#' @param fs sampling frequency of y.
+#' @param comps number of Lorentzian components to use for modelling.
+#' @param irlba option to use irlba SVD (logical).
+#' @param max_damp maximum allowable damping factor. Default value of 0 ensures
+#' resultant model is damped.
+#' @return basis matrix and signal table.
+#' @export
+hsvd_vec <- function(y, fs, comps = 40, irlba = TRUE, max_damp = 0) {
   N <- length(y)
   L <- floor(0.5 * N)
-  # M <- N + 1 - L
   
   # scale the input vector to keep things stable
   sc_factor <- max(Mod(y))
@@ -1859,13 +2058,13 @@ hsvd <- function(y, fs, K = 40, irlba = TRUE) {
   H <- H[1:L,]
   
   if (irlba)  {
-    svd_res <- irlba::irlba(H, K)
+    svd_res <- irlba::irlba(H, comps)
   } else {
     svd_res <- svd(H)
   }
   
   # construct H of rank K
-  Uk <- svd_res$u[,1:K]
+  Uk <- svd_res$u[,1:comps]
   rows <- nrow(Uk)
   Ukt <- Uk[2:rows,]
   Ukb <- Uk[1:(rows - 1),]
@@ -1875,16 +2074,21 @@ hsvd <- function(y, fs, K = 40, irlba = TRUE) {
   q <- pracma::eig(Zp)
   q <- log(q)
   dt <- 1 / fs
-  dampings <- Re(q) / dt;
-  frequencies <- Im(q)/(2 * pi) / dt;
+  dampings <- Re(q) / dt
+  frequencies <- Im(q)/(2 * pi) / dt
+  
+  # large +ve dampings can cause stability issues where the basis signals
+  # can have values 1e88 at the end of the FID causing ginv to fail
+  # cap these positive dampings to max_damp
+  dampings[dampings > max_damp] <- max_damp
   
   t <- seq(from = 0, to = (N - 1) / fs, by = 1 / fs)
-  t_mat <- matrix(t, ncol = K, nrow = N)
+  t_mat <- matrix(t, ncol = comps, nrow = N)
   
   # TODO not sure if the next line is faster
   #basis <- t(exp(t(t_mat) * (dampings + 2i * pi * frequencies)))
   
-  freq_damp <- matrix(dampings + 2i * pi * frequencies, ncol = K, nrow = N,
+  freq_damp <- matrix(dampings + 2i * pi * frequencies, ncol = comps, nrow = N,
                       byrow = TRUE)
   
   basis <- exp(t_mat * freq_damp)
@@ -1893,15 +2097,15 @@ hsvd <- function(y, fs, K = 40, irlba = TRUE) {
   
   # Undo scaling
   ahat <- ahat * sc_factor
-  #yhat <- basis%*%ahat 
+  # yhat <- basis %*% ahat 
   
   # scale basis by ahat
-  ahat_mat <- matrix(ahat, ncol = K, nrow = N, byrow = TRUE)
+  ahat_mat <- matrix(ahat, ncol = comps, nrow = N, byrow = TRUE)
   basis <- basis * ahat_mat
   
   # generate a table of resonances
   reson_table <- data.frame(amplitude = Mod(ahat), phase = Arg(ahat) * 180 / pi,
-                            frequency = frequencies, damping = dampings)
+                            frequency_hz = frequencies, damping = dampings)
   
   list(basis = basis, reson_table = reson_table)
 }
@@ -2005,11 +2209,13 @@ ecc <- function(metab, ref, rev = FALSE) {
   get_metab(ecc_data)
 }
 
-#' Apodise MRSI data in the x-y direction with a k-space hamming filter.
+#' Apodise MRSI data in the x-y direction with a k-space filter.
 #' @param mrs_data MRSI data.
+#' @param func must be "hamming" or "gaussian".
+#' @param w the reciprocal of the standard deviation for the gaussian function.
 #' @return apodised data.
 #' @export
-apodise_xy <- function(mrs_data) {
+apodise_xy <- function(mrs_data, func = "hamming", w = 2.5) {
   
   # check the input
   check_mrs_data(mrs_data) 
@@ -2019,18 +2225,29 @@ apodise_xy <- function(mrs_data) {
   y_dim <- mrsi_dims[3]
   N <- mrsi_dims[7]
   
-  mrs_data <- mrsi2d_img2kspace(mrs_data)
+  mrs_data <- img2kspace_xy(mrs_data)
   
   mat <- mrs_data$data
   mat <- drop(mat)
   dim(mat) <- c(x_dim, y_dim * N)
-  mat <- mat * signal::hamming(x_dim)
+  
+  if (func == "hamming") {
+    x_fun <- signal::hamming(x_dim)
+    y_fun <- signal::hamming(y_dim)
+  } else if (func == "gaussian") {
+    x_fun <- signal::gausswin(x_dim, w = w)
+    y_fun <- signal::gausswin(y_dim, w = w)
+  } else{
+    stop("error func not recognised")
+  }
+    
+  mat <- mat * x_fun
   
   dim(mat) <- c(x_dim, y_dim, N)
   mat <- aperm(mat, c(2, 1, 3))
   dim(mat) <- c(y_dim, x_dim * N)
   
-  mat <- mat * signal::hamming(y_dim)
+  mat <- mat * y_fun
   
   dim(mat) <- c(y_dim, x_dim, N)
   mat <- aperm(mat, c(2, 1, 3))
@@ -2038,7 +2255,7 @@ apodise_xy <- function(mrs_data) {
   mrs_data$data <- mat
   
   # put xy dims back to space
-  mrs_data <- mrsi2d_kspace2img(mrs_data)
+  mrs_data <- kspace2img_xy(mrs_data)
   return(mrs_data)
 }
 
@@ -2059,7 +2276,7 @@ grid_shift_xy <- function(mrs_data, x_shift, y_shift) {
   y_dim <- mrsi_dims[3]
   N <- mrsi_dims[7]
   
-  mrs_data <- mrsi2d_img2kspace(mrs_data)
+  mrs_data <- img2kspace_xy(mrs_data)
   
   mat <- mrs_data$data
   mat <- drop(mat)
@@ -2081,32 +2298,48 @@ grid_shift_xy <- function(mrs_data, x_shift, y_shift) {
   mrs_data$data <- mat
   
   # put xy dims back to space
-  mrs_data <- mrsi2d_kspace2img(mrs_data)
+  mrs_data <- kspace2img_xy(mrs_data)
   return(mrs_data)
 }
 
 #' Zero-fill MRSI data in the k-space x-y direction.
 #' @param mrs_data MRSI data.
-#' @param factor zero-filling factor, factor of 2 returns a dataset with
-#' twice the original points in the x-y directions.
+#' @param factor zero-filling factor, a factor of 2 returns a dataset with
+#' twice the original points in the x-y directions. Factors smaller than one
+#' are permitted, such that a factor of 0.5 returns half the k-space points in
+#' the x-y directions.
 #' @return zero-filled data.
 #' @export
 zf_xy <- function(mrs_data, factor = 2) {
-  # TODO check data is 2D in xy dirn and make (much) faster by using afill
-  # TODO check this works for even numbers of rows and cols...
+  # TODO check this works for odd numbers of rows and cols...
   
   # check the input
-  check_mrs_data(mrs_data) 
+  check_mrs_data(mrs_data)
+  
+  if (factor == 1) return(mrs_data)
   
   # put xy dims into k-space
-  mrs_data <- apply_mrs(mrs_data, 2, ft_shift)
-  mrs_data <- apply_mrs(mrs_data, 3, ft_shift)
-  # apply filter
-  mrs_data <- apply_mrs(mrs_data, 2, zp_vec, dim(mrs_data)[2] * factor)
-  mrs_data <- apply_mrs(mrs_data, 3, zp_vec, dim(mrs_data)[3] * factor)
-  # put xy dims back to space
-  mrs_data <- apply_mrs(mrs_data, 2, ift_shift)
-  apply_mrs(mrs_data, 3, ift_shift)
+  mrs_data <- img2kspace_xy(mrs_data)
+  
+  orig_dims <- dim(mrs_data$data)
+  new_dims  <- orig_dims
+  new_dims[2] <- new_dims[2] * factor
+  new_dims[3] <- new_dims[3] * factor
+  
+  if (factor > 1) {
+    new_data <- array(0, dim = new_dims)
+    x_inds <- 1:orig_dims[2] + new_dims[2] / 2 - orig_dims[2] / 2
+    y_inds <- 1:orig_dims[3] + new_dims[3] / 2 - orig_dims[3] / 2
+    new_data[,x_inds, y_inds,,,,] <- mrs_data$data
+    mrs_data$data <- new_data 
+  } else {
+    x_inds <- 1:new_dims[2] + orig_dims[2] / 2 - new_dims[2] / 2
+    y_inds <- 1:new_dims[3] + orig_dims[3] / 2 - new_dims[3] / 2
+    mrs_data$data <- mrs_data$data[, x_inds, y_inds,,,,,drop = FALSE]
+  }
+  
+  # put xy dims back to spatial domain
+  mrs_data <- kspace2img_xy(mrs_data)
 }
 
 hamming_vec <- function(vector) {
@@ -2121,39 +2354,6 @@ zp_vec <- function(vector, n) {
   zp_vec
 }
 
-#' Combine coil data following phase correction based on the first data point
-#' in the FID.
-#' @param metab MRS data containing metabolite data.
-#' @param ref MRS data containing reference data (optional).
-#' @param sum_coils sum the coil elements as a final step (logical).
-#' @param ret_ref return the reference data following correction.
-#' @return MRS data.
-#' @export
-comb_coils_fp_pc <- function(metab, ref = NULL, sum_coils = TRUE,
-                             ret_ref = FALSE) {
-  
-  if (is_fd(metab)) metab <- fd2td(metab)
-  
-  if (is.null(ref)) ref <- metab
-  
-  if (is_fd(ref)) ref <- fd2td(ref)
-  
-  fp <- get_fp(ref)
-  mult <- exp(-1i * Arg(fp))
-  mult_full <- rep_array_dim(mult, 7, Npts(metab))
-  
-  metab$data <- metab$data * mult_full 
-  if (sum_coils) metab <- sum_coils(metab)
-  
-  if (ret_ref) {
-    ref$data <- ref$data * mult_full 
-    if (sum_coils) ref <- sum_coils(ref)
-    return(list(metab = metab, ref = ref))
-  } else {
-    return(metab)
-  }
-}
-
 #' Combine coil data based on the first data point of a reference signal.
 #' 
 #' By default, elements are phased and scaled prior to summation. Where a 
@@ -2164,16 +2364,23 @@ comb_coils_fp_pc <- function(metab, ref = NULL, sum_coils = TRUE,
 #' @param noise MRS data from a noise scan (optional).
 #' @param scale option to rescale coil elements based on the first data point
 #' (logical).
+#' @param scale_method one of "sig_noise_sq", "sig_noise" or "sig".
 #' @param sum_coils sum the coil elements as a final step (logical).
+#' @param noise_region the spectral region (in ppm) to estimate the noise.
 #' @return MRS data.
 #' @export
-comb_coils <- function(metab, ref = NULL, noise = NULL, 
-                       scale = TRUE, sum_coils = TRUE) {
+comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
+                       scale_method = "sig_noise_sq", sum_coils = TRUE,
+                       noise_region = c(-0.5, -2.5)) {
   
   metab_only <- FALSE
   if (is.null(ref)) {
     ref <- mean_dyns(metab)
     metab_only <- TRUE
+  }
+  
+  if (!(scale_method %in% c("sig_noise_sq", "sig_noise", "sig"))) {
+    stop("incorrect scale_method requested")
   }
   
   if (is_fd(metab)) metab <- fd2td(metab)
@@ -2191,32 +2398,41 @@ comb_coils <- function(metab, ref = NULL, noise = NULL,
   phi <- Arg(fp)
   amp <- Mod(fp)
   
-  if (scale) {
+  # maintain original spatial scaling
+  mean_amps <- apply(amp, c(1,2,3,4,5), mean)
+  dim(mean_amps) <- c(dim(mean_amps), 1, 1)
+  mean_amps <- rep_array_dim(mean_amps, 6, Ncoils(mean_ref))
+  amp <- amp / mean_amps
+  
+  if (scale & (scale_method != "sig")) {
     if (!is.null(noise)) {
       # estimate noise from noise data
-      amp <- amp / (calc_coil_noise_sd(noise) ^ 2)
+      if (scale_method == "sig_noise_sq") {
+        amp <- amp / (calc_coil_noise_sd(noise) ^ 2)
+      } else {
+        amp <- amp / calc_coil_noise_sd(noise)
+      }
+      
     } else {
       # estimate noise from first FID of the metab data
       metab_first <- get_dyns(metab, 1)
-      noise_data <- crop_spec(metab_first, c(-0.5, -2.5))
+      noise_data <- crop_spec(metab_first, noise_region)
       noise_sd <- est_noise_sd(noise_data, offset = 0, n = Npts(noise_data),
                                p_order = 2)
       
-      amp <- amp / (noise_sd ^ 2)
+      if (scale_method == "sig_noise_sq") {
+        amp <- amp / (noise_sd ^ 2)
+      } else {
+        amp <- amp / noise_sd
+      }
     }
   }
   
   # phase and scale ref data
-  ref_dims <- dim(ref$data)
-  
-  ang <- rep(phi, prod(ref_dims[-6]))
-  dim(ang) <- c(ref_dims[c(6, 2, 3, 4, 5, 1, 7)])
-  ang <- aperm(ang, c(6, 2, 3, 4, 5, 1, 7))
+  ang <- rep_array_dim(phi, 7, Npts(ref))
   
   if (scale) {
-    scale_f <- rep(amp, prod(ref_dims[-6]))
-    dim(scale_f) <- c(ref_dims[c(6, 2, 3, 4, 5, 1, 7)])
-    scale_f <- aperm(scale_f, c(6, 2, 3, 4, 5, 1, 7))
+    scale_f <- rep_array_dim(amp, 7, Npts(ref))
     
     ref_ps <- ref
     ref_ps$data <- ref$data * exp(-1i * ang) * scale_f
@@ -2228,16 +2444,10 @@ comb_coils <- function(metab, ref = NULL, noise = NULL,
   if (sum_coils) ref_ps <- sum_coils(ref_ps)
   
   # phase and scale metab data
-  metab_dims <- dim(metab$data)
-  
-  ang <- rep(phi, prod(metab_dims[-6]))
-  dim(ang) <- c(metab_dims[c(6, 2, 3, 4, 5, 1, 7)])
-  ang <- aperm(ang, c(6, 2, 3, 4, 5, 1, 7))
+  ang <- rep_array_dim(phi, 7, Npts(metab))
   
   if (scale) {
-    scale_f <- rep(amp, prod(metab_dims[-6]))
-    dim(scale_f) <- c(metab_dims[c(6, 2, 3, 4, 5, 1, 7)])
-    scale_f <- aperm(scale_f, c(6, 2, 3, 4, 5, 1, 7))
+    scale_f <- rep_array_dim(amp, 7, Npts(metab))
     
     metab_ps <- metab
     metab_ps$data <- metab$data * exp(-1i * ang) * scale_f
@@ -2569,31 +2779,66 @@ bc_als <- function(mrs_data, lambda = 1e4, p = 0.001) {
 }
 
 bc_als_vec <- function(vec, lambda, p) {
-  ptw::baseline.corr(Re(vec), lambda = lambda, p = p) 
+  if (is.na(vec[1]))
+    return(vec) 
+  else {
+    return(ptw::baseline.corr(Re(vec), lambda = lambda, p = p))
+  }
 }
 
-#' Back extrapolate time-domain points using the Burg autoregressive model
+#' Back extrapolate time-domain data points using an autoregressive model.
 #' @param mrs_data mrs_data object.
-#' @param n_pts number of points to extrapolate.
+#' @param extrap_pts number of points to extrapolate.
+#' @param pred_pts number of points to base the extrapolation on.
+#' @param method character string specifying the method to fit the model. Must
+#' be one of the strings in the default argument (the first few characters are
+#' sufficient). Defaults to "burg".
+#' @param rem_add remove additional points from the end of the FID to maintain
+#' the original length of the dataset. Default to TRUE.
+#' @param ... additional arguments to specific methods, see ?ar.
 #' @return back extrapolated data.
 #' @export
-back_extrap <- function(mrs_data, n_pts) {
+back_extrap_ar <- function(mrs_data, extrap_pts, pred_pts = NULL,
+                           method = "burg", rem_add = TRUE, ...) {
   
+  # a time-domain operation
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
   
   Np <- Npts(mrs_data) 
+  
   mrs_data$data <- mrs_data$data[,,,,,,Np:1, drop = FALSE]
-  mrs_data <- apply_mrs(mrs_data, 7, back_extrap_vec, n_pts)
-  mrs_data$data <- mrs_data$data[,,,,,,(Np + n_pts):1, drop = FALSE]
-  mrs_data
+  mrs_data <- apply_mrs(mrs_data, 7, back_extrap_vec, extrap_pts, pred_pts,
+                        method, ...)
+  mrs_data$data <- mrs_data$data[,,,,,,(Np + extrap_pts):1, drop = FALSE]
+  
+  if (rem_add) mrs_data <- get_subset(mrs_data, td_set = 1:Np)
+  
+  dimnames(mrs_data$data) <- NULL
+  
+  return(mrs_data)
 }
 
-back_extrap_vec <- function(vec, n_pts) {
-  new_pts_re <- as.numeric(stats::predict(stats::ar.burg(Re(vec)),
-                                          se.fit = FALSE, n.ahead = n_pts))
-  new_pts_im <- as.numeric(stats::predict(stats::ar.burg(Im(vec)),
-                                          se.fit = FALSE, n.ahead = n_pts))
-  c(vec, new_pts_re + new_pts_im * 1i)
+back_extrap_vec <- function(vec, extrap_pts, pred_pts, method, ...) {
+  
+  # use the full vector unless instructed otherwise
+  if (is.null(pred_pts)) {
+    pred_vec <- vec 
+  } else {
+    pred_vec <- utils::tail(vec, pred_pts)
+  }
+  
+  new_pts_re <- as.numeric(stats::predict(stats::ar(Re(pred_vec),
+                                                    method = method, ...),
+                                          n.ahead = extrap_pts,
+                                          se.fit = FALSE))
+  
+  new_pts_im <- as.numeric(stats::predict(stats::ar(Im(pred_vec),
+                                                    method = method, ...),
+                                          n.ahead = extrap_pts,
+                                          se.fit = FALSE))
+  
+  out <- c(vec, new_pts_re + new_pts_im * 1i)
+  return(out)
 }
 
 #' Calculate the sum of squares differences between two mrs_data objects.
@@ -2620,7 +2865,7 @@ calc_spec_diff <- function(mrs_data, ref = NULL, xlim = c(4, 0.5)) {
 #' @param mrs_data 2D MRSI data.
 #' @return k-space data.
 #' @export
-mrsi2d_img2kspace <- function(mrs_data) {
+img2kspace_xy <- function(mrs_data) {
   
   # check the input
   check_mrs_data(mrs_data) 
@@ -2628,16 +2873,17 @@ mrsi2d_img2kspace <- function(mrs_data) {
   mrsi_dims <- dim(mrs_data$data) 
   x_dim <- mrsi_dims[2]
   y_dim <- mrsi_dims[3]
+  coils <- mrsi_dims[6]
   N <- mrsi_dims[7]
   mat <- mrs_data$data
   mat <- drop(mat)
-  dim(mat) <- c(x_dim, y_dim * N)
+  dim(mat) <- c(x_dim, y_dim * N * coils)
   mat <- ft_shift_mat(mat)
-  dim(mat) <- c(x_dim, y_dim, N)
+  dim(mat) <- c(x_dim, y_dim, N * coils)
   mat <- aperm(mat, c(2, 1, 3))
-  dim(mat) <- c(y_dim, x_dim * N)
+  dim(mat) <- c(y_dim, x_dim * N * coils)
   mat <- ft_shift_mat(mat)
-  dim(mat) <- c(y_dim, x_dim, N)
+  dim(mat) <- c(y_dim, x_dim, N * coils)
   mat <- aperm(mat, c(2, 1, 3))
   dim(mat) <- mrsi_dims
   mrs_data$data <- mat
@@ -2648,7 +2894,7 @@ mrsi2d_img2kspace <- function(mrs_data) {
 #' @param mrs_data 2D MRSI data.
 #' @return MRSI data in image space.
 #' @export
-mrsi2d_kspace2img <- function(mrs_data) {
+kspace2img_xy <- function(mrs_data) {
   
   # check the input
   check_mrs_data(mrs_data) 
@@ -2656,16 +2902,17 @@ mrsi2d_kspace2img <- function(mrs_data) {
   mrsi_dims <- dim(mrs_data$data) 
   x_dim <- mrsi_dims[2]
   y_dim <- mrsi_dims[3]
+  coils <- mrsi_dims[6]
   N <- mrsi_dims[7]
   mat <- mrs_data$data
   mat <- drop(mat)
-  dim(mat) <- c(x_dim, y_dim * N)
+  dim(mat) <- c(x_dim, y_dim * N * coils)
   mat <- ift_shift_mat(mat)
-  dim(mat) <- c(x_dim, y_dim, N)
+  dim(mat) <- c(x_dim, y_dim, N * coils)
   mat <- aperm(mat, c(2, 1, 3))
-  dim(mat) <- c(y_dim, x_dim * N)
+  dim(mat) <- c(y_dim, x_dim * N * coils)
   mat <- ift_shift_mat(mat)
-  dim(mat) <- c(y_dim, x_dim, N)
+  dim(mat) <- c(y_dim, x_dim, N * coils)
   mat <- aperm(mat, c(2, 1, 3))
   dim(mat) <- mrsi_dims
   mrs_data$data <- mat
@@ -2683,51 +2930,247 @@ set_lw <- function(mrs_data, lw, xlim = c(4, 0.5)) {
   # check the input
   check_mrs_data(mrs_data) 
   
-  # measure current lw and check it is narrower than requested
-  init_lw <- peak_info(mrs_data, xlim)$fwhm_ppm[1]
+  # start in the frequency-domain
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
-  if (init_lw > lw) stop("Error, target linewidth is too narrow.")
+  # get an example spectrum for the data parameters 
+  single_mrs <- get_subset(mrs_data, x_set = 1, y_set = 1, z_set = 1,
+                           dyn_set = 1, coil_set = 1)
   
-  res <- stats::optim(0, lw_obj_fn, NULL, mrs_data, lw, lower = 0, upper = 50,
-         method = "Brent")
+  lb_res <- apply_mrs(mrs_data, 7, optim_set_lw, lw, xlim, single_mrs,
+                   data_only = TRUE)
   
-  return(lb(mrs_data, res$par[1]))
+  # apply the lb parameter to the full dataset
+  res <- lb(mrs_data, lb_res)
+  
+  return(res)
 }
 
-lw_obj_fn <- function(lb, mrs_data, lw) {
-  mrs_data <- lb(mrs_data, lb)
-  new_lw <- peak_info(mrs_data)$fwhm_ppm[1]
+optim_set_lw <- function(x, lw, xlim, single_mrs) {
+  single_mrs$data[1,1,1,1,1,1,] <- x
+  
+  # return NA if the spectrum has been masked
+  if (is.na(x[1])) return(NA)
+  
+  # measure current lw and check it is narrower than requested
+  init_lw <- peak_info(single_mrs, xlim)$fwhm_ppm[1]
+  if (init_lw > lw) {
+    warning("Target linewidth is too narrow, masking spectrum.")
+    return(NA)
+  }
+  
+  # convert lw to Hz to get the upper value for 1D search
+  upper_lw <- lw * single_mrs$ft / 1e6
+  
+  res <- stats::optim(0, lw_obj_fn, NULL, single_mrs, lw, xlim, lower = 0,
+                      upper = upper_lw, method = "Brent")
+  
+  return(res$par[1])
+}
+
+lw_obj_fn <- function(lb_val, mrs_data, lw, xlim) {
+  mrs_data <- lb(mrs_data, lb_val)
+  new_lw   <- peak_info(mrs_data, xlim)$fwhm_ppm[1]
   Mod(new_lw - lw)
 }
 
+#' Perform l2 regularisation artefact suppression.
+#' 
 #' Perform l2 regularisation artefact suppression using the method proposed by
 #' Bilgic et al. JMRI 40(1):181-91 2014.
 #' @param mrs_data input data for artefact suppression.
-#' @param A matrix of spectral data points containing the artefact basis 
-#' signals.
+#' @param thresh threshold parameter to extract lipid signals from mrs_data
+#' based on the integration of the full spectral width in magnitude mode.
 #' @param b regularisation parameter.
+#' @param A set of spectra containing the artefact basis signals. The thresh
+#' parameter is ignored when A is specified.
+#' @param xlim spectral limits in ppm to restrict the reconstruction range.
+#' Defaults to the full spectral width.
 #' @return l2 reconstructed mrs_data object.
 #' @export
-l2_reg <- function(mrs_data, A, b) {
+l2_reg <- function(mrs_data, thresh = 0.05, b = 1e-11, A = NA, xlim = NA) {
   
   # generally done as a FD operation
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
-  A <- t(A)
-  if (nrow(A) != Npts(mrs_data)) stop("l2 reg. A matrix dimensions do not agree with the input data")
+  # crop mrs_data to xlim if specified
+  if (!anyNA(xlim)) mrs_data <- crop_spec(mrs_data, xlim)
   
-  orig_dim <- dim(mrs_data$data)
+  # get the data dimensions per coil
+  res_dim <- dim(mrs_data$data)
+  res_dim[6] <- 1
   
-  # original data
-  x0 <- t(mrs_data2mat(collapse_to_dyns(mrs_data)))
+  if (!anyNA(A)) {
+    if (!is_fd(A)) A <- td2fd(A)
+    # crop A to xlim if specified
+    if (!anyNA(xlim)) A <- crop_spec(A, xlim)
+    A_coil <- t(stats::na.omit(mrs_data2mat(A)))
+  }
   
-  # recon. matrix 
-  recon_mat <- solve(diag(nrow(A)) + b * A %*% Conj(t(A)))
-  
-  # recon data
-  x <- recon_mat %*% x0
-  x <- t(x) 
-  dim(x) <- orig_dim
-  mrs_data$data <- x
+  for (coil in 1:Ncoils(mrs_data)) {
+    
+    mrs_data_coil <- get_subset(mrs_data, coil_set = coil)
+    
+    if (anyNA(A)) {
+      map <- drop(int_spec(mrs_data_coil, mode = "mod"))
+      map_bool <- map > (max(map) * thresh)
+      mrsi_mask <- mask_xy_mat(mrs_data_coil, mask = !map_bool)
+      A_coil <- t(stats::na.omit(mrs_data2mat(mrsi_mask)))
+    }
+    
+    # original data as a matrix
+    x0 <- t(mrs_data2mat(mrs_data_coil))
+    
+    # recon. matrix 
+    recon_mat <- solve(diag(nrow(A_coil)) + b * A_coil %*% Conj(t(A_coil)))
+    
+    # recon data
+    x <- recon_mat %*% x0
+    x <- t(x) 
+    dim(x) <- res_dim
+    mrs_data$data[,,,,,coil,] <- x
+  }
+    
   return(mrs_data)
+}
+
+#' Signal space projection method for lipid suppression.
+#' 
+#' Signal space projection method as described in:
+#' Tsai SY, Lin YR, Lin HY, Lin FH. Reduction of lipid contamination in MR
+#' spectroscopy imaging using signal space projection. Magn Reson Med 2019
+#' Mar;81(3):1486-1498.
+#' 
+#' @param mrs_data MRS data object.
+#' @param comps the number of spatial components to use.
+#' @param xlim spectral range (in ppm) covering the lipid signals.
+#' @return lipid suppressed \code{mrs_data} object.
+#' @export
+ssp <- function(mrs_data, comps = 5, xlim = c(1.5, 0.8)) {
+  
+  # normally a FD operation
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  # chop out the lipid region
+  D_ol_mrs <- crop_spec(mrs_data, xlim)
+  
+  # get the data dimensions per coil
+  res_dim <- dim(mrs_data$data)
+  res_dim[6] <- 1
+  
+  for (coil in 1:Ncoils(mrs_data)) {
+    # extract the lipid region
+    D_ol <- mrs_data2mat(get_subset(D_ol_mrs, coil_set = coil))
+    
+    # SVD
+    svd_res <- svd(D_ol)
+    
+    # get the top spatial components
+    U_m <- svd_res$u[,1:comps]
+    
+    # remove the lipids from the input
+    D_ori <- mrs_data2mat(get_subset(mrs_data, coil_set = coil))
+    P <- diag(nrow(U_m)) - U_m %*% Conj(t(U_m))
+    D_supp <- P %*% D_ori
+    
+    # restructure back into an mrs_data object
+    dim(D_supp) <- res_dim
+    
+    # replace the input data points
+    mrs_data$data[,,,,,coil,] <- D_supp
+  }
+  dimnames(mrs_data$data) <- NULL
+  
+  return(mrs_data)
+}
+
+#' Generate mrs_data from a table of single Lorentzian resonances.
+#' @param reson_table as produced by the hsvd function.
+#' @param acq_paras list of acquisition parameters. See
+#' @param back_extrap_pts number of data points to back extrapolate
+#' \code{\link{def_acq_paras}}
+#' @return mrs_data object.
+#' @export
+reson_table2mrs_data <- function(reson_table, acq_paras = def_acq_paras(),
+                                 back_extrap_pts = 0) {
+  
+  if (class(acq_paras) == "mrs_data") acq_paras <- get_acq_paras(acq_paras)
+  
+  sim_resonances(freq = reson_table$frequency_ppm, amp = reson_table$amplitude,
+                 phase = reson_table$phase, lw = reson_table$lw_hz,
+                 acq_paras = acq_paras, fp_scale = FALSE,
+                 back_extrap_pts = back_extrap_pts)
+}
+
+#' Papoulis-Gerchberg (PG) algorithm method for k-space extrapolation.
+#' 
+#' PG method as described in: Haupt CI, Schuff N, Weiner MW, Maudsley AA.
+#' Removal of lipid artifacts in 1H spectroscopic imaging by data extrapolation.
+#' Magn Reson Med. 1996 May;35(5):678-87. Extrapolation is performed to expand
+#' k-space coverage by a factor of 2, with the aim to reduce Gibbs ringing.
+#' 
+#' @param mrs_data MRS data object.
+#' @param img_mask a boolean matrix of voxels with strong signals to be
+#' extrapolated. Must be twice the dimensions of the input data.
+#' @param kspace_mask a boolean matrix of kspace points that have been sampled.
+#' Typically a circle for MRSI, but defaults to the full rectangular area of
+#' k-space covered by the input data. Must match the x-y dimensions of the input
+#' data.
+#' @param intensity_thresh used to define img_mask based on the strength of the
+#' signal in each voxel. Defaults to intensities greater than 15% of the
+#' maximum. Ignored if img_mask is specified as argument.
+#' @param iters number of iterations to perform.
+#' @return extrapolated \code{mrs_data} object.
+#' @export
+pg_extrap_xy <- function(mrs_data, img_mask = NULL, kspace_mask = NULL,
+                         intensity_thresh = 0.15, iters = 50) {
+  
+  # zero fill kspace by a factor of two
+  mrs_data_zf <- zf_xy(mrs_data)
+  
+  # central mask of original k-space values
+  # would typically be circular for MRSI but we assume rectangular unless told
+  # otherwise
+  kspace_mask_full <- matrix(FALSE, Nx(mrs_data_zf), Ny(mrs_data_zf)) 
+  x_inds <- 1:Nx(mrs_data) + Nx(mrs_data_zf) / 2 - Nx(mrs_data) / 2
+  y_inds <- 1:Ny(mrs_data) + Ny(mrs_data_zf) / 2 - Nx(mrs_data) / 2
+  if (is.null(kspace_mask)) {
+    # assume rectangular
+    kspace_mask_full[x_inds, y_inds] <- TRUE
+  } else {
+    kspace_mask_full[x_inds, y_inds] <- kspace_mask
+  }
+  
+  # make sure points outside the kspace mask are zero at the start
+  mrs_data_ksp_zf <- img2kspace_xy(mrs_data_zf)
+  mrs_data_ksp_zf_zerod <- mask_xy_mat(mrs_data_ksp_zf,
+                                       mask = !kspace_mask_full, value = 0)
+  mrs_data_zf <- kspace2img_xy(mrs_data_ksp_zf_zerod)
+ 
+  # save a copy 
+  mrs_data_zf_orig <- mrs_data_zf
+  
+  # get an image mask from the interpolated data, generally a scalp lipid mask
+  if (is.null(img_mask)) {
+    img_map  <- drop(int_spec(mrs_data_zf, mode = "mod"))
+    img_mask <- img_map > (max(img_map) * intensity_thresh)
+  }
+  
+  for (n in 1:iters) {
+    # set all voxels not included in the image mask to zero
+    mask_only <- mask_xy_mat(mrs_data_zf, mask = !img_mask, value = 0)
+    
+    # transform to kspace
+    mask_only_ksp <- img2kspace_xy(mask_only)
+    
+    # set inner kspace values (in the kspace_mask_full) to zero to maintain the
+    # original values in the following step
+    mask_only_ksp <- mask_xy_mat(mask_only_ksp, kspace_mask_full, value = 0)
+    
+    # add new peripheral k-space values to the original zero-filled data
+    mrs_data_zf <- kspace2img_xy(img2kspace_xy(mrs_data_zf_orig) +
+                                     mask_only_ksp)
+  }
+  
+  return(mrs_data_zf)
 }

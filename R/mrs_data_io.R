@@ -2,8 +2,8 @@
 #' @param fname filename of the dpt format MRS data.
 #' @param format string describing the data format. Must be one of the 
 #' following : "spar_sdat", "rda", "ima", "twix", "pfile", "list_data",
-#' "paravis", "dpt", "lcm_raw", "rds", "nifti". If not specified, the format
-#' will be guessed from the filename extension.
+#' "paravis", "dpt", "lcm_raw", "rds", "nifti", "varian". If not specified,
+#' the format will be guessed from the filename extension.
 #' @param ft transmitter frequency in Hz (required for list_data format).
 #' @param fs sampling frequency in Hz (required for list_data format).
 #' @param ref reference value for ppm scale (required for list_data format).
@@ -54,6 +54,8 @@ read_mrs <- function(fname, format = NULL, ft = NULL, fs = NULL, ref = NULL,
     return(mrs_data)
   } else if (format == "nifti") {
     return(read_mrs_nifti(fname))
+  } else if (format == "varian") {
+    return(read_varian(fname))
   } else {
     stop("Unrecognised file format.")
   }
@@ -86,6 +88,8 @@ guess_mrs_format <- function(fname) {
     format <- "rds"
   } else if (stringr::str_ends(fname_low, ".raw")) {
     format <- "lcm_raw"
+  } else if (basename(fname_low) == "fid") {
+    format <- "varian"
   } else {
     stop("Could not guess the MRS format, please specify the format argument.")
   }
@@ -146,6 +150,7 @@ read_mrs_dpt <- function(fname) {
   cols <- as.integer(header$V2[10])
   slices <- as.integer(header$V2[11])
   pix_sp <- header$V2[12]
+  
   if (pix_sp == "Unknown") {
     row_dim <- NA
     col_dim <- NA
@@ -176,10 +181,11 @@ read_mrs_dpt <- function(fname) {
     row_vec <- IOP[1:3]
     col_vec <- IOP[4:6]
   } else {
-    row_vec = NA  
-    col_vec = NA  
+    row_vec <- NA  
+    col_vec <- NA  
   }
   pos_vec <- IPP
+  sli_vec <- crossprod_3d(row_vec, col_vec)
   
   # read the data points  
   raw_data <- utils::read.table(fname, skip = 16, as.is = TRUE)
@@ -204,9 +210,14 @@ read_mrs_dpt <- function(fname) {
   # freq domain vector vector
   freq_domain <- rep(FALSE, 7)
   
+  # defaults
+  nuc <- def_nuc()
+  
   mrs_data <- list(ft = ft, data = data_arr, resolution = res, te = te,
-                   ref = ref, row_vec = row_vec, col_vec = col_vec,
-                   pos_vec = pos_vec, freq_domain = freq_domain)
+                   ref = ref, nuc = nuc, row_vec = row_vec, col_vec = col_vec,
+                   sli_vec = sli_vec, pos_vec = pos_vec,
+                   freq_domain = freq_domain)
+  
   class(mrs_data) <- "mrs_data"
   mrs_data
 }

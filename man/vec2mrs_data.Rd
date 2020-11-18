@@ -9,6 +9,7 @@ vec2mrs_data(
   fs = def_fs(),
   ft = def_ft(),
   ref = def_ref(),
+  nuc = def_nuc(),
   dyns = 1,
   fd = FALSE
 )
@@ -21,6 +22,8 @@ vec2mrs_data(
 \item{ft}{transmitter frequency in Hz.}
 
 \item{ref}{reference value for ppm scale.}
+
+\item{nuc}{resonant nucleus.}
 
 \item{dyns}{replicate the data across the dynamic dimension.}
 
