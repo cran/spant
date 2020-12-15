@@ -45,9 +45,11 @@ read_rda <- function(fname) {
   col_ori[2] <- as.numeric(txt$V2[which(txt$V1 == "ColumnVector[1]")])
   col_ori[3] <- as.numeric(txt$V2[which(txt$V1 == "ColumnVector[2]")])
   
-  row_vox_dim <- as.numeric(txt$V2[which(txt$V1 == "PixelSpacingCol")])
-  col_vox_dim <- as.numeric(txt$V2[which(txt$V1 == "PixelSpacingRow")])
+  col_vox_dim <- as.numeric(txt$V2[which(txt$V1 == "PixelSpacingCol")])
+  row_vox_dim <- as.numeric(txt$V2[which(txt$V1 == "PixelSpacingRow")])
   slice_vox_dim <- as.numeric(txt$V2[which(txt$V1 == "PixelSpacing3D")])
+  
+  pos_vec_file <- pos_vec
   
   pos_vec <- pos_vec + row_ori * row_vox_dim / 2 + col_ori * col_vox_dim / 2
   sli_vec <- crossprod_3d(row_ori, col_ori)
@@ -68,7 +70,7 @@ read_rda <- function(fname) {
   dim(data) <- c(N, rows, cols, slices, 1, 1, 1)
   data <- aperm(data, c(7, 2, 3, 4, 5, 6, 1))
   
-  res <- c(NA, row_vox_dim, col_vox_dim, slice_vox_dim, 1, NA, 1 / fs)
+  res <- c(NA, col_vox_dim, row_vox_dim, slice_vox_dim, 1, NA, 1 / fs)
   ref <- def_ref()
   
   # TODO determine from the data
@@ -77,11 +79,17 @@ read_rda <- function(fname) {
   # freq domain vector
   freq_domain <- rep(FALSE, 7)
   
-  mrs_data <- list(ft = ft, data = data, resolution = res, te = te, ref = ref, 
-                   nuc = nuc, row_vec = row_ori, col_vec = col_ori,
-                   sli_vec = sli_vec, pos_vec = pos_vec,
-                   freq_domain = freq_domain)
+  pos_vec_affine <- pos_vec_file + row_ori * res[2] / 2 + col_ori * res[3] / 2
   
-  class(mrs_data) <- "mrs_data"
-  mrs_data
+  affine <- cbind(c(row_ori * res[2], 0),
+                  c(col_ori * res[3], 0),
+                  c(sli_vec * res[4], 0),
+                  c(pos_vec_affine, 1))
+  affine[1:2,] <- -affine[1:2,]
+  
+  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, te = te,
+                       ref = ref, nuc = nuc, freq_domain = freq_domain,
+                       affine = affine, meta = NULL)
+  
+  return(mrs_data)
 }

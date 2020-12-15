@@ -30,12 +30,12 @@ plot(mrs_data_zf, xlim = c(4, 0.5))
 
 ## -----------------------------------------------------------------------------
 mrs_data_filt <- hsvd_filt(mrs_data)
-stackplot(append_dyns(mrs_data, mrs_data_filt), xlim = c(5, 0.5), y_offset = 10,
+stackplot(list(mrs_data, mrs_data_filt), xlim = c(5, 0.5), y_offset = 10,
           col = c("black", "red"), labels = c("original", "filtered"))
 
 ## -----------------------------------------------------------------------------
 mrs_data_shift <- shift(mrs_data, 0.1, "ppm")
-stackplot(append_dyns(mrs_data, mrs_data_shift), xlim = c(4, 0.5), y_offset = 10,
+stackplot(list(mrs_data, mrs_data_shift), xlim = c(4, 0.5), y_offset = 10,
           col = c("black", "red"), labels = c("original", "shifted"))
 
 ## -----------------------------------------------------------------------------

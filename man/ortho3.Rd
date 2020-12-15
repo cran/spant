@@ -10,7 +10,7 @@ ortho3(
   xyz = NULL,
   zlim = NULL,
   zlim_ol = NULL,
-  alpha = 1,
+  alpha = 0.7,
   col_ol = viridisLite::viridis(64),
   orient_lab = TRUE,
   rescale = 1,
@@ -19,7 +19,7 @@ ortho3(
   colourbar = TRUE,
   bg = "black",
   mar = c(0, 0, 0, 0),
-  smallplot = c(0.5, 0.52, 0.1, 0.4)
+  smallplot = c(0.63, 0.65, 0.07, 0.42)
 )
 }
 \arguments{

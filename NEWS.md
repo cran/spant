@@ -1,3 +1,18 @@
+# spant 1.9.0
+* NIfTI MRS reader and writer now uses the header extension for metadata. Thanks
+to Jon Clayden for adding extension read/write support to the RNifti package.
+* Default plots now have gridlines in the y-direction and the plot line is now
+thicker and colored blue.
+* Opacity option added to the plotting functions (alpha).
+* Bug fix for comb_coils with SVS data.
+* Bug fixes for Siemens geometry information.
+* Changed the ordering of arguments to write_mrs and write_mrs_nifti to improve 
+consistency with other functions.
+* Internal function (ortho3) now used to plot voxel locations on MRI.
+* Internal dicom reader function added.
+* Tentative support for Siemens and Philips DICOM MRS format added.
+* Internal changes to the way orientation information is handled.
+
 # spant 1.8.0
 * Added gridplot function.
 * New functions added for down sampling.

@@ -93,13 +93,11 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
   
   data <- array(data,dim = c(1, 1, 1, 1, 1, 1, acq_paras$N + back_extrap_pts))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / acq_paras$fs)
-  mrs_data <- list(ft = acq_paras$ft, data = data, resolution = res, te = 0, 
-                   ref = acq_paras$ref, nuc = acq_paras$nuc,
-                   row_vec = c(1, 0, 0), col_vec = c(0, 1, 0),
-                   sli_vec = c(0, 0, 1), pos_vec = c(0, 0, 0),
-                   freq_domain = rep(FALSE, 7))
   
-  class(mrs_data) <- "mrs_data"
+  mrs_data <- mrs_data(data = data, ft = acq_paras$ft, resolution = res,
+                       te = NULL, ref = acq_paras$ref, nuc = acq_paras$nuc,
+                       freq_domain = rep(FALSE, 7), affine = NULL, meta = NULL)
+  
   return(mrs_data)
 }
 
@@ -133,12 +131,10 @@ sim_resonances_fast <- function(freq = 0, amp = 1, freq_ppm = TRUE,
   
   data <- array(data,dim = c(1, 1, 1, 1, 1, 1, N))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
-  mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref,
-                   nuc = nuc, row_vec = c(1, 0, 0), col_vec = c(0, 1, 0),
-                   sli_vec = c(0, 0, 1), pos_vec = c(0,0,0), 
-                   freq_domain = rep(FALSE, 7))
-  
-  class(mrs_data) <- "mrs_data"
+    
+  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, te = NULL,
+                       ref = ref, nuc = nuc, freq_domain = rep(FALSE, 7),
+                       affine = NULL, meta = NULL)
   
   return(mrs_data)
 }
@@ -179,14 +175,11 @@ sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
   
   data <- array(data, dim = c(1, 1, 1, 1, 1, 1, N))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
-  mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref, 
-                   nuc = nuc, row_vec = c(1, 0, 0), col_vec = c(0, 1, 0), 
-                   sli_vec = c(0, 0, 1), pos_vec = c(0,0,0), 
-                   freq_domain = rep(FALSE, 7))
   
-  print(res$par)
+  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, te = NULL,
+                       ref = ref, nuc = nuc, freq_domain = rep(FALSE, 7),
+                       affine = NULL, meta = NULL)
   
-  class(mrs_data) <- "mrs_data"
   return(mrs_data)
 }
 
@@ -207,12 +200,11 @@ vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
   data <- aperm(data,c(2, 1))
   dim(data) <- c(1, 1, 1, 1, dyns, 1, length(vec))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
-  mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref, 
-                   nuc = nuc, row_vec = c(1, 0, 0), col_vec = c(0, 1, 0),
-                   sli_vec = c(0, 0, 1), pos_vec = c(0, 0, 0), 
-                   freq_domain = c(rep(FALSE, 6), fd))
   
-  class(mrs_data) <- "mrs_data"
+  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, te = NA,
+                       ref = ref, nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
+                       affine = NA, meta = NA)
+  
   return(mrs_data)
 }
 
@@ -232,12 +224,11 @@ array2mrs_data <- function(data_array, fs = def_fs(), ft = def_ft(),
   if (length(dim(data_array)) != 7) stop("Incorrect number of dimensions.")
   
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
-  mrs_data <- list(ft = ft, data = data_array, resolution = res, te = 0,
-                   ref = ref, nuc = nuc, row_vec = c(1, 0, 0),
-                   col_vec = c(0, 1, 0), sli_vec = c(0, 0, 1),
-                   pos_vec = c(0, 0, 0), freq_domain = c(rep(FALSE, 6), fd))
   
-  class(mrs_data) <- "mrs_data"
+  mrs_data <- mrs_data(data = data_array, ft = ft, resolution = res, te = NULL,
+                       ref = ref, nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
+                       affine = NULL, meta = NULL)
+  
   return(mrs_data)
 }
 
@@ -289,12 +280,11 @@ mat2mrs_data <- function(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(),
   
   data <- array(mat, dim = c(1, 1, 1, 1, nrow(mat), 1, ncol(mat)))
   res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
-  mrs_data <- list(ft = ft, data = data, resolution = res, te = 0, ref = ref, 
-                   nuc = nuc, row_vec = c(1, 0, 0), col_vec = c(0, 1, 0),
-                   sli_vec = c(0, 0, 1), pos_vec = c(0, 0, 0), 
-                   freq_domain = c(rep(FALSE, 6), fd))
   
-  class(mrs_data) <- "mrs_data"
+  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, te = NULL,
+                       ref = ref, nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
+                       affine = NULL, meta = NULL)
+  
   return(mrs_data)
 }
 
@@ -1402,9 +1392,13 @@ crop_xy <- function(mrs_data, x_dim, y_dim) {
   y_set <- floor(y_set) # could be floor or ceil, need to test
   x_offset <- x_set[1] - 1
   y_offset <- y_set[1] - 1
-  mrs_data$pos_vec <- mrs_data$pos_vec +
-                      x_offset * mrs_data$row_vec * mrs_data$resolution[2] +
-                      y_offset * mrs_data$col_vec * mrs_data$resolution[3]
+  
+  affine <- mrs_data$affine
+  
+  affine[1:3, 4] <- affine[1:3, 4] + mrs_data$affine[1:3, 1] * x_offset +
+                                     mrs_data$affine[1:3, 2] * y_offset
+  
+  mrs_data$affine <- affine
   
   return(get_subset(mrs_data, x_set = x_set, y_set = y_set))
 }
@@ -2367,15 +2361,17 @@ zp_vec <- function(vector, n) {
 #' @param scale_method one of "sig_noise_sq", "sig_noise" or "sig".
 #' @param sum_coils sum the coil elements as a final step (logical).
 #' @param noise_region the spectral region (in ppm) to estimate the noise.
+#' @param average_ref_dyns take the mean of the reference scans in the dynamic
+#' dimension before use.
 #' @return MRS data.
 #' @export
 comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
                        scale_method = "sig_noise_sq", sum_coils = TRUE,
-                       noise_region = c(-0.5, -2.5)) {
+                       noise_region = c(-0.5, -2.5), average_ref_dyns = TRUE) {
   
   metab_only <- FALSE
   if (is.null(ref)) {
-    ref <- mean_dyns(metab)
+    ref <- metab
     metab_only <- TRUE
   }
   
@@ -2387,21 +2383,18 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
   
   if (is_fd(ref)) ref <- fd2td(ref)
   
-  # get the first dynamic of the ref data
-  # first_ref <- get_dyns(ref, 1)
-  # fp <- get_fp(first_ref)
+  # get the dynamic mean of the ref data (better to take the first dynamic in
+  # some cases?)
+  if (average_ref_dyns) ref <- mean_dyns(ref)
   
-  # get the dynamic mean of the ref data
-  mean_ref <- mean_dyns(ref)
-  fp <- get_fp(mean_ref)
-  
+  fp <- get_fp(ref)
   phi <- Arg(fp)
   amp <- Mod(fp)
   
   # maintain original spatial scaling
   mean_amps <- apply(amp, c(1,2,3,4,5), mean)
   dim(mean_amps) <- c(dim(mean_amps), 1, 1)
-  mean_amps <- rep_array_dim(mean_amps, 6, Ncoils(mean_ref))
+  mean_amps <- rep_array_dim(mean_amps, 6, Ncoils(ref))
   amp <- amp / mean_amps
   
   if (scale & (scale_method != "sig")) {
@@ -2429,10 +2422,15 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
   }
   
   # phase and scale ref data
+  
+  # repeat across the FID and dynamic dimensions
   ang <- rep_array_dim(phi, 7, Npts(ref))
+  if (Ndyns(ref) > 1) ang <- rep_array_dim(ang, 5, Ndyns(ref))
   
   if (scale) {
+    # repeat across the FID and dynamic dimensions
     scale_f <- rep_array_dim(amp, 7, Npts(ref))
+    if (Ndyns(ref) > 1) scale_f <- rep_array_dim(scale_f, 5, Ndyns(ref))
     
     ref_ps <- ref
     ref_ps$data <- ref$data * exp(-1i * ang) * scale_f
@@ -2444,10 +2442,15 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
   if (sum_coils) ref_ps <- sum_coils(ref_ps)
   
   # phase and scale metab data
+  
+  # repeat across the FID and dynamic dimensions
   ang <- rep_array_dim(phi, 7, Npts(metab))
+  if (Ndyns(metab) > 1) ang <- rep_array_dim(ang, 5, Ndyns(metab))
   
   if (scale) {
+    # repeat across the FID and dynamic dimensions
     scale_f <- rep_array_dim(amp, 7, Npts(metab))
+    if (Ndyns(metab) > 1) scale_f <- rep_array_dim(scale_f, 5, Ndyns(metab))
     
     metab_ps <- metab
     metab_ps$data <- metab$data * exp(-1i * ang) * scale_f

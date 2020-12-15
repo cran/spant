@@ -114,6 +114,7 @@ get_mrsi_voxel_xy_psf <- function(mrs_data, target_mri, x_pos, y_pos, z_pos) {
 #' @export
 get_mrsi_voi <- function(mrs_data, target_mri = NULL, map = NULL,
                          ker = mmand::boxKernel()) {
+  #affine <- get_mrs_affine(mrs_data)
   affine <- get_mrs_affine(mrs_data)
   
   rows   <- dim(mrs_data$data)[2]
@@ -130,7 +131,6 @@ get_mrsi_voi <- function(mrs_data, target_mri = NULL, map = NULL,
     # assume 2D xy map for now
     #resamp_map <- mmand::rescale(drop(map), 10, mmand::mnKernel())
     resamp_map <- mmand::rescale(drop(map), mrs_data$resolution[2], ker)
-    resamp_map <- t(resamp_map)
     raw_data <- array(resamp_map, voi_dim) 
   }
   
@@ -172,10 +172,21 @@ resample_img <- function(source, target, interp = 3L) {
 
 #' Plot a volume as an image overlay.
 #' @export
-#' @param voi volume data as a nifti object.
-#' @param mri image data as a nifti object.
+#' @param voi volume data as a nifti object or path to data file.
+#' @param mri image data as a nifti object or path to data file.
 #' @param flip_lr flip the image in the left-right direction.
-plot_voi_overlay <- function(voi, mri, flip_lr = TRUE) {
+#' @param export_path optional path to save the image in png format.
+plot_voi_overlay <- function(voi, mri, flip_lr = FALSE, export_path = NULL) {
+  
+  if ("character" %in% class(mri)) mri <- RNifti::readNifti(mri)
+  
+  if ("character" %in% class(voi)) {
+    mrs_data <- read_mrs(voi)
+    voi <- get_svs_voi(mrs_data, mri)
+  } else if (class(voi)[1] == "mrs_data") {
+    voi <- get_svs_voi(voi, mri)
+  }
+  
   # check the image orientation etc is the same
   check_geom(voi, mri)
  
@@ -187,18 +198,34 @@ plot_voi_overlay <- function(voi, mri, flip_lr = TRUE) {
   
   # get the centre of gravity coords
   vox_inds <- get_voi_cog(voi)
-  plot_col <- add_alpha(grDevices::heat.colors(10), 0.4)
-  mri_oro <- neurobase::robust_window(oro.nifti::nifti(mri))
-  neurobase::ortho2(mri_oro, oro.nifti::nifti(voi), xyz = vox_inds, 
-                    col.y = plot_col, zlim.y = c(1, 2))
+  plot_col <- grDevices::heat.colors(10)
+  
+  zlim <- stats::quantile(mri, probs = c(0, 0.999))
+  
+  if (!is.null(export_path)) grDevices::png(export_path)
+  ortho3(mri, voi, xyz = vox_inds, col_ol = plot_col, zlim = zlim,
+         zlim_ol = c(0.99, 2), alpha = 0.4, colourbar = FALSE)
+  if (!is.null(export_path)) grDevices::dev.off()
 }
 
 #' Plot a volume as an overlay on a segmented brain volume.
 #' @param voi volume data as a nifti object.
 #' @param mri_seg segmented brain volume as a nifti object.
 #' @param flip_lr flip the image in the left-right direction.
+#' @param export_path optional path to save the image in png format.
 #' @export
-plot_voi_overlay_seg <- function(voi, mri_seg, flip_lr = TRUE) {
+plot_voi_overlay_seg <- function(voi, mri_seg, flip_lr = FALSE,
+                                 export_path = NULL) {
+  
+  if ("character" %in% class(mri_seg)) mri_seg <- RNifti::readNifti(mri_seg)
+  
+  if ("character" %in% class(voi)) {
+    mrs_data <- read_mrs(voi)
+    voi <- get_svs_voi(mrs_data, mri_seg)
+  } else if (class(voi)[1] == "mrs_data") {
+    voi <- get_svs_voi(voi, mri_seg)
+  }
+  
   # check the image orientation etc is the same
   check_geom(voi, mri_seg)
   
@@ -218,12 +245,19 @@ plot_voi_overlay_seg <- function(voi, mri_seg, flip_lr = TRUE) {
                  sprintf("%.1f", pvs[["Other"]]),'%', sep = "")
   
   plot_col <- add_alpha(grDevices::heat.colors(10), 0.4)
-  neurobase::ortho2(oro.nifti::nifti(mri_seg), oro.nifti::nifti(voi),
-                    xyz = vox_inds, col.y = plot_col, zlim.y = c(1, 2))
+  
+  if (!is.null(export_path)) grDevices::png(export_path)
+ 
+  ortho3(mri_seg, voi, xyz = vox_inds, col_ol = plot_col,
+         zlim_ol = c(0.99, 2), alpha = 0.4, colourbar = FALSE)
   
   graphics::par(xpd = NA)
-  graphics::text(x = 0.55, y = 0.12, labels = c(table), col = "white", pos = 4, 
-                 cex = 1.5)
+  graphics::text(x = 0.55, y = 0.22, labels = c(table), col = "white", pos = 4, 
+                 cex = 1.2)
+  
+  if (!is.null(export_path)) grDevices::dev.off()
+  
+  return(pvs)
 }
 
 #' Return the white matter, gray matter and CSF composition of a volume.
@@ -326,29 +360,26 @@ spm_pve2categorical <- function(fname) {
   x
 }
 
-# generate an sform affine for nifti generation
+#' Generate an affine for nifti generation.
+#' @param mrs_data input data.
+#' @param x_pos x_position coordinate.
+#' @param y_pos y_position coordinate.
+#' @param z_pos z_position coordinate.
+#' @return affine matrix.
 get_mrs_affine <- function(mrs_data, x_pos = 1, y_pos = 1, z_pos = 1) {
-  # l1 norm
-  col_vec <- mrs_data$col_vec/sqrt(sum(mrs_data$col_vec ^ 2))
-  row_vec <- mrs_data$row_vec/sqrt(sum(mrs_data$row_vec ^ 2))
-  col_vec[1:2] <- col_vec[1:2] * -1
-  row_vec[1:2] <- row_vec[1:2] * -1
-  slice_vec <- crossprod_3d(row_vec, col_vec)
-  slice_vec <- slice_vec / sqrt(sum(slice_vec ^ 2))
-  pos_vec <- mrs_data$pos_vec
-  pos_vec[1:2] <- pos_vec[1:2] * -1
-  affine <- diag(4)
-  affine[1:3, 1] <- col_vec
-  affine[1:3, 2] <- row_vec
-  affine[1:3, 3] <- slice_vec
-  rows <- dim(mrs_data$data)[2]
-  cols <- dim(mrs_data$data)[3]
-  slices <- dim(mrs_data$data)[4]
+  affine <- mrs_data$affine
   
-  affine[1:3, 4] <- pos_vec -
-                    (mrs_data$resolution[2] * (-(x_pos - 1) + 0.5)) * row_vec -
-                    (mrs_data$resolution[3] * (-(y_pos - 1) + 0.5)) * col_vec -
-                    (mrs_data$resolution[4] * (-(z_pos - 1) + 0.5)) * slice_vec
+  affine[1:3, 1] <- l2_norm_vec(affine[1:3, 1])
+  affine[1:3, 2] <- l2_norm_vec(affine[1:3, 2])
+  affine[1:3, 3] <- l2_norm_vec(affine[1:3, 3])
+  affine[1:3, 4] <- affine[1:3, 4] - mrs_data$affine[1:3, 1] / 2 -
+                                     mrs_data$affine[1:3, 2] / 2 -
+                                     mrs_data$affine[1:3, 3] / 2
+  
+  affine[1:3, 4] <- affine[1:3, 4] + (x_pos - 1) * mrs_data$affine[1:3, 1] +
+                                     (y_pos - 1) * mrs_data$affine[1:3, 2] +
+                                     (z_pos - 1) * mrs_data$affine[1:3, 3]
+  
   return(affine)
 }
 

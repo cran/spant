@@ -5,17 +5,11 @@ read_mrs_nifti <- function(fname) {
     stop("filename argument must end in .nii.gz")
   }
   
-  # get the file name of the json sidecar file
-  fname_json <- stringr::str_c(stringr::str_sub(fname, 1, -7), "json")
-  
-  # check both files exist
+  # check file exists
   if (!file.exists(fname)) {
     cat(fname)
     stop("File not found.")
-  } else if (!file.exists(fname_json)) {
-    cat(fname_json)
-    stop("json file not found.")
-  }
+  } 
   
   # read the nifti file
   nii_data <- RNifti::readNifti(fname)
@@ -40,12 +34,16 @@ read_mrs_nifti <- function(fname) {
   # add a dummy dimension
   dim(data) <- c(1, dim(data))
   
-  # read the json file
-  json_data <- jsonlite::fromJSON(fname_json)
+  ext_char <- RNifti::extension(readNifti(fname), 44, "character")
   
-  if ("dim_5" %in% json_data) stop("NIFTI MRS non-default dimensions are not currently supported")
-  if ("dim_6" %in% json_data) stop("NIFTI MRS non-default dimensions are not currently supported")
-  if ("dim_7" %in% json_data) stop("NIFTI MRS non-default dimensions are not currently supported")
+  if (is.null(ext_char)) stop("NIfTI extension header for MRS not found.")
+  
+  # read the json file
+  json_data <- jsonlite::fromJSON(ext_char)
+  
+  if ("dim_5" %in% json_data) stop("NIfTI MRS non-default dimensions are not currently supported")
+  if ("dim_6" %in% json_data) stop("NIfTI MRS non-default dimensions are not currently supported")
+  if ("dim_7" %in% json_data) stop("NIfTI MRS non-default dimensions are not currently supported")
   
   # read voxel dimensions, dwell time and time between dynamic scans
   res <- c(NA, pixdim[2], pixdim[3], pixdim[4], pixdim[6], NA, pixdim[5])
@@ -56,23 +54,20 @@ read_mrs_nifti <- function(fname) {
   row_vec <- xform_mat[1:3, 2] / sum(xform_mat[1:3, 2] ^ 2) ^ 0.5 * c(-1, -1, 1)
   sli_vec <- crossprod_3d(row_vec, col_vec)
   pos_vec <- xform_mat[1:3, 4] * c(-1, -1, 1)
+  affine  <- xform_mat
+  attr(affine, "code") <- NULL
   
   # freq domain vector vector
   freq_domain <- rep(FALSE, 7)
 
-  te  <- json_data$EchoTime / 1e3
-  ft  <- json_data$TransmitterFrequency * 1e6
-  
-  if (exists("SpectralWidth", where = json_data)) {
-    # check json and nifti header values for the sampling frequency are consistent
-    if (abs((1 / pixdim[5]) - json_data$SpectralWidth) > 0.01) {
-      stop("Sampling frequencies in the json sidecar and NIFTI header differ by greater than 0.01 Hz")
-    }
-    res[7] <- 1 / json_data$SpectralWidth # prefer the json value if available
-                                          # due to higher precision than the
-                                          # NIFTI header (double vs float)
+  if (is.null(json_data$EchoTime)) {
+    te <- json_data$EchoTime
+  } else {
+    te <- json_data$EchoTime / 1e3
   }
- 
+  
+  ft <- json_data$TransmitterFrequency * 1e6
+  
   # read the nucleus
   nuc <- json_data$ResonantNucleus
   
@@ -80,11 +75,17 @@ read_mrs_nifti <- function(fname) {
   # the json sidecar
   ref <- def_ref()
   
-  mrs_data <- list(ft = ft, data = data, resolution = res,
-                   te = te, ref = ref, nuc = nuc, row_vec = row_vec,
-                   col_vec = col_vec, sli_vec = sli_vec, pos_vec = pos_vec,
-                   freq_domain = freq_domain)
+  # get all metadata
+  meta <- json_data
+  # remove any data that is explicitly part of the mrs_data structure
+  # TODO add ref when we decide what it is called
+  meta$EchoTime <- NULL
+  meta$TransmitterFrequency <- NULL
+  meta$ResonantNucleus <- NULL
   
-  class(mrs_data) <- "mrs_data"
-  mrs_data
+  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, te = te,
+                       ref = ref, nuc = nuc, freq_domain = freq_domain,
+                       affine = affine, meta = meta)
+  
+  return(mrs_data)
 }

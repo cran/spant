@@ -1,3 +1,43 @@
+calc_siemens_paras <- function(vars, is_ima) {
+  
+  # correct fs if the FID has been decimated for ima data
+  if (vars$rm_oversampling & is_ima) vars$fs <- vars$fs / 2
+  
+  res <- c(NA, vars$x_dim / vars$x_pts, vars$y_dim / vars$y_pts,
+           vars$z_dim / vars$z_pts, 1, NA, 1 / vars$fs)
+  
+  ima_norm <- c(vars$norm_sag, vars$norm_cor, vars$norm_tra)
+  ima_norm <- l2_norm_vec(ima_norm)
+  ima_pos  <- c(vars$pos_sag,  vars$pos_cor,  vars$pos_tra)
+  rotation <- vars$ip_rot
+  
+  x <- fGSLCalcPRS(ima_norm, rotation)
+  col_vec <- x$dGp
+  # row_vec <- x$dGr # this is more consistent with spec2nii as of Dec 2020
+  
+  # following is needed for MRSI - don't know why but doesn't seem to break SVS
+  row_vec <- -x$dGr
+  sli_vec <- ima_norm
+  ima_pos <- ima_pos - row_vec * (vars$x_pts / 2 - 0.5) * vars$x_dim /
+                       vars$x_pts - col_vec * (vars$y_pts / 2 - 0.5) *
+                       vars$y_dim / vars$y_pts
+  
+  affine <- cbind(c(row_vec * res[2], 0),
+                  c(col_vec * res[3], 0),
+                  c(sli_vec * res[4], 0),
+                  c(ima_pos, 1))
+  
+  # NIfTI sign swap
+  affine[1:2,] <- -affine[1:2,]
+  
+  # TODO parse from the data file and use sensible ref based on nuc
+  nuc <- def_nuc()
+  ref <- def_ref()
+  
+  return(list(res = res, nuc = nuc, ref = ref,
+              affine = affine))
+}
+
 read_twix <- function(fname, verbose, full_data = FALSE) {
   # check the file size
   fbytes <- file.size(fname)
@@ -198,66 +238,57 @@ read_twix <- function(fname, verbose, full_data = FALSE) {
     data <- data[,,,,,,(ima_kspace_center_column + 1):ima_samples, drop = FALSE]
   }
   
-  # check if the FID has been decimated
-  if (vars$rm_oversampling == 0) {
-    vars$fs <- vars$fs / 2
-  }
-  
-  res <- c(NA, vars$y_dim / vars$y_pts, vars$x_dim / vars$x_pts,
-           vars$z_dim / vars$z_pts, 1, NA, 1 / vars$fs)
-  
   # freq domain vector vector
   freq_domain <- rep(FALSE, 7)
+  
+  # get the resolution and geom info
+  paras <- calc_siemens_paras(vars, FALSE)
 
-  ref <- def_ref()
+  mrs_data <- mrs_data(data = data, ft = vars$ft, resolution = paras$res,
+                       te = paras$te, ref = paras$ref, nuc = paras$nuc,
+                       freq_domain = freq_domain, affine = paras$affine,
+                       meta = NULL)
   
-  # TODO extract from the data file
-  nuc <- def_nuc()
-  
-  ima_norm <- c(vars$norm_sag, vars$norm_cor, vars$norm_tra)
-  ima_pos  <- c(vars$pos_sag,  vars$pos_cor,  vars$pos_tra)
-  rotation <- vars$ip_rot
-
-  x_dirn   <- c(1, 0, 0)
-  x_new    <- rotate_vec(x_dirn, ima_norm, -rotation)
-  col_vec  <- cross(ima_norm, x_new)
-  row_vec  <- cross(col_vec, ima_norm)
-  pos_vec  <- ima_pos - row_vec * ( vars$x_pts / 2 - 0.5) * vars$x_dim /
-              vars$x_pts - col_vec * (vars$y_pts / 2 - 0.5) *
-              vars$y_dim / vars$y_pts
-  sli_vec  <- cross(col_vec, row_vec)
-  
-  mrs_data <- list(ft = vars$ft, data = data, resolution = res,
-                   te = vars$te, ref = ref, nuc = nuc, row_vec = row_vec,
-                   col_vec = col_vec, sli_vec = sli_vec, pos_vec = pos_vec,
-                   freq_domain = freq_domain)
-  
-  class(mrs_data) <- "mrs_data"
-  mrs_data
+  return(mrs_data)
 }
 
-#' Read the text format header found in Siemens IMA and TWIW data files.
-#' @param fname file name to read.
+#' Read the text format header found in Siemens IMA and TWIX data files.
+#' @param input file name to read or raw data.
 #' @param version software version, can be "vb" or "vd".
 #' @return a list of parameter values
 #' @export
-read_siemens_txt_hdr <- function(fname, version = "vd") {
-  con <- file(fname, 'rb', encoding = "UTF-8")
+read_siemens_txt_hdr <- function(input, version = "vd") {
+  if (is.character(input)) {
+    con <- file(input, 'rb', encoding = "UTF-8")
+  } else {
+    # assume binary
+    con <- rawConnection(input, "rb")
+  }
   while (TRUE) {
-    line <- readLines(con, n = 1 ,skipNul = TRUE)
-    if (startsWith(line, "ulVersion") && version == 'vb') {
-      break
-    }
-    
+    line <- readLines(con, n = 1, skipNul = TRUE, warn = FALSE)
+    if (length(line) == 0) break
+    if (startsWith(line, "ulVersion") && version == 'vb') break
+
     if (startsWith(line, "ulVersion") && version == 'vd') {
+      line_no_sp <- gsub(" ", "", line)
+      line_no_sp_no_tab <- gsub("\t", "", line_no_sp)
+      # skip if there isn't an equal sign once spaces have been removed
+      if (!startsWith(line_no_sp_no_tab, "ulVersion=")) next
       tSequenceFilename <- readLines(con, n = 1)
       tProtocolName <- readLines(con, n = 1)
-      if ((tProtocolName != "tProtocolName\t = \t\"AdjCoilSens\"") && (tProtocolName != "tProtocolName\t = \t\"CBU_MPRAGE_32chn\"")) {
+      last_ulVersion_pos <- seek(con)
+      #if ((tProtocolName != "tProtocolName\t = \t\"AdjCoilSens\"") && (tProtocolName != "tProtocolName\t = \t\"CBU_MPRAGE_32chn\"")) {
         #print(tProtocolName)
-        break
-      }
+      #  break
+      #}
     }
   }
+  
+  # TODO reads the whole file looking for "ulVersion" and then
+  # tracks back to the last one. Must be a better way of finding the
+  # last one without reading all the spectral data. This is particularly
+  # bad for ima data when there will only ever be one set.
+  if (version == 'vd') seek(con, where = last_ulVersion_pos)
   
   vars <- list(averages = NA,
                fs = NA,
@@ -299,6 +330,7 @@ read_siemens_txt_hdr <- function(fname, version = "vd") {
   voi_norm_cor       <- 0
   voi_norm_tra       <- 0
   voi_ip_rot         <- 0
+  scan_reg_pos_tra   <- 0
   
   while (TRUE) {
     line <- readLines(con, n = 1, skipNul = TRUE)
@@ -340,6 +372,8 @@ read_siemens_txt_hdr <- function(fname, version = "vd") {
       voi_dCor <- as.numeric(strsplit(line, "=")[[1]][2])
     } else if (startsWith(line, "sSpecPara.sVoI.sPosition.dTra")) {
       voi_dTra <- as.numeric(strsplit(line, "=")[[1]][2])
+    } else if (startsWith(line, "lScanRegionPosTra")) {
+      scan_reg_pos_tra <- as.numeric(strsplit(line, "=")[[1]][2])
     } else if (startsWith(line, "sSpecPara.sVoI.sNormal.dSag")) {
       voi_norm_sag <- as.numeric(strsplit(line, "=")[[1]][2])
     } else if (startsWith(line, "sSpecPara.sVoI.sNormal.dCor")) {
@@ -364,36 +398,30 @@ read_siemens_txt_hdr <- function(fname, version = "vd") {
       vars$rm_oversampling <- as.numeric(strsplit(line, "=")[[1]][2])
     }
   }
-  
-  # check if the FID has been decimated
-  if (vars$rm_oversampling == 0) {
-    vars$N <- vars$N * 2
-    vars$fs <- vars$fs * 2
-  }
-  
+ 
   # how many voxels do we expect?
   Nvoxels <- vars$x_pts * vars$y_pts * vars$z_pts
   
   if (Nvoxels > 1) {
     # looks like MRSI
-    vars$x_dim    <- slice_dPhaseFOV 
-    vars$y_dim    <- slice_dReadoutFOV 
+    vars$x_dim    <- slice_dReadoutFOV 
+    vars$y_dim    <- slice_dPhaseFOV 
     vars$z_dim    <- slice_dThickness
     vars$pos_sag  <- slice_dSag 
     vars$pos_cor  <- slice_dCor
-    vars$pos_tra  <- slice_dTra
+    vars$pos_tra  <- slice_dTra + scan_reg_pos_tra # don't ask
     vars$norm_sag <- slice_norm_sag
     vars$norm_cor <- slice_norm_cor
     vars$norm_tra <- slice_norm_tra
     vars$ip_rot   <- slice_ip_rot
   } else if (Nvoxels == 1) {
     # looks like SVS
-    vars$x_dim    <- voi_dPhaseFOV 
-    vars$y_dim    <- voi_dReadoutFOV 
+    vars$x_dim    <- voi_dReadoutFOV 
+    vars$y_dim    <- voi_dPhaseFOV 
     vars$z_dim    <- voi_dThickness
     vars$pos_sag  <- voi_dSag 
     vars$pos_cor  <- voi_dCor
-    vars$pos_tra  <- voi_dTra
+    vars$pos_tra  <- voi_dTra + scan_reg_pos_tra # don't ask
     vars$norm_sag <- voi_norm_sag
     vars$norm_cor <- voi_norm_cor
     vars$norm_tra <- voi_norm_tra

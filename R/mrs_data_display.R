@@ -22,10 +22,10 @@ print.mrs_data <- function(x, full = FALSE, ...) {
   cat(paste(c("Spectral domain         : ", x$freq_domain[7], "\n")), sep = "")
   if (full) {
     cat(paste(c("Echo time (s)           :", x$te, "\n")), sep = " ")
-    cat(paste(c("Row vector              :", x$row_vec, "\n")), sep = " ")
-    cat(paste(c("Column vector           :", x$col_vec, "\n")), sep = " ")
-    cat(paste(c("Slice vector            :", x$sli_vec, "\n")), sep = " ")
-    cat(paste(c("Position vector         :", x$pos_vec, "\n")), sep = " ")
+    #cat(paste(c("Row vector              :", x$row_vec, "\n")), sep = " ")
+    #cat(paste(c("Column vector           :", x$col_vec, "\n")), sep = " ")
+    #cat(paste(c("Slice vector            :", x$sli_vec, "\n")), sep = " ")
+    #cat(paste(c("Position vector         :", x$pos_vec, "\n")), sep = " ")
   }
 }
 
@@ -56,6 +56,15 @@ print.mrs_data <- function(x, full = FALSE, ...) {
 #' @param xlabs x-axis tick labels.
 #' @param yat y-axis tick label values.
 #' @param ylabs y-axis tick labels.
+#' @param show_grid plot gridlines behind the data (logical). Defaults to TRUE.
+#' @param grid_nx number of cells of the grid in x and y direction. When NULL
+#' the grid aligns with the tick marks on the corresponding default axis (i.e.,
+#' tickmarks as computed by axTicks). When NA, no grid lines are drawn in the
+#' corresponding direction.
+#' @param grid_ny as above.
+#' @param col set the line color, eg col = rgb(0.5, 0.5, 0.5).
+#' @param alpha set the line transparency, eg alpha = 0.5 is 50% transparency.
+#' Overrides any transparency levels set by col.
 #' @param ... other arguments to pass to the plot method.
 #' @export
 plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
@@ -64,7 +73,9 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
                           lwd = NULL, bty = NULL, label = "",
                           restore_def_par = TRUE, mar = NULL,
                           xaxis_lab = NULL, xat = NULL, xlabs = TRUE,
-                          yat = NULL, ylabs = TRUE, ...) {
+                          yat = NULL, ylabs = TRUE, show_grid = TRUE,
+                          grid_nx = NULL, grid_ny = NA, col = NULL,
+                          alpha = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
  
@@ -78,6 +89,12 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
     return(NULL)
   }
   
+  # default to blue
+  if (is.null(col)) col <- grDevices::rgb(0, 0.45, 0.7, 1)
+  
+  # if alpha is specified, override the default value in col
+  if (!is.null(alpha)) col <- add_alpha(col, alpha)
+  
   # convert to the correct domain for plotting
   if (fd & !is_fd(x)) {
     x <- td2fd(x)
@@ -85,7 +102,7 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
     x <- fd2td(x)
   }
   
-  if (is.null(lwd)) lwd <- 1.0
+  if (is.null(lwd)) lwd <- 2.0
   
   if (is.null(bty) && !y_scale) bty <- "n"
   if (is.null(bty) && y_scale) bty <- "l"
@@ -149,13 +166,16 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
     if (is.null(mar)) graphics::par(mar = c(3.5, 3.5, 1, 1))
     graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim, 
                    xlab = xlab, ylab = "Intensity (au)", lwd = lwd, bty = bty, 
-                   xaxt = "n", yaxt = "n", ...)
+                   xaxt = "n", yaxt = "n", col = col,
+                   panel.first = {if (show_grid) graphics::grid(nx = grid_nx,
+                                                            ny = grid_ny)}, ...)
     graphics::axis(2, lwd = 0, lwd.ticks = 1, at = yat, labels = ylabs)
   } else {
     if (is.null(mar)) graphics::par(mar = c(3.5, 1, 1, 1))
     graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim,
          xlab = xlab, yaxt = "n", xaxt = "n", ylab = "", lwd = lwd, bty = bty,
-         ...)
+         col = col, panel.first = {if (show_grid) graphics::grid(nx = grid_nx,
+                                                      ny = grid_ny)}, ...)
   }
   
   if (x_ax) graphics::axis(1, lwd = 0, lwd.ticks = 1, at = xat, labels = xlabs)
@@ -301,7 +321,7 @@ stackplot <- function(x, ...) {
 stackplot.list <- function(x, ...) {
   # make them all td or fd
   combined <- append_scan(x)
-  stackplot(combined, dim = "scan", ...)
+  stackplot(combined, plot_dim = "scan", ...)
 }
 
 #' Stackplot plotting method for objects of class mrs_data.
@@ -313,7 +333,9 @@ stackplot.list <- function(x, ...) {
 #' (logical).
 #' @param x_units the units to use for the x-axis, can be one of: "ppm", "hz", 
 #' "points" or "seconds".
-#' @param col set the colour of the line, eg col = rgb(1,0,0,0.5).
+#' @param col set the colour of the line, eg col = rgb(1, 0, 0, 0.5).
+#' @param alpha set the line transparency, eg alpha = 0.5 is 50% transparency.
+#' Overrides any transparency levels set by col.
 #' @param x_offset separate plots in the x-axis direction by this value. 
 #' Default value is 0.
 #' @param y_offset separate plots in the y-axis direction by this value.
@@ -333,15 +355,23 @@ stackplot.list <- function(x, ...) {
 #' results in no baseline being plotted.
 #' @param restore_def_par restore default plotting par values after the plot has 
 #' been made.
+#' @param show_grid plot gridlines behind the data (logical). Defaults to TRUE.
+#' @param grid_nx number of cells of the grid in x and y direction. When NULL
+#' the grid aligns with the tick marks on the corresponding default axis (i.e.,
+#' tickmarks as computed by axTicks). When NA, no grid lines are drawn in the
+#' corresponding direction.
+#' @param grid_ny as above.
+#' @param lwd plot linewidth.
 #' @param ... other arguments to pass to the matplot method.
 #' @export
 stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
-                               fd = TRUE, col = NULL, x_offset = 0,
-                               y_offset = 0, plot_dim = NULL, x_pos = NULL, 
-                               y_pos = NULL, z_pos = NULL, dyn = 1, coil = 1, 
-                               bty = NULL, labels = NULL, lab_cex = 1, 
-                               right_marg = NULL, bl_lty = NULL,
-                               restore_def_par = TRUE, ...) {
+                               fd = TRUE, col = NULL, alpha = NULL, 
+                               x_offset = 0, y_offset = 0, plot_dim = NULL,
+                               x_pos = NULL, y_pos = NULL, z_pos = NULL,
+                               dyn = 1, coil = 1, bty = NULL, labels = NULL,
+                               lab_cex = 1, right_marg = NULL, bl_lty = NULL,
+                               restore_def_par = TRUE, show_grid = NULL,
+                               grid_nx = NULL, grid_ny = NA, lwd = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -352,9 +382,24 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
     x <- fd2td(x)
   }
   
-  if (is.null(col)) col <- 1
+  # default to blue
+  if (is.null(col)) col <- grDevices::rgb(0, 0.45, 0.7, 1)
+  
+  # show the grid by default unless x_offset is non-zero
+  if (is.null(show_grid)) {
+    if (x_offset == 0) {
+      show_grid = TRUE 
+    } else {
+      show_grid = FALSE
+    }
+  }
+  
+  # if alpha is specified, override the default value in col
+  if (!is.null(alpha)) col <- add_alpha(col, alpha)
   
   if (is.null(bty)) bty <- "n"
+  
+  if (is.null(lwd)) lwd <- 2.0
   
   if (is.null(right_marg) && is.null(labels)) right_marg = 1
   if (is.null(right_marg) && !is.null(labels)) right_marg = 4
@@ -454,7 +499,7 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   plot_data <- t(stats::na.omit(t(plot_data)))
   
   max_val <- max(abs(plot_data), na.rm = TRUE)
-  y_offset_vec <- 0:(ncol(plot_data) - 1) * max_val * -y_offset / 100
+  y_offset_vec <- 0:(ncol(plot_data) - 1) * max_val * y_offset / 100
   y_offset_mat <- matrix(y_offset_vec, nrow = nrow(plot_data),
                          ncol = ncol(plot_data), byrow = TRUE)
   
@@ -476,7 +521,7 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
                         ncol = ncol(plot_data), byrow = FALSE)
   
   x_offset_mat <- matrix((0:(ncol(plot_data) - 1) * 
-                         (xlim[2] - xlim[1]) * x_offset / 100), 
+                         (xlim[2] - xlim[1]) * -x_offset / 100), 
                          nrow = nrow(plot_data), ncol = ncol(plot_data),
                          byrow = TRUE)
   
@@ -486,36 +531,43 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   xlim <- range(x_scale_mat)
   
   # bug fix for rounding errors
-  if (xlim[1] > xlim_labs[1]) xlim[1] = xlim_labs[1]
-  if (xlim[2] < xlim_labs[2]) xlim[2] = xlim_labs[2]
+  if (xlim[1] > xlim_labs[1]) xlim[1] <- xlim_labs[1]
+  if (xlim[2] < xlim_labs[2]) xlim[2] <- xlim_labs[2]
   
   if ( x_units == "ppm" ) xlim <- rev(xlim)
-  
-  #print(dim(x_scale_mat))
-  #print(length(subset))
   
   graphics::matplot(x_scale_mat[length(subset):1,],
                     plot_data[length(subset):1,], type = "l", 
                     lty = lty, col = col, xlab = xlab, ylab = "",
                     yaxt = "n", xaxt = "n", xlim = xlim,
-                    bty = bty, ...)
+                    bty = bty, lwd = lwd, panel.first = {if (show_grid)
+                                                   graphics::grid(nx = grid_nx,
+                                                   ny = grid_ny)}, ...)
   
-  graphics::axis(1, lwd = 0, lwd.ticks = 1)
+  graphics::axis(1, lwd = 0, lwd.ticks = 1, at = pretty(xlim_labs))
   
-  if (bty == "n") graphics::abline(h = graphics::par("usr")[3]) 
+  if (bty == "n") graphics::lines(xlim_labs, c(graphics::par("usr")[3],
+                                               graphics::par("usr")[3]))
   
-  #abline(h = y_offset_vec, lty = 2)
+  if (x_offset != 0) {
+    graphics::lines(c(0, utils::tail(as.numeric(x_offset_mat),1)),
+          c(graphics::par("usr")[3], graphics::par("usr")[3] +
+              utils::tail(as.numeric(y_offset_mat),1)))
+  }
   
   # write text labels if provided
   if (!is.null(labels)) {
     
     # allow text outside axes
-    graphics::par(xpd = NA)
+    graphics::par(xpd = T)
     for (n in 1:length(labels)) {
       graphics::text(xlim[2] , y_offset_vec[n], labels[n], pos = 4,
                      cex = lab_cex)
     }
+    graphics::par(xpd = F)
   }
+  
+  # if (show_grid) graphics::grid(nx = grid_nx, ny = grid_ny)
   
   if (restore_def_par) graphics::par(.pardefault)
 }
@@ -617,6 +669,13 @@ plot_slice_map <- function(data, zlim = NULL, mask_map = NULL,
 #' @export
 gridplot <- function(x, ...) {
   UseMethod("gridplot", x)
+}
+
+#' @export
+gridplot.list <- function(x, ...) {
+  # make them all td or fd
+  combined <- append_scan(x)
+  gridplot(combined, ...)
 }
 
 #' Arrange spectral plots in a grid.

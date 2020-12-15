@@ -1,7 +1,19 @@
+# constructor for mrs_data
+mrs_data <- function(data, ft, resolution, te, ref, nuc, freq_domain, affine,
+                     meta) {
+  
+  mrs_data <- list(data = data, ft = ft, resolution = resolution, te = te,
+                   ref = ref, nuc = nuc, freq_domain = freq_domain,
+                   affine = affine, meta = meta)
+  
+  class(mrs_data) <- "mrs_data"
+  return(mrs_data)
+}
+
 #' Read MRS data from a file.
 #' @param fname filename of the dpt format MRS data.
 #' @param format string describing the data format. Must be one of the 
-#' following : "spar_sdat", "rda", "ima", "twix", "pfile", "list_data",
+#' following : "spar_sdat", "rda", "dicom", "twix", "pfile", "list_data",
 #' "paravis", "dpt", "lcm_raw", "rds", "nifti", "varian". If not specified,
 #' the format will be guessed from the filename extension.
 #' @param ft transmitter frequency in Hz (required for list_data format).
@@ -28,8 +40,8 @@ read_mrs <- function(fname, format = NULL, ft = NULL, fs = NULL, ref = NULL,
     return(read_spar_sdat(fname))
   } else if (format == "rda") {
     return(read_rda(fname))
-  } else if (format == "ima") {
-    return(read_ima(fname, verbose))
+  } else if (format == "dicom") {
+    return(read_dicom(fname, verbose))
   } else if (format == "twix") {
     return(read_twix(fname, verbose, full_data))
   } else if (format == "pfile") {
@@ -69,7 +81,9 @@ guess_mrs_format <- function(fname) {
   } else if (stringr::str_ends(fname_low, ".rda")) {
     format <- "rda"
   } else if (stringr::str_ends(fname_low, ".ima")) {
-    format <- "ima"
+    format <- "dicom"
+  } else if (stringr::str_ends(fname_low, ".dcm")) {
+    format <- "dicom"
   } else if (stringr::str_ends(fname_low, ".spar")) {
     format <- "spar_sdat"
   } else if (stringr::str_ends(fname_low, ".sdat")) {
@@ -91,19 +105,20 @@ guess_mrs_format <- function(fname) {
   } else if (basename(fname_low) == "fid") {
     format <- "varian"
   } else {
-    stop("Could not guess the MRS format, please specify the format argument.")
+    # if all else fails, assume DICOM
+    format <- "dicom"
   }
   return(format)
 }
 
 #' Write MRS data object to file.
-#' @param fname the filename of the output.
 #' @param mrs_data object to be written to file.
+#' @param fname the filename of the output.
 #' @param format string describing the data format. Must be one of the 
 #' following : "nifti", "dpt", "lcm_raw", "rds". If not specified, the format
 #' will be guessed from the filename extension.
 #' @export
-write_mrs <- function(fname, mrs_data, format = NULL) {
+write_mrs <- function(mrs_data, fname, format = NULL) {
   
   if (class(mrs_data) != "mrs_data") stop("data object is not mrs_data format")
   
@@ -115,7 +130,7 @@ write_mrs <- function(fname, mrs_data, format = NULL) {
   } else if (format == "lcm_raw") {
     write_mrs_lcm_raw(fname, mrs_data)
   } else if (format == "nifti") {
-    write_mrs_nifti(fname, mrs_data)
+    write_mrs_nifti(mrs_data, fname)
   } else if (format == "rds") {
     write_mrs_rds(fname, mrs_data)
   } else {
@@ -213,13 +228,17 @@ read_mrs_dpt <- function(fname) {
   # defaults
   nuc <- def_nuc()
   
-  mrs_data <- list(ft = ft, data = data_arr, resolution = res, te = te,
-                   ref = ref, nuc = nuc, row_vec = row_vec, col_vec = col_vec,
-                   sli_vec = sli_vec, pos_vec = pos_vec,
-                   freq_domain = freq_domain)
+  # mrs_data <- list(ft = ft, data = data_arr, resolution = res, te = te,
+  #                  ref = ref, nuc = nuc, row_vec = row_vec, col_vec = col_vec,
+  #                  sli_vec = sli_vec, pos_vec = pos_vec,
+  #                  freq_domain = freq_domain)
+  # class(mrs_data) <- "mrs_data"
   
-  class(mrs_data) <- "mrs_data"
-  mrs_data
+  mrs_data <- mrs_data(data = data_arr, ft = ft, resolution = res, te = te,
+                       ref = ref, nuc = nuc, freq_domain = freq_domain,
+                       affine = NULL, meta = NULL)
+  
+  return(mrs_data)
 }
 
 #' Read MRS data using the TARQUIN software package.
