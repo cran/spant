@@ -5,6 +5,10 @@
 #' specify the location of these software packages.
 #'
 #' Fitting approaches described in the following references:
+#' ABfit
+#' Wilson, M. Adaptive baseline fitting for 1H MR spectroscopy analysis. Magn
+#' Reson Med 2012;85:13-29.
+#' 
 #' VARPRO
 #' van der Veen JW, de Beer R, Luyten PR, van Ormondt D. Accurate quantification
 #' of in vivo 31P NMR signals using the variable projection method and prior 
@@ -53,13 +57,18 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
   
   # let's assume a PRESS basis and simulate if one isn't specified
   if (is.null(basis)) {
+    
+    if (is.null(metab$meta$EchoTime)) {
+      stop("Echo time not found, please specify a basis.")
+    }
+    
     if (METHOD == "LCMODEL") {
       lcm_compat = TRUE
     } else {
       lcm_compat = FALSE
     }
     TE1 = 0.01
-    TE2 = metab$te - TE1
+    TE2 = metab$meta$EchoTime - TE1
     warning("Basis set not specified, so simulating default PRESS brain basis.")
     basis <- sim_basis_1h_brain_press(metab, lcm_compat = lcm_compat, TE1 = TE1, 
                                       TE2 = TE2) 
@@ -96,12 +105,22 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
     
     acq_paras <- get_acq_paras(metab)
     
-    result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), abfit, 
-                               acq_paras, basis, opts, 
-                               .parallel = parallel, 
-                               .paropts = list(.inorder = TRUE,
-                                               .packages = "spant"),
-                               .progress = progress, .inform = FALSE)
+    plyr <- TRUE
+    if (plyr) {
+      result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), abfit,
+                                 acq_paras, basis, opts,
+                                 .parallel = parallel,
+                                 .paropts = list(.inorder = TRUE,
+                                                 .packages = "spant"),
+                                 .progress = progress, .inform = FALSE)
+    } else {
+      result_list <- apply(metab$data, c(2, 3, 4, 5, 6), abfit, acq_paras,
+                           basis, opts)
+      labs <- which(array(TRUE, dim(result_list)), arr.ind = TRUE)
+      result_list <- result_list[,,,,]
+      attr(result_list, "split_labels") <- labs
+      names(result_list) <- seq_len(nrow(labs))
+    }
     
   } else if (METHOD == "VARPRO") {
     # read basis into memory if a file
@@ -222,6 +241,7 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
                                .paropts = list(.inorder = TRUE,
                                                .packages = "spant"),
                                .progress = progress, .inform = FALSE)
+    
     
   } else {
     stop(paste('Fit method not found : ', method))

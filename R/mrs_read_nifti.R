@@ -41,9 +41,10 @@ read_mrs_nifti <- function(fname) {
   # read the json file
   json_data <- jsonlite::fromJSON(ext_char)
   
-  if ("dim_5" %in% json_data) stop("NIfTI MRS non-default dimensions are not currently supported")
-  if ("dim_6" %in% json_data) stop("NIfTI MRS non-default dimensions are not currently supported")
-  if ("dim_7" %in% json_data) stop("NIfTI MRS non-default dimensions are not currently supported")
+  # TODO
+  # if ("dim_5" %in% names(json_data)) stop("NIfTI MRS non-default dimensions are not currently supported")
+  # if ("dim_6" %in% names(json_data)) stop("NIfTI MRS non-default dimensions are not currently supported")
+  # if ("dim_7" %in% names(json_data)) stop("NIfTI MRS non-default dimensions are not currently supported")
   
   # read voxel dimensions, dwell time and time between dynamic scans
   res <- c(NA, pixdim[2], pixdim[3], pixdim[4], pixdim[6], NA, pixdim[5])
@@ -60,13 +61,13 @@ read_mrs_nifti <- function(fname) {
   # freq domain vector vector
   freq_domain <- rep(FALSE, 7)
 
-  if (is.null(json_data$EchoTime)) {
-    te <- json_data$EchoTime
-  } else {
-    te <- json_data$EchoTime / 1e3
-  }
+  # if (is.null(json_data$EchoTime)) {
+  #   te <- json_data$EchoTime
+  # } else {
+  #   te <- json_data$EchoTime / 1e3
+  # }
   
-  ft <- json_data$TransmitterFrequency * 1e6
+  ft <- json_data$SpectrometerFrequency * 1e6
   
   # read the nucleus
   nuc <- json_data$ResonantNucleus
@@ -79,13 +80,13 @@ read_mrs_nifti <- function(fname) {
   meta <- json_data
   # remove any data that is explicitly part of the mrs_data structure
   # TODO add ref when we decide what it is called
-  meta$EchoTime <- NULL
+  # meta$TxOff <- NULL
   meta$TransmitterFrequency <- NULL
   meta$ResonantNucleus <- NULL
   
-  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, te = te,
-                       ref = ref, nuc = nuc, freq_domain = freq_domain,
-                       affine = affine, meta = meta)
+  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
+                       nuc = nuc, freq_domain = freq_domain, affine = affine,
+                       meta = meta)
   
   return(mrs_data)
 }

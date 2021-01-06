@@ -2,11 +2,15 @@
 #' @param fit_result result object generated from fitting.
 #' @param ref_data water reference MRS data object.
 #' @param p_vols a numeric vector of partial volumes.
-#' @param te the MRS TE.
-#' @param tr the MRS TR.
+#' @param te the MRS TE in seconds.
+#' @param tr the MRS TR in seconds.
 #' @return A \code{fit_result} object with a rescaled results table.
 #' @export
 scale_amp_molal_pvc <- function(fit_result, ref_data, p_vols, te, tr){
+  
+  if (!identical(dim(fit_result$data$data)[2:6], dim(ref_data$data)[2:6])) {
+    stop("Mismatch between fit result and reference data dimensions.")
+  }
   
   # check if res_tab_unscaled exists, and if not create it
   if (is.null(fit_result$res_tab_unscaled)) {
@@ -22,12 +26,26 @@ scale_amp_molal_pvc <- function(fit_result, ref_data, p_vols, te, tr){
   amp_cols <- fit_result$amp_cols
   
   w_amp <- as.numeric(get_td_amp(ref_data))
+  
+  if (length(w_amp) != nrow(fit_result$res_tab)) {
+    stop("Mismatch between fit result and reference data.")
+  }
+  
   fit_result$res_tab$w_amp <- w_amp
   
-  fit_result$res_tab$GM_vol <- p_vols[["GM"]]
-  fit_result$res_tab$WM_vol <- p_vols[["WM"]]
-  fit_result$res_tab$CSF_vol <- p_vols[["CSF"]]
+  fit_result$res_tab$GM_vol    <- p_vols[["GM"]]
+  fit_result$res_tab$WM_vol    <- p_vols[["WM"]]
+  fit_result$res_tab$CSF_vol   <- p_vols[["CSF"]]
   fit_result$res_tab$Other_vol <- p_vols[["Other"]]
+  fit_result$res_tab$GM_frac   <- p_vols[["GM"]] / 
+                                 (p_vols[["GM"]] + p_vols[["WM"]])
+  
+  fit_result$res_tab_unscaled$GM_vol    <- p_vols[["GM"]]
+  fit_result$res_tab_unscaled$WM_vol    <- p_vols[["WM"]]
+  fit_result$res_tab_unscaled$CSF_vol   <- p_vols[["CSF"]]
+  fit_result$res_tab_unscaled$Other_vol <- p_vols[["Other"]]
+  fit_result$res_tab_unscaled$GM_frac   <- p_vols[["GM"]] / 
+                                          (p_vols[["GM"]] + p_vols[["WM"]])
   
   # append tables with %GM, %WM, %CSF and %Other
   pvc_cols <- 6:(5 + amp_cols * 2)
@@ -47,6 +65,10 @@ scale_amp_molal_pvc <- function(fit_result, ref_data, p_vols, te, tr){
 #' @export
 scale_amp_molar <- function(fit_result, ref_data, w_att = 0.7, w_conc = 35880) {
   
+  if (!identical(dim(fit_result$data$data)[2:6], dim(ref_data$data)[2:6])) {
+    stop("Mismatch between fit result and reference data dimensions.")
+  }
+  
   # check if res_tab_unscaled exists, and if not create it
   if (is.null(fit_result$res_tab_unscaled)) {
     fit_result$res_tab_unscaled <- fit_result$res_tab
@@ -55,6 +77,10 @@ scale_amp_molar <- function(fit_result, ref_data, w_att = 0.7, w_conc = 35880) {
   }
   
   w_amp <- as.numeric(get_td_amp(ref_data))
+  
+  if (length(w_amp) != nrow(fit_result$res_tab)) {
+    stop("Mismatch between fit result and reference data.")
+  }
   
   fit_result$res_tab$w_amp <- w_amp
   
@@ -74,6 +100,10 @@ scale_amp_molar <- function(fit_result, ref_data, w_att = 0.7, w_conc = 35880) {
 #' @export
 scale_amp_water_ratio <- function(fit_result, ref_data) {
   
+  if (!identical(dim(fit_result$data$data)[2:6], dim(ref_data$data)[2:6])) {
+    stop("Mismatch between fit result and reference data dimensions.")
+  }
+  
   # check if res_tab_unscaled exists, and if not create it
   if (is.null(fit_result$res_tab_unscaled)) {
     fit_result$res_tab_unscaled <- fit_result$res_tab
@@ -82,6 +112,10 @@ scale_amp_water_ratio <- function(fit_result, ref_data) {
   }
   
   w_amp <- as.numeric(get_td_amp(ref_data))
+  
+  if (length(w_amp) != nrow(fit_result$res_tab)) {
+    stop("Mismatch between fit result and reference data.")
+  }
   
   fit_result$res_tab$w_amp <- w_amp
   
@@ -107,7 +141,6 @@ scale_amp_ratio <- function(fit_result, name) {
   } else {
     fit_result$res_tab <- fit_result$res_tab_unscaled
   }
-  
   
   ratio_amp <- as.numeric(fit_result$res_tab[[name]])
   
@@ -199,7 +232,6 @@ apply_pvc <- function(fit_result, p_vols, te, tr){
     fit_result$res_tab <- fit_result$res_tab_unscaled
   }
   
-  #te <- result$data$te
   B0 <- round(fit_result$data$ft / 42.58e6,1)
   corr_factor <- get_corr_factor(te, tr, B0, p_vols[["GM"]], p_vols[["WM"]],
                                  p_vols[["CSF"]])

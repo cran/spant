@@ -1,8 +1,19 @@
+# spant 1.10.0
+* Fix for NIfTI MRS reader/writer.
+* ortho3 now shows correct labels for orientations other than RAS.
+* ortho3_int function renamed to ortho3_inter.
+* Argument order change to plot_voi_overlay and plot_voi_overlay_seg to be more
+consistent with ortho3.
+* Regression fix for partial volume segmentation plotting.
+* Echo time parameter is now stored in the meta structure.
+* ABfit now performs a 1D phase parameter search before the prefit stage to
+improve reliability. May be disabled with the prefit_phase_search fit option.
+
 # spant 1.9.0
 * NIfTI MRS reader and writer now uses the header extension for metadata. Thanks
 to Jon Clayden for adding extension read/write support to the RNifti package.
 * Default plots now have gridlines in the y-direction and the plot line is now
-thicker and colored blue.
+thicker and coloured blue.
 * Opacity option added to the plotting functions (alpha).
 * Bug fix for comb_coils with SVS data.
 * Bug fixes for Siemens geometry information.

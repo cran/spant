@@ -57,21 +57,31 @@ plot_slice_map_inter <- function(mrs_data, map = NULL, xlim = NULL, slice = 1,
     mrs_data <- get_subset(mrs_data, coil_set = coil) # speeds things up
     if (is.null(map)) map <- int_spec(mrs_data, mode = "mod")
     input_mrs_data <- TRUE
+    
+    if (fd) {
+      x_scale <- ppm(mrs_data)
+    } else {
+      x_scale <- seconds(mrs_data) 
+    }
+    
+    if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[length(x_scale)])
   } else if (class(mrs_data) == "fit_result") {
     fit_res  <- mrs_data
     mrs_data <- fit_res$data
     input_mrs_data <- FALSE
+    
+    if ((!is.null(fit_res$opts$ppm_left)) &
+        (!is.null(fit_res$opts$ppm_right))) {
+      xlim <- c(fit_res$opts$ppm_left, fit_res$opts$ppm_right)
+    } else {
+      xlim <- rev(range(ppm(fit_res)))
+    }
+      
+    x_scale <- ppm(fit_res)
+    
   } else {
     stop("input is not an mrs_data or fit_result object")
   }
-    
-  if (fd) {
-    x_scale <- ppm(mrs_data)
-  } else {
-    x_scale <- seconds(mrs_data) 
-  }
-  
-  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[length(x_scale)])
   
   ui <- miniUI::miniPage(
     miniUI::gadgetTitleBar("Select point on the map to show spectrum."),
@@ -188,9 +198,8 @@ ortho3 <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
                    ch_lwd = 1, colourbar = TRUE, bg = "black",
                    mar = c(0, 0, 0, 0), smallplot = c(0.63, 0.65, 0.07, 0.42)) {
   
-  if ((RNifti::orientation(underlay) != "RAS") && (orient_lab)) {
-    warning("Underlay image is not in RAS format, orientation labels may be incorrect.")
-  }
+  # check the images are comparable
+  if (!is.null(overlay)) check_geom(underlay, overlay)
   
   graphics::par(bg = bg, fg = "white", col.axis = "white", mar = mar)
   
@@ -222,20 +231,17 @@ ortho3 <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
   }
 
   if (is.null(zlim)) {
-    zlim <- range(underlay)
-  } else {
-    full[full < zlim[1]] <- zlim[1]
-    full[full > zlim[2]] <- zlim[2]
+    zlim <- stats::quantile(underlay, probs = c(0, 0.999), na.rm = TRUE)
   }
+    
+  full[full < zlim[1]] <- zlim[1]
+  full[full > zlim[2]] <- zlim[2]
   
   asp <- dim(full)[2] / dim(full)[1]
   graphics::image(full, useRaster = TRUE, col = grDevices::gray(0:64 / 64),
                   axes = FALSE, asp = asp, zlim = zlim)
   
   if (!is.null(overlay)) {
-    if ((RNifti::orientation(overlay) != "RAS") && (orient_lab)) {
-      warning("Overlay image is not in RAS format, orientation labels may be incorrect.")
-    }
     cor_y <- overlay[img_dim[1]:1, xyz[2],]
     sag_y <- overlay[xyz[1], img_dim[2]:1,]
     ax_y <-  overlay[img_dim[1]:1,, xyz[3]]
@@ -292,37 +298,61 @@ ortho3 <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
     lm_pos <- 1 + lab_marg
     lm_neg <- -lab_marg
     
-    graphics::text(0.0, ycutoff / 2, "R", col = "white", cex = cex_lab,
+    ori_code <- RNifti::orientation(underlay)
+    if (grepl("R", ori_code)) {
+      ori_code_inv <- sub("R", "L", ori_code)
+    } else {
+      ori_code_inv <- sub("L", "R", ori_code)
+    }
+    
+    if (grepl("A", ori_code_inv)) { 
+      ori_code_inv <- sub("A", "P", ori_code_inv)
+    } else {
+      ori_code_inv <- sub("P", "A", ori_code_inv)
+    }
+    
+    if (grepl("S", ori_code_inv)) { 
+      ori_code_inv <- sub("S", "I", ori_code_inv)
+    } else {
+      ori_code_inv <- sub("I", "S", ori_code_inv)
+    }
+    
+    left_labs   <- substr(ori_code, 1, 1)
+    right_labs  <- substr(ori_code_inv, 2, 2)
+    bottom_labs <- substr(ori_code_inv, 2, 2)
+    top_labs    <- substr(ori_code, 3, 3)
+    
+    graphics::text(0.0, ycutoff / 2, left_labs, col = "white", cex = cex_lab,
                    adj = lm_neg, font = lab_font)
     
     #text(xcutoff, ycutoff / 2, "L", col = "white", cex = cex_lab, adj = lm_pos,
     #     font = lab_font)
     
-    graphics::text(0.0, ycutoff + (1 - ycutoff) / 2, "R", col = "white",
+    graphics::text(0.0, ycutoff + (1 - ycutoff) / 2, left_labs, col = "white",
                    cex = cex_lab, adj = lm_neg, font = lab_font)
     
     #text(xcutoff, ycutoff + (1 - ycutoff) / 2, "L", col = "white", cex = cex_lab,
     #     adj = lm_pos, font = lab_font)
     
-    graphics::text(xcutoff / 2, 0, "P", col = "white", cex = cex_lab,
+    graphics::text(xcutoff / 2, 0, bottom_labs, col = "white", cex = cex_lab,
                    adj = c(1, lm_neg), font = lab_font)
     
     #text(xcutoff / 2, ycutoff, "A", col = "white", cex = cex_lab,
     #     adj = c(1, lm_pos), font = lab_font)
     
-    graphics::text(xcutoff / 2, 1, "S", col = "white", cex = cex_lab,
+    graphics::text(xcutoff / 2, 1, top_labs, col = "white", cex = cex_lab,
                    adj = c(1, lm_pos), font = lab_font)
     
     #text(xcutoff / 2, ycutoff, "I", col = "white", cex = cex_lab,
     #     adj = c(1.7, lm_neg), font = lab_font)
     
-    graphics::text(1.0, ycutoff + (1 - ycutoff) / 2, "P", col = "white",
+  graphics::text(1.0, ycutoff + (1 - ycutoff) / 2, right_labs, col = "white",
                    cex = cex_lab, adj = lm_pos, font = lab_font)
     
     #text(xcutoff, ycutoff + (1 - ycutoff) / 2, "A", col = "white", cex = cex_lab,
     #     adj = lm_neg, font = lab_font)
     
-    graphics::text(xcutoff + (1 - xcutoff) / 2, 1, "S", col = "white",
+    graphics::text(xcutoff + (1 - xcutoff) / 2, 1, top_labs, col = "white",
                    cex = cex_lab, adj = c(1, lm_pos), font = lab_font)
     
     # text(xcutoff + (1 - xcutoff) / 2, ycutoff, "I", col = "white", cex = cex_lab,
@@ -339,14 +369,16 @@ ortho3 <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
 #' @param alpha transparency of overlay.
 #' @param ... other options to be passed to the ortho3 function.
 #' @export
-ortho3_int <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
-                       zlim_ol = NULL, alpha = 1, ...) {
+ortho3_inter <- function(underlay, overlay = NULL, xyz = NULL, zlim = NULL,
+                         zlim_ol = NULL, alpha = 0.7, ...) {
   
   img_dim <- dim(underlay)[1:3]
   if (is.null(xyz)) xyz <- ceiling(img_dim / 2)
   
   mri_range <- signif(range(underlay, na.rm = TRUE), 3)
-  if (is.null(zlim)) zlim <- mri_range
+  
+  if (is.null(zlim)) zlim <- stats::quantile(underlay, probs = c(0, 0.999),
+                                             na.rm = TRUE)
   
   if (is.null(overlay)) {
     mri_range_y <- c(0, 1)
