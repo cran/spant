@@ -1,3 +1,14 @@
+# spant 1.11.0
+* Options added to allow extra information to attached to mrs_data and
+fit_result objects as a data frame.
+* New functions (combine_fit_XXX) for working with multiple fit results
+contained within a list structure.
+* Basis set and noise region are now checked for validity in ABfit.
+* Added spant_abfit_benchmark function.
+* Tentative functions for performing "standard" 1H brain analyses: 
+svs_1h_brain_analysis and svs_1h_brain_batch_analysis.
+* Improved support for LCModel analyses.
+
 # spant 1.10.0
 * Fix for NIfTI MRS reader/writer.
 * ortho3 now shows correct labels for orientations other than RAS.

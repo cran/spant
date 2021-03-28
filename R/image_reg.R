@@ -255,6 +255,7 @@ get_voi_seg <- function(voi, mri_seg) {
   vals <- mri_seg[voi == 1]
   pvs <- summary(factor(vals, levels = c(0, 1, 2, 3), 
         labels = c("Other", "CSF", "GM", "WM"))) / sum(voi) * 100
+  pvs <- as.data.frame(t(pvs))
   return(pvs)
 }
 
@@ -275,6 +276,7 @@ get_voi_seg_psf <- function(psf, mri_seg) {
   vec <- c(other, csf, gm, wm)
   vec <- 100 * vec / sum(vec)  # normalise as a %
   names(vec) <- c("Other", "CSF", "GM", "WM")
+  vec <- as.data.frame(t(vec))
   return(vec)
 }
 
@@ -369,11 +371,17 @@ get_mrs_affine <- function(mrs_data, x_pos = 1, y_pos = 1, z_pos = 1) {
 
 # check two nifti images are in the same space
 check_geom <- function(a, b) {
-  eq_xform <- max(Mod(RNifti::xform(a) - RNifti::xform(b))) < 1e-6
+  eq_xform <- max(Mod(RNifti::xform(a) - RNifti::xform(b))) < 1e-5
   eq_dim <- identical(dim(a), dim(b))
   eq_pix_dim <- identical(RNifti::pixdim(a), RNifti::pixdim(b))
   
   if ( !eq_xform | !eq_dim | !eq_pix_dim ) {
+    print(RNifti::xform(a))
+    print(RNifti::xform(b))
+    print(dim(a))
+    print(dim(b))
+    print(RNifti::pixdim(a))
+    print(RNifti::pixdim(b))
     stop("Inconsistant image geometry.")
   }
 } 

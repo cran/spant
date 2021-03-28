@@ -36,10 +36,13 @@
 #' @param progress option is passed to plyr::alply function to display a
 #' progress bar during fitting. Default value is "text", set to "none" to
 #' disable.
+#' @param extra an optional data frame to provide additional variables for use 
+#' in subsequent analysis steps, eg id or grouping variables.
 #' @return MRS analysis object.
 #' @examples
-#' fname <- system.file("extdata","philips_spar_sdat_WS.SDAT",package="spant")
-#' svs <- read_mrs(fname, format="spar_sdat")
+#' fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT", package =
+#' "spant")
+#' svs <- read_mrs(fname)
 #' \dontrun{
 #' basis <- sim_basis_1h_brain_press(svs)
 #' fit_result <- fit_mrs(svs, basis)
@@ -47,7 +50,7 @@
 #' @export
 fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
                     opts = NULL, parallel = FALSE, time = TRUE,
-                    progress = "text") {
+                    progress = "text", extra = metab$extra) {
   
   # start the clock
   if (time) ptm <- proc.time()
@@ -327,9 +330,9 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
     proc_time <- NULL
   }
   
-  out <- list(res_tab = res_tab, fits = fits, 
-              data = metab, basis = basis, amp_cols = ncol(amps), 
-              proc_time = proc_time, method = method, opts = opts)
+  out <- list(res_tab = res_tab, fits = fits,  data = metab, basis = basis,
+              amp_cols = ncol(amps), proc_time = proc_time, method = method,
+              opts = opts, extra = extra)
   
   class(out) <- "fit_result"
   return(out)
@@ -422,6 +425,7 @@ lcmodel_fit <- function(element, temp_mrs, basis_file, opts) {
   
   sink(control_f)
   cat("$LCMODL\n")
+  cat(paste0("key=210387309\n"))
   cat(paste0("nunfil=", dim(metab$data)[7], "\n"))
   cat(paste0("deltat=", metab$resolution[7],"\n"))
   cat(paste0("hzpppm=", metab$ft / 1e6, "\n"))
@@ -443,13 +447,21 @@ lcmodel_fit <- function(element, temp_mrs, basis_file, opts) {
   sink()
   
   # used for debugging
-  #file.copy(control_f, "~/control.file")
+  #file.copy(control_f, "~/control.file", overwrite = TRUE)
   
   # run LCModel
   cmd <- paste(getOption("spant.lcm_cmd"), "<", control_f)
-  res = system(cmd, intern = TRUE, ignore.stderr = TRUE, ignore.stdout = TRUE)
   
+  # used for debugging 
   #print(cmd)
+  
+  if(.Platform$OS.type == "unix") {
+    res <- system(cmd, intern = TRUE, ignore.stderr = TRUE,
+                  ignore.stdout = TRUE)
+  } else {
+    res <- shell(cmd, intern = TRUE, ignore.stderr = TRUE, ignore.stdout = TRUE)
+  }
+  
   if (!file.exists(coord_f)) {
     print(res)
     print(cmd)
@@ -457,7 +469,7 @@ lcmodel_fit <- function(element, temp_mrs, basis_file, opts) {
   }
   
   # used for debugging
-  #file.copy(coord_f, "~/coord.file")
+  #file.copy(coord_f, "~/coord.file", overwrite = TRUE)
   
   coord_res <- read_lcm_coord(coord_f)
   res_tab <- coord_res$res_tab
@@ -526,14 +538,14 @@ read_lcm_coord <- function(coord_f) {
     }
   }
   
-  FWHM <- as.double(strsplit(trimws(line_reader[signals + 8]),"  *")[[1]][3])
-  SNR <- as.double(strsplit(trimws(line_reader[signals + 8]),"  *")[[1]][7])
+  FWHM <- as.double(strsplit(trimws(line_reader[signals + 6]),"  *")[[1]][3])
+  SNR <- as.double(strsplit(trimws(line_reader[signals + 6]),"  *")[[1]][7])
   diags <- data.frame(FWHM = FWHM, SNR = SNR)
   
   #print(coord_f)  
   # -1 width needed to avoid issues when the metab name is
   # prefixed with a + or -
-  metab_table <- utils::read.fwf(coord_f, widths = c(9, 5, 8, -1, 40), skip = 6, 
+  metab_table <- utils::read.fwf(coord_f, widths = c(9, 5, 8, -1, 40), skip = 4, 
                                  n = signals, header = FALSE, 
                                  col.names = c("amp", "SD", "TCr_ratio", "Metab")
                                  , row.names = "Metab")
@@ -569,10 +581,10 @@ read_lcm_coord <- function(coord_f) {
     colnames <- c(colnames, name)
     n = n + 1
   }
-  colnames[1] = "PPMScale"
-  colnames[2] = "Data"
-  colnames[3] = "Fit"
-  colnames[4] = "Baseline"
+  colnames[1] <- "PPMScale"
+  colnames[2] <- "Data"
+  colnames[3] <- "Fit"
+  colnames[4] <- "Baseline"
   names(fit_tab_list) <- colnames
   fit_tab <- stats::na.omit(as.data.frame(fit_tab_list))
   fit_tab$Fit <- fit_tab$Fit - fit_tab$Baseline
@@ -670,34 +682,66 @@ fit_amps <- function(x, inc_index = FALSE, sort_names = FALSE,
   out
 }
 
-#' Combine a list of fit_result objects into a single fit object containing a 
-#' dynamic series.
+#' Combine all fitting data points from a list of fits into a single data frame.
 #' @param fit_list list of fit_result objects.
-#' @return fit_result object.
+#' @param add_extra add variables in the extra data frame to the output (TRUE).
+#' @param harmonise_ppm ensure the ppm scale for each fit is identical to the
+#' first.
+#' @param inc_basis_sigs include the individual fitting basis signals in the
+#' output table, defaults to FALSE.
+#' @param inc_indices include indices such as X, Y and coil in the output,
+#' defaults to TRUE. These are generally not useful for SVS analysis.
+#' @param add_res_id add a res_id column to the output to distinguish between
+#' datasets.
+#' @return a data frame containing the fit data points.
 #' @export
-comb_fits <- function(fit_list) {
-  res_tab <- do.call(rbind, lapply(fit_list, `[[`, "res_tab"))
-  res_tab$Dynamic <- 1:length(fit_list)
-  fits <- unlist(lapply(fit_list, `[[`, "fits"), FALSE)
-  data <- append_dyns(lapply(fit_list, `[[`, "data"))
-  proc_time <- fit_list[[1]]$proc_time
-  for (n in 2:length(fit_list)) {
-    proc_time <- proc_time + fit_list[[n]]$proc_time
+comb_fit_list_fit_tables <- function(fit_list, add_extra = TRUE,
+                                     harmonise_ppm = TRUE,
+                                     inc_basis_sigs = FALSE, inc_indices = TRUE,
+                                     add_res_id = TRUE) {
+  
+  fit_table_list <- lapply(fit_list, comb_fit_tables,
+                           inc_basis_sigs = inc_basis_sigs,
+                           inc_indices = inc_indices)
+  
+  if (harmonise_ppm) {
+    # get the first ppm scale 
+    ppm <- fit_table_list[[1]]$PPMScale
+    fit_table_list <- lapply(fit_table_list, function(x) {x$PPMScale = ppm; x})
   }
   
-  fit_out <- list(res_tab = res_tab, fits = fits, data = data,
-                  basis = fit_list[[1]]$basis,
-                  amp_cols = fit_list[[1]]$amp_cols, proc_time = proc_time)
+  if (add_res_id) {
+    fit_table_list <- mapply(cbind, fit_table_list,
+                             "res_id" = seq(fit_table_list), SIMPLIFY = FALSE)
+  }
   
-  class(fit_out) <- "fit_result"
-  fit_out
+  # add extra variables if requested and sensible
+  if ((!is.null(fit_list[[1]]$extra)) & add_extra) {
+    if (nrow(fit_list[[1]]$extra) != 1) {
+      stop("unable to combine extra data, set add_extra to FALSE")
+    }
+    extra_list <- lapply(fit_list, '[[', 'extra')
+    fit_table_list <- mapply(cbind, fit_table_list, extra_list,
+                             SIMPLIFY = FALSE)
+  }
+  
+  out <- do.call("rbind", fit_table_list)
+  
+  if (add_res_id) out$res_id <- as.factor(out$res_id)
+  
+  return(out)
 }
-
-#' Combine all fitting data points into a single dataframe.
+  
+#' Combine all fitting data points into a single data frame.
 #' @param fit_res a single fit_result object.
-#' @return a dataframe containing the fit data points.
+#' @param inc_basis_sigs include the individual fitting basis signals in the
+#' output table, defaults to FALSE.
+#' @param inc_indices include indices such as X, Y and coil in the output,
+#' defaults to TRUE. These are generally not useful for SVS analysis.
+#' @return a data frame containing the fit data points.
 #' @export
-get_fit_table <- function(fit_res) {
+comb_fit_tables <- function(fit_res, inc_basis_sigs = FALSE,
+                            inc_indices = TRUE) {
   
   # search for masked spectra
   na_fits <- is.na(fit_res$fits)
@@ -716,12 +760,55 @@ get_fit_table <- function(fit_res) {
     full_fit_df <- do.call("rbind", fit_res$fits)
   }
   
-  # add some ID columns
-  full_fit_df$id <- rep(1:length(na_fits), each = frows)
-  full_fit_df$X  <- rep(fit_res$res_tab$X, each = frows)
-  full_fit_df$Y  <- rep(fit_res$res_tab$Y, each = frows)
-  full_fit_df$Z  <- rep(fit_res$res_tab$Z, each = frows)
-  full_fit_df$Dynamic <- rep(fit_res$res_tab$Dynamic, each = frows)
-  full_fit_df$Coil <- rep(fit_res$res_tab$Coil, each = frows)
-  full_fit_df
+  # remove basis signals if requested
+  if (!inc_basis_sigs) full_fit_df <- full_fit_df[,1:4]
+  
+  if (inc_indices) {
+    # add some ID columns
+    full_fit_df$N  <- as.factor(rep(1:length(na_fits), each = frows))
+    full_fit_df$X  <- as.factor(rep(fit_res$res_tab$X, each = frows))
+    full_fit_df$Y  <- as.factor(rep(fit_res$res_tab$Y, each = frows))
+    full_fit_df$Z  <- as.factor(rep(fit_res$res_tab$Z, each = frows))
+    full_fit_df$Dynamic <- as.factor(rep(fit_res$res_tab$Dynamic, each = frows))
+    full_fit_df$Coil <- as.factor(rep(fit_res$res_tab$Coil, each = frows))
+  }
+  
+  # this could be a bad idea 
+  full_fit_df <- stats::na.omit(full_fit_df)
+  
+  return(full_fit_df)
+}
+
+#' Combine the fit result tables from a list of fit results.
+#' @param fit_list a list of fit_result objects.
+#' @param add_extra add variables in the extra data frame to the output (TRUE).
+#' @param add_res_id add a res_id column to the output to distinguish between
+#' datasets.
+#' @return a data frame combine all fit result tables with an additional id
+#' column to differentiate between data sets. Any variables in the extra data
+#' frame may be optionally added to the result.
+#' @export
+comb_fit_list_result_tables <- function(fit_list, add_extra = TRUE,
+                                        add_res_id = TRUE) {
+  
+  # extract a list of result tables
+  df_list <- lapply(fit_list, '[[', 'res_tab')
+  
+  # add a result id variable to each item
+  if (add_res_id) {
+    df_list <- mapply(cbind, df_list, "res_id" = seq(df_list), SIMPLIFY = FALSE)
+  }
+  
+  # add extra variables if requested and sensible
+  if ((!is.null(fit_list[[1]]$extra)) & add_extra) {
+    extra_list <- lapply(fit_list, '[[', 'extra')
+    df_list    <- mapply(cbind, df_list, extra_list, SIMPLIFY = FALSE)
+  }
+  
+  # combine into a single data frame
+  out <- do.call("rbind", df_list)
+  
+  if (add_res_id) out$res_id <- as.factor(out$res_id)
+  
+  return(out)
 }

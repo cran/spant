@@ -96,7 +96,8 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
   
   mrs_data <- mrs_data(data = data, ft = acq_paras$ft, resolution = res,
                        ref = acq_paras$ref, nuc = acq_paras$nuc,
-                       freq_domain = rep(FALSE, 7), affine = NULL, meta = NULL)
+                       freq_domain = rep(FALSE, 7), affine = NULL, meta = NULL,
+                       extra = NULL)
   
   return(mrs_data)
 }
@@ -134,7 +135,7 @@ sim_resonances_fast <- function(freq = 0, amp = 1, freq_ppm = TRUE,
     
   mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = rep(FALSE, 7), affine = NULL,
-                       meta = NULL)
+                       meta = NULL, extra = NULL)
   
   return(mrs_data)
 }
@@ -178,7 +179,7 @@ sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
   
   mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = rep(FALSE, 7), affine = NULL,
-                       meta = NULL)
+                       meta = NULL, extra = NULL)
   
   return(mrs_data)
 }
@@ -203,7 +204,7 @@ vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
   
   mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
-                       affine = NULL, meta = NULL)
+                       affine = NULL, meta = NULL, extra = NULL)
   
   return(mrs_data)
 }
@@ -227,7 +228,7 @@ array2mrs_data <- function(data_array, fs = def_fs(), ft = def_ft(),
   
   mrs_data <- mrs_data(data = data_array, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
-                       affine = NULL, meta = NULL)
+                       affine = NULL, meta = NULL, extra = NULL)
   
   return(mrs_data)
 }
@@ -283,12 +284,12 @@ mat2mrs_data <- function(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(),
   
   mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
-                       affine = NULL, meta = NULL)
+                       affine = NULL, meta = NULL, extra = NULL)
   
   return(mrs_data)
 }
 
-#' Simulate a time-domain mrs_data object containing simulated Gaussian noise.
+#' Simulate an mrs_data object containing simulated Gaussian noise.
 #' @param sd standard deviation of the noise.
 #' @param fs sampling frequency in Hz.
 #' @param ft transmitter frequency in Hz.
@@ -1209,16 +1210,21 @@ align <- function(mrs_data, ref_freq = 4.65, zf_factor = 2, lb = 2,
 #' @param mrs_data MRS data.
 #' @param nstart first data point to fit.
 #' @param nend last data point to fit.
+#' @param method method for measuring the amplitude, one of "spline" or "exp".
 #' @return array of amplitudes.
 #' @export
-get_td_amp <- function(mrs_data, nstart = 10, nend = 50) {
+get_td_amp <- function(mrs_data, nstart = 10, nend = 50, method = "spline") {
   
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
   
-  #t <- seconds(mrs_data)
-  #amps <- apply_mrs(mrs_data, 7, measure_lorentz_amp, t, nstart, nend)$data
-  
-  amps <- apply_mrs(mrs_data, 7, measure_td_amp, nstart, nend)$data
+  if (method == "spline") {
+    amps <- apply_mrs(mrs_data, 7, measure_td_amp, nstart, nend)$data
+  } else if (method == "exp") {
+    t <- seconds(mrs_data)
+    amps <- apply_mrs(mrs_data, 7, measure_lorentz_amp, t, nstart, nend)$data
+  } else {
+    stop("incorrect method for get_td_amp")
+  }
  
   amps <- abind::adrop(amps, 7)
   amps

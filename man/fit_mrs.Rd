@@ -12,7 +12,8 @@ fit_mrs(
   opts = NULL,
   parallel = FALSE,
   time = TRUE,
-  progress = "text"
+  progress = "text",
+  extra = metab$extra
 )
 }
 \arguments{
@@ -36,6 +37,9 @@ LCModel .basis format.}
 \item{progress}{option is passed to plyr::alply function to display a
 progress bar during fitting. Default value is "text", set to "none" to
 disable.}
+
+\item{extra}{an optional data frame to provide additional variables for use
+in subsequent analysis steps, eg id or grouping variables.}
 }
 \value{
 MRS analysis object.
@@ -66,8 +70,9 @@ Provencher SW. Estimation of metabolite concentrations from localized in vivo
 proton NMR spectra. Magn Reson Med 1993;30:672-679.
 }
 \examples{
-fname <- system.file("extdata","philips_spar_sdat_WS.SDAT",package="spant")
-svs <- read_mrs(fname, format="spar_sdat")
+fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT", package =
+"spant")
+svs <- read_mrs(fname)
 \dontrun{
 basis <- sim_basis_1h_brain_press(svs)
 fit_result <- fit_mrs(svs, basis)
