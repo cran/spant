@@ -1,9 +1,11 @@
 ## ---- include = FALSE---------------------------------------------------------
+library(ragg)
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 6,
-  fig.height = 5
+  fig.height = 5,
+  dev = "ragg_png"
 )
 
 ## ----setup, message = FALSE---------------------------------------------------
