@@ -308,6 +308,28 @@ sim_noise <- function(sd = 0.1, fs = def_fs(), ft = def_ft(), N = def_N(),
   array2mrs_data(data_array, fs = fs, ft = ft, ref = ref, fd = fd)
 }
 
+#' Add noise to an mrs_data object.
+#' @param mrs_data data to add noise to.
+#' @param sd standard deviation of the noise.
+#' @param fd generate the noise samples in the frequency-domain (TRUE) or
+#' time-domain (FALSE). This is required since the absolute value of the 
+#' standard deviation of noise samples changes when data is Fourier transformed.
+#' @return mrs_data object with additive normally distributed noise.
+#' @export
+add_noise <- function(mrs_data, sd = 0.1, fd = TRUE) {
+  
+  # covert data to the frequency domain if needed
+  if (fd & !is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  # covert data to the time domain if needed
+  if (!fd & is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+ 
+  data_pts <- length(mrs_data$data)
+  noise <- stats::rnorm(data_pts, 0, sd) + 1i*stats::rnorm(data_pts, 0, sd)
+  mrs_data$data <- mrs_data$data + noise
+  mrs_data
+}
+
 sim_zeros <- function(fs = def_fs(), ft = def_ft(), N = def_N(),
                       ref = def_ref(), dyns = 1) {
   
@@ -1684,9 +1706,56 @@ bc <- function(mrs_data, lambda = 1e3, p = 0.1) {
   apply_mrs(mrs_data, 7, ptw::baseline.corr, lambda, p)
 }
 
+#' Sum two mrs_data objects.
+#' @param a first mrs_data object to be summed.
+#' @param b second mrs_data object to be summed.
+#' @param force set to TRUE to force mrs_data objects to be summed, even if they
+#' are in different time/frequency domains.
+#' @return a + b 
+#' @export
+sum_mrs <- function(a, b, force = FALSE) {
+ 
+  if (class(a) != "mrs_data") stop("a argument is not an mrs_data object")
+  
+  if (class(b) != "mrs_data") stop("b argument is not an mrs_data object")
+  
+  # if they are not in the same domain and we are not forcing, then swap b to 
+  # match a
+  if ((is_fd(a) != is_fd(b)) & !force) {
+    if (is_fd(b)) {
+      b <- fd2td(b)
+    } else {
+      b <- td2fd(b)
+    }
+  }
+  
+  a$data <- a$data + b$data
+  
+  return(a)
+}
+
+#' Scale an mrs_data object by a constant.
+#' @param mrs_data data to be scaled.
+#' @param scale multiplicative factor.
+#' @return mrs_data multiplied by the scale factor.
+#' @export
+scale_mrs <- function(mrs_data, scale) {
+ 
+  if (class(mrs_data) != "mrs_data") {
+    stop("first argument is not an mrs_data object")
+  }
+  
+  mrs_data$data <- mrs_data$data * scale
+  
+  return(mrs_data)
+}
+  
 #' @export
 `+.mrs_data` <- function(a, b) {
   if (class(b) == "mrs_data" ) {
+    if (is_fd(a) != is_fd(b)) {
+      warning("sum warning, spectral domains do not match")
+    }
     a$data <- a$data + b$data
   } else if (class(b) == "numeric") {
     a$data <- a$data + b
@@ -1697,6 +1766,9 @@ bc <- function(mrs_data, lambda = 1e3, p = 0.1) {
 #' @export
 `-.mrs_data` <- function(a, b = NULL) {
   if (class(b) == "mrs_data" ) {
+    if (is_fd(a) != is_fd(b)) {
+      warning("subtract warning, time/frequency domains do not match")
+    }
     a$data = a$data - b$data
   } else if (is.null(b)) {
     a$data = -a$data
@@ -1709,6 +1781,9 @@ bc <- function(mrs_data, lambda = 1e3, p = 0.1) {
 #' @export
 `*.mrs_data` <- function(a, b) {
   if (class(b) == "mrs_data" ) {
+    if (is_fd(a) != is_fd(b)) {
+      warning("multiply warning, time/frequency domains do not match")
+    }
     a$data <- a$data * b$data
   } else if ( class(b) == "numeric") {
     a$data <- a$data * b
@@ -1719,6 +1794,9 @@ bc <- function(mrs_data, lambda = 1e3, p = 0.1) {
 #' @export
 `/.mrs_data` <- function(a, b) {
   if (class(b) == "mrs_data" ) {
+    if (is_fd(a) != is_fd(b)) {
+      warning("divide warning, time/frequency domains do not match")
+    }
     a$data <- a$data / b$data
   } else if (class(b) == "numeric") {
     a$data <- a$data / b
@@ -1989,31 +2067,53 @@ fd_conv_filt <- function(mrs_data, K = 25, ext = 1) {
 #' signals. J Magn Reson 1987;73:553-557.
 #' 
 #' @param mrs_data MRS data to be filtered.
-#' @param xlim frequency range in Hz to filter.
+#' @param xlim frequency range to filter, default units are Hz which can be
+#' changed to ppm using the "scale" argument.
 #' @param comps number of Lorentzian components to use for modelling.
 #' @param irlba option to use irlba SVD (logical).
 #' @param max_damp maximum allowable damping factor.
-#' @return filtered data.
+#' @param scale either "hz" or "ppm" to set the frequency units of xlim.
+#' @param return_model by default the filtered spectrum is returned. Set
+#' return_model to TRUE to return the HSVD model of the data.
+#' @return filtered data or model depending on the return_model argument.
 #' @export
 hsvd_filt <- function(mrs_data, xlim = c(-30, 30), comps = 40, irlba = TRUE,
-                      max_damp = 10) {
+                      max_damp = 10, scale = "hz", return_model = FALSE) {
   
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
   
-  apply_mrs(mrs_data, 7, hsvd_filt_vec, fs = fs(mrs_data), region = xlim,
-            comps = comps, irlba, max_damp = max_damp)
+  if ( scale == "ppm" ) {
+    xlim <- ppm2hz(xlim, mrs_data$ft, mrs_data$ref) 
+  } else if (scale != "hz") {
+    stop("Invalid scale option, should be 'ppm' or 'hz'.")
+  }
+  
+  xlim <- sort(xlim)
+  
+  filt <- apply_mrs(mrs_data, 7, hsvd_filt_vec, fs = fs(mrs_data),
+                    region = xlim, comps = comps, irlba, max_damp = max_damp)
+  
+  if (return_model) {
+    model <- sum_mrs(mrs_data, -filt)
+    return(model)
+  } else {
+    return(filt)
+  }
 }
 
 hsvd_filt_vec <- function(fid, fs, region = c(-30, 30), comps = 40, 
                           irlba = TRUE, max_damp = 10) {
   
-  hsvd_res <- hsvd_vec(fid, fs, comps = comps, irlba)  
-  idx <- (hsvd_res$reson_table$frequency_hz < region[2]) &
-         (hsvd_res$reson_table$frequency_hz > region[1] )
-  model <- rowSums(hsvd_res$basis[,idx])
+  hsvd_res <- hsvd_vec(fid, fs, comps = comps, irlba, max_damp)
+  if (is.null(region)) {
+    model <- rowSums(hsvd_res$basis)
+  } else {
+    idx <- (hsvd_res$reson_table$frequency_hz < region[2]) &
+           (hsvd_res$reson_table$frequency_hz > region[1] )
+    model <- rowSums(hsvd_res$basis[,idx])
+  }
   fid - model
 }
-
 
 #' HSVD of an mrs_data object.
 #' 
@@ -2075,7 +2175,7 @@ hsvd_vec <- function(y, fs, comps = 40, irlba = TRUE, max_damp = 0) {
   rows <- nrow(Uk)
   Ukt <- Uk[2:rows,]
   Ukb <- Uk[1:(rows - 1),]
-  Zp = MASS::ginv(Ukb) %*% Ukt
+  Zp <- MASS::ginv(Ukb) %*% Ukt
 
   # find the poles
   q <- pracma::eig(Zp)
@@ -2087,7 +2187,7 @@ hsvd_vec <- function(y, fs, comps = 40, irlba = TRUE, max_damp = 0) {
   # large +ve dampings can cause stability issues where the basis signals
   # can have values 1e88 at the end of the FID causing ginv to fail
   # cap these positive dampings to max_damp
-  dampings[dampings > max_damp] <- max_damp
+  if (!is.null(max_damp)) dampings[dampings > max_damp] <- max_damp
   
   t <- seq(from = 0, to = (N - 1) / fs, by = 1 / fs)
   t_mat <- matrix(t, ncol = comps, nrow = N)
@@ -2682,7 +2782,9 @@ calc_peak_info_vec <- function(data_pts, interp_f) {
   hh <- peak_height / 2
   
   # right side of peak
-  rs <- peak_pos_n + min(which((data_pts < hh)[peak_pos_n:length(data_pts)])) - 1
+  rs <- peak_pos_n + 
+        min(which((data_pts < hh)[peak_pos_n:length(data_pts)])) - 1
+  
   rs_slope <- (data_pts[rs] - data_pts[rs - 1])
   rs_intercept <- data_pts[rs] - rs_slope * rs
   rs_x_hh <- (hh - rs_intercept) / rs_slope

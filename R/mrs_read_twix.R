@@ -45,7 +45,9 @@ calc_siemens_paras <- function(vars, is_ima) {
               affine = affine))
 }
 
-read_twix <- function(fname, verbose, full_data = FALSE, extra) {
+read_twix <- function(fname, verbose, full_fid = FALSE,
+                      omit_svs_ref_scans = TRUE, extra) {
+  
   # check the file size
   fbytes <- file.size(fname)
   
@@ -82,8 +84,11 @@ read_twix <- function(fname, verbose, full_data = FALSE, extra) {
   # read data points 
   con <- file(fname, "rb")
   seek(con, dataStart)
+ 
+  # scan ids
+  inds <- NULL
   
-  ima_echoes <- 0
+  # ima_echoes <- 0
   cPos <- dataStart
   
   # overestimate the number of data points and pre-allocate
@@ -116,12 +121,31 @@ read_twix <- function(fname, verbose, full_data = FALSE, extra) {
       # read next 64 bits
       info_bits <- c(as.logical(intToBits(read_int32(con))),
                      as.logical(intToBits(read_int32(con))))
-      samples_in_scan       <- read_uint16(con)
-      used_channels         <- read_uint16(con)
-      seek(con, 8, "current")
-      Necho                 <- read_uint16(con)
-      seek(con, 22, "current")
-      kspace_center_column  <- read_uint16(con)
+      samples_in_scan       <- read_uint16(con) # NCol
+      used_channels         <- read_uint16(con) # NCha
+      Lin                   <- read_uint16(con)
+      Ave                   <- read_uint16(con)
+      Sli                   <- read_uint16(con)
+      Par                   <- read_uint16(con)
+      Eco                   <- read_uint16(con)
+      Phs                   <- read_uint16(con)
+      Rep                   <- read_uint16(con)
+      Set                   <- read_uint16(con)
+      Seg                   <- read_uint16(con)
+      Ida                   <- read_uint16(con)
+      Idb                   <- read_uint16(con)
+      Idc                   <- read_uint16(con)
+      Idd                   <- read_uint16(con)
+      Ide                   <- read_uint16(con)
+      
+      # not sure if this next part is right as I don't have any test data
+      # that uses it
+      seek(con, 4, "current")
+      kspace_center_column  <- read_uint16(con) # centerCol
+      centerLin             <- read_uint16(con)
+      centerPar             <- read_uint16(con)
+      cutOff                <- read_uint16(con)
+      coilSelect            <- read_uint16(con)
       
       MDH_ACQEND            <- info_bits[1]
       MDH_RTFEEDBACK        <- info_bits[2]
@@ -167,9 +191,13 @@ read_twix <- function(fname, verbose, full_data = FALSE, extra) {
       }
       
       if (MDH_IMASCAN) {
+        # this chunk of data is from all coils
+        inds <- c(inds, c(Lin, Ave, Sli, Par, Eco, Phs, Rep, Set, Seg, Ida, Idb,
+                         Idc, Idd, Ide))
+        
         ima_coils <- used_channels
         ima_samples <- samples_in_scan
-        if (Necho > ima_echoes) ima_echoes <- Necho
+        # if (Necho > ima_echoes) ima_echoes <- Necho
         ima_kspace_center_column <- kspace_center_column 
         # read in the data points
         for (x in 0:(used_channels - 1)) {
@@ -240,7 +268,7 @@ read_twix <- function(fname, verbose, full_data = FALSE, extra) {
   data <- array(data, dim = c(ima_samples, ima_coils, dynamics, 1, 1, 1, 1))
   data <- aperm(data, c(7,6,5,4,3,2,1))
    
-  if (!full_data & (floor(ima_kspace_center_column / 2) > 0)) {
+  if (!full_fid & (floor(ima_kspace_center_column / 2) > 0)) {
     #data <- data[,,,,,,(fid_offset + 1):ima_samples, drop = FALSE]
     data <- data[,,,,,,(ima_kspace_center_column + 1):ima_samples, drop = FALSE]
   }
@@ -257,6 +285,21 @@ read_twix <- function(fname, verbose, full_data = FALSE, extra) {
                        ref = paras$ref, nuc = paras$nuc,
                        freq_domain = freq_domain, affine = paras$affine,
                        meta = meta, extra = extra)
+  
+  # some extra info specific to twix data
+  mrs_data$twix_inds <- as.data.frame(matrix(inds, ncol = 14, byrow = TRUE))
+  
+  ind_names <- c("Lin", "Ave", "Sli", "Par", "Eco", "Phs", "Rep", "Set", "Seg",
+                 "Ida", "Idb", "Idc", "Idd", "Ide")
+  
+  names(mrs_data$twix_inds) <- ind_names
+  
+  # remove SVS ref scans if required
+  if (omit_svs_ref_scans & (max(mrs_data$twix_inds$Phs) == 1) &
+      max(mrs_data$twix_inds$Ave) > 0) {
+    
+    mrs_data <- get_dyns(mrs_data, mrs_data$twix_inds$Phs == 1)
+  }
   
   return(mrs_data)
 }

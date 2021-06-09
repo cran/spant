@@ -1,3 +1,19 @@
+# spant 1.13.0
+* ABfit frequency shifts limits are now specified in ppm rather than Hz to
+improve consistency between field strengths.
+* NAA linewidth is now estimated and output by ABfit when NAAG is absent - 
+useful for BRAINO phantom scans.
+* Warning now given when spectra are mathematically combined and are not both
+in the same time/frequency domain.
+* sum_mrs function added to simplify combining spectra within a pipe.
+* scale_mrs function added to simplify scaling a spectrum within a pipe.
+* add_noise function added to simplify generating simulated data with a pipe.
+* hsvd_filt function now accepts a frequency range in ppm units and gives the
+option to return the model rather than the filtered data.
+* Bug fix for hsvd_filt function where the max_damp argument was ignored.
+* SVS reference scans, found in some TWIX files, are now removed by default.
+* Bug fix for reading list/data when only one coil element is used.
+
 # spant 1.12.0
 * Added 2HG and citrate simulation parameters. e.g. get_mol_paras("2hg").
 * Better print output for molecular definitions.

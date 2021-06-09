@@ -222,30 +222,37 @@ write_basis <- function(basis, basis_file, fwhmba = 0.1) {
 #' across the dynamic dimension.
 #' @param basis basis set object.
 #' @param sum_elements return the sum of basis elements (logical)
-#' @param amp a vector of scaling factors to apply to each basis element.
-#' @param shift a vector of frequency shifts (in PPM) to apply to each basis
+#' @param amps a vector of scaling factors to apply to each basis element.
+#' @param shifts a vector of frequency shifts (in ppm) to apply to each basis
 #' element.
 #' @return an mrs_data object with basis signals spread across the dynamic 
 #' dimension or summed.
 #' @export
-basis2mrs_data <- function(basis, sum_elements = FALSE, amp = NULL,
-                           shift = NULL) {
+basis2mrs_data <- function(basis, sum_elements = FALSE, amps = NULL,
+                           shifts = NULL) {
   
   res <- mat2mrs_data(t(basis$data), fs = basis$fs, ft = basis$ft,
                       ref = basis$ref, fd = TRUE)
   
+  n_sigs <- Ndyns(res)
+  
   # scale basis elements
-  if (!is.null(amp)) {
-    n_sigs <- Ndyns(res)
-    if (n_sigs != length(amp)) {
-      stop(paste("Error, length of amp does not match the number of basis elements :", dim(basis$data)[2]))
+  if (!is.null(amps)) {
+    if (n_sigs != length(amps)) {
+      stop(paste("Error, length of amps does not match the number of basis elements :", dim(basis$data)[2]))
     }
     for (n in 1:n_sigs) {
-      res$data[,,,,n ,,] <- res$data[,,,,n ,,] * amp[n]
+      res$data[,,,,n ,,] <- res$data[,,,,n ,,] * amps[n]
     }
   }
   
-  if (!is.null(shift)) res <- shift(res, shift)
+  # shift basis elements
+  if (!is.null(shifts)) {
+    if (n_sigs != length(shifts)) {
+      stop(paste("Error, length of amps does not match the number of basis elements :", dim(basis$data)[2]))
+    }
+    res <- shift(res, shifts)
+  }
   
   if (sum_elements) res <- sum_dyns(res)
   
@@ -292,4 +299,19 @@ append_basis <- function(basis_a, basis_b) {
   basis_out_mrs <- append_dyns(basis_a_mrs, basis_b_mrs)
   basis_out <- mrs_data2basis(basis_out_mrs, c(basis_a$names, basis_b$names))
   return(basis_out)
+}
+
+#' Apply frequency shifts to basis set signals.
+#' @param basis the basis to apply the shift to.
+#' @param shifts a vector of frequency shifts to apply in ppm units. Must be the
+#' same length as there are basis elements.
+#' @return modified basis set object.
+#' @export
+shift_basis <- function(basis, shifts) {
+  if (length(shifts) != ncol(basis$data)) {
+    stop("the length of shifts does not match the number of basis signals")
+  }
+  basis_mrs_data <- basis2mrs_data(basis)
+  basis_mrs_data <- shift(basis_mrs_data, shifts)
+  mrs_data2basis(basis_mrs_data, basis$names)
 }
