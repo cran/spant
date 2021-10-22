@@ -1,3 +1,14 @@
+# spant 1.15.0
+* Added a unit test for reading and writing LCM .basis formatted files.
+* Added FWHM estimates for tCr and tCho in ABfit.
+* Added water suppression efficiency and water FWHM measures to the diagnostic
+output of svs_1h_brain_analysis.
+* Added get_head_dyns and get_tail_dyns to return the first and last dynamic
+scans within a dataset.
+* Fixed CI errors.
+* Improved installation instructions.
+* Removed comb_csv_results function and reduced the number of required packages.
+
 # spant 1.14.0
 * Added glycerol simulation parameters, e.g. get_mol_paras("glyc").
 * Bug fix for read_ima_* functions.

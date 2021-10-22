@@ -543,6 +543,23 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
                     (sp_bas_final$x_scale[1] - sp_bas_final$x_scale[2])
   }
   
+  # tCr_lw calc 
+  if (("Cr" %in% colnames(amps)) & ("PCr" %in% colnames(amps))) {
+    tcr_sig_pts <- basis_frame$Cr + basis_frame$PCr
+    diags$tCr_lw <- calc_peak_info_vec(tcr_sig_pts, 2)[3] * 
+                     (sp_bas_final$x_scale[1] - sp_bas_final$x_scale[2])
+  } else if ("Cr" %in% colnames(amps)) {
+    diags$Cr_lw <- calc_peak_info_vec(basis_frame$Cr, 2)[3] * 
+                    (sp_bas_final$x_scale[1] - sp_bas_final$x_scale[2])
+  }
+  
+  # tCho_lw calc 
+  if (("GPC" %in% colnames(amps)) & ("PCh" %in% colnames(amps))) {
+    tcho_sig_pts <- basis_frame$GPC + basis_frame$PCh
+    diags$tCho_lw <- calc_peak_info_vec(tcho_sig_pts, 2)[3] * 
+                     (sp_bas_final$x_scale[1] - sp_bas_final$x_scale[2])
+  } 
+  
   #### crlb calc ####
   
   # calculate the analytical jacobian for the non-linear parameters
@@ -1255,7 +1272,7 @@ auto_pspline_smoother <- function(y, spline_basis, deriv_mat, maxiters = 25,
   for (iter in 1:maxiters) {
     lambda <- sig_sq / tau_sq
     
-    inv_mat <- MASS::ginv(rbind(spline_basis, lambda ^ 0.5 * deriv_mat))
+    inv_mat <- ginv(rbind(spline_basis, lambda ^ 0.5 * deriv_mat))
     alpha <-   inv_mat %*% c(y, rep(0, dim(deriv_mat)[1]))
     
     yhat <- spline_basis %*% alpha
@@ -1291,7 +1308,7 @@ auto_pspline_smoother <- function(y, spline_basis, deriv_mat, maxiters = 25,
 }
 
 calc_ed_from_lambda_stable <- function(spline_basis, deriv_mat, lambda) {
-  inv_mat  <- MASS::ginv(rbind(spline_basis, (lambda ^ 0.5) * deriv_mat))
+  inv_mat  <- ginv(rbind(spline_basis, (lambda ^ 0.5) * deriv_mat))
   zero_mat <- matrix(0, dim(deriv_mat)[1], dim(deriv_mat)[2])
   G        <- inv_mat %*% rbind(spline_basis, zero_mat)
   return(sum(diag(G)))
