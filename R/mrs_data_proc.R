@@ -27,36 +27,39 @@ check_mrs_data <- function(mrs_data) {
 #' \code{\link{def_acq_paras}}
 #' @param fp_scale multiply the first data point by 0.5.
 #' @param back_extrap_pts number of data points to back extrapolate.
+#' @param sum_resonances sum all resonances (default is TRUE), otherwise return
+#' a dynamic mrs_data object. 
 #' @return MRS data object.
 #' @examples
 #' sim_data <- sim_resonances(freq = 2, lw = 5)
 #' @export
 sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0, 
                            freq_ppm = TRUE, acq_paras = def_acq_paras(),
-                           fp_scale = TRUE, back_extrap_pts = 0) {
-  
-  # TODO check this works for vectors
-  #if ((sum(lg > 1) + sum(lg < 0)) > 0) {
-  #  cat("Error, lg values not between 0 and 1.")  
-  #  stop()
-  #}
+                           fp_scale = TRUE, back_extrap_pts = 0,
+                           sum_resonances = TRUE) {
   
   if (class(acq_paras) == "mrs_data") acq_paras <- get_acq_paras(acq_paras)
   
   sig_n <- length(freq)
   if (sig_n != length(amp)) {
+    if (length(amp) != 1) warning("amp length is not the same as freq length")
     amp <- rep_len(amp, sig_n)
   }
   
   if (sig_n != length(lw)) {
+    if (length(lw) != 1) warning("lw length is not the same as freq length")
     lw <- rep_len(lw, sig_n)
   }
   
   if (sig_n != length(phase)) {
+    if (length(phase) != 1) {
+      warning("phase length is not the same as freq length")
+    }
     phase <- rep_len(phase, sig_n)
   }
   
   if (sig_n != length(lg)) {
+    if (length(lg) != 1) warning("lg length is not the same as freq length")
     lg <- rep_len(lg, sig_n)
   }
   
@@ -71,35 +74,24 @@ sim_resonances <- function(freq = 0, amp = 1, lw = 0, lg = 0, phase = 0,
     f_hz <- freq
   }
   
-  data <- rep(0, acq_paras$N + back_extrap_pts)
+  data <- matrix(NA, sig_n, acq_paras$N + back_extrap_pts)
+  
   for (n in 1:sig_n) {
-    temp_data <- amp[n] * exp(1i * pi * phase[n] / 180 + 2i * pi * f_hz[n] * t)
+    data[n,] <- amp[n] * exp(1i * pi * phase[n] / 180 + 2i * pi * f_hz[n] * t)
     
     # LG peak model
-    temp_data <- temp_data * ((1 - lg[n]) * exp(-lw[n] * t * pi) + 
-                              lg[n] * exp(-lw2beta(lw[n]) * t * t))
-    
-    data <- data + temp_data
+    data[n,] <- data[n,] * ((1 - lg[n]) * exp(-lw[n] * t * pi) + 
+                             lg[n] * exp(-lw2beta(lw[n]) * t * t))
   }
   
   # first point correction
-  if (fp_scale) data[1] <- data[1] * 0.5
+  if (fp_scale) data[, 1] <- data[, 1] * 0.5
   
-  #if (lg < 1) {
-  #  mrs_data$data = mrs_data$data*exp(-(1-lg)*lb*t*pi)
-  #}
+  mrs_data <- mat2mrs_data(data, fs = acq_paras$fs, ft = acq_paras$ft,
+                           ref = acq_paras$ref, nuc = acq_paras$nuc,
+                           fd = FALSE)
   
-  #if (lg > 0) {
-  #  mrs_data$data = mrs_data$data*exp(((lg*lb)^2*pi^2/4/log(0.5))*(t^2))
-  #}
-  
-  data <- array(data,dim = c(1, 1, 1, 1, 1, 1, acq_paras$N + back_extrap_pts))
-  res <- c(NA, 1, 1, 1, 1, NA, 1 / acq_paras$fs)
-  
-  mrs_data <- mrs_data(data = data, ft = acq_paras$ft, resolution = res,
-                       ref = acq_paras$ref, nuc = acq_paras$nuc,
-                       freq_domain = rep(FALSE, 7), affine = NULL, meta = NULL,
-                       extra = NULL)
+  if (sum_resonances) mrs_data <- sum_dyns(mrs_data)
   
   return(mrs_data)
 }
@@ -1867,6 +1859,8 @@ spec_op <- function(mrs_data, xlim = NULL, operator = "sum", freq_scale = "ppm",
     x_scale <- hz(mrs_data)
   } else if (freq_scale == "points") {
     x_scale <- pts(mrs_data)
+  } else {
+    stop("unknown freq_scale for spec_op function")
   }
   
   if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[Npts(mrs_data)])
@@ -1881,6 +1875,8 @@ spec_op <- function(mrs_data, xlim = NULL, operator = "sum", freq_scale = "ppm",
     data_arr <- Im(data_arr)
   } else if (mode == "mod") {
     data_arr <- Mod(data_arr)
+  } else {
+    stop("unknown mode for spec_op function")
   }
  
   if (operator == "l2") {
@@ -2572,18 +2568,20 @@ ecc <- function(metab, ref, rev = FALSE) {
 apodise_xy <- function(mrs_data, func = "hamming", w = 2.5) {
   
   # check the input
-  check_mrs_data(mrs_data) 
+  check_mrs_data(mrs_data)
   
-  mrsi_dims <- dim(mrs_data$data)
-  x_dim <- mrsi_dims[2]
-  y_dim <- mrsi_dims[3]
-  N <- mrsi_dims[7]
+  x_dim <- Nx(mrs_data)
+  y_dim <- Ny(mrs_data)
+  z_dim <- Nz(mrs_data)
+  dyns  <- Ndyns(mrs_data)
+  coils <- Ncoils(mrs_data)
+  N     <- Npts(mrs_data)
   
+  # transform to k-space
   mrs_data <- img2kspace_xy(mrs_data)
   
-  mat <- mrs_data$data
-  mat <- drop(mat)
-  dim(mat) <- c(x_dim, y_dim * N)
+  # create the k-space weighting matrix
+  weight_mat <- matrix(1, nrow = x_dim, ncol = y_dim)
   
   if (func == "hamming") {
     x_fun <- signal::hamming(x_dim)
@@ -2595,20 +2593,18 @@ apodise_xy <- function(mrs_data, func = "hamming", w = 2.5) {
     stop("error func not recognised")
   }
     
-  mat <- mat * x_fun
+  weight_mat   <- t(t(weight_mat * x_fun) * y_fun)
+  weight_array <- array(weight_mat, c(1, x_dim, y_dim, 1, 1, 1, 1))
   
-  dim(mat) <- c(x_dim, y_dim, N)
-  mat <- aperm(mat, c(2, 1, 3))
-  dim(mat) <- c(y_dim, x_dim * N)
+  if (z_dim != 1) weight_array <- rep_array_dim(weight_array, 4, z_dim)
+  if (dyns != 1)  weight_array <- rep_array_dim(weight_array, 5, dyns)
+  if (coils != 1) weight_array <- rep_array_dim(weight_array, 6, coils)
+  if (N != 1)     weight_array <- rep_array_dim(weight_array, 7, N)
   
-  mat <- mat * y_fun
+  # apply the weighting to the dataset
+  mrs_data$data <- mrs_data$data * weight_array
   
-  dim(mat) <- c(y_dim, x_dim, N)
-  mat <- aperm(mat, c(2, 1, 3))
-  dim(mat) <- mrsi_dims
-  mrs_data$data <- mat
-  
-  # put xy dims back to space
+  # transform back to image space
   mrs_data <- kspace2img_xy(mrs_data)
   return(mrs_data)
 }
@@ -2723,11 +2719,14 @@ zp_vec <- function(vector, n) {
 #' @param noise_region the spectral region (in ppm) to estimate the noise.
 #' @param average_ref_dyns take the mean of the reference scans in the dynamic
 #' dimension before use.
+#' @param ref_pt_index time-domain point to use for estimating phase and scaling 
+#' values.
 #' @return MRS data.
 #' @export
 comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
                        scale_method = "sig_noise_sq", sum_coils = TRUE,
-                       noise_region = c(-0.5, -2.5), average_ref_dyns = TRUE) {
+                       noise_region = c(-0.5, -2.5), average_ref_dyns = TRUE,
+                       ref_pt_index = 1) {
   
   metab_only <- FALSE
   if (is.null(ref)) {
@@ -2747,9 +2746,10 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
   # some cases?)
   if (average_ref_dyns) ref <- mean_dyns(ref)
   
-  fp <- get_fp(ref)
-  phi <- Arg(fp)
-  amp <- Mod(fp)
+  # ref_pt <- get_fp(ref)
+  ref_pt <- get_subset(ref, td_set = ref_pt_index)$data
+  phi <- Arg(ref_pt)
+  amp <- Mod(ref_pt)
   
   # maintain original spatial scaling
   mean_amps <- apply(amp, c(1,2,3,4,5), mean)
@@ -2849,10 +2849,11 @@ rep_dyn <- function(mrs_data, times) {
 #' @param z_rep number of z replications.
 #' @param dyn_rep number of dynamic replications.
 #' @param coil_rep number of coil replications.
+#' @param warn print a warning when the data dimensions do not change.
 #' @return replicated data object.
 #' @export
 rep_mrs <- function(mrs_data, x_rep = 1, y_rep = 1, z_rep = 1, dyn_rep = 1,
-                    coil_rep = 1) {
+                    coil_rep = 1, warn = TRUE) {
   
   # check the input
   check_mrs_data(mrs_data) 
@@ -2865,16 +2866,21 @@ rep_mrs <- function(mrs_data, x_rep = 1, y_rep = 1, z_rep = 1, dyn_rep = 1,
   if (dyn_rep != 1) mrs_data$data <- rep_array_dim(mrs_data$data, 5, dyn_rep)
   if (coil_rep != 1) mrs_data$data <- rep_array_dim(mrs_data$data, 6, coil_rep)
   
-  if (identical(old_dims, dim(mrs_data$data))) warning("Data dimensions not changed.")
+  if (warn & (identical(old_dims, dim(mrs_data$data)))) {
+    warning("Data dimensions not changed.")
+  }
   
   mrs_data
 }
 
-#' Estimate the standard deviation of the noise from a segment of an mrs_data object.
+#' Estimate the standard deviation of the noise from a segment of an mrs_data
+#' object.
 #' @param mrs_data MRS data object.
-#' @param n number of data points (taken from the end of array) to use in the estimation.
+#' @param n number of data points (taken from the end of array) to use in the
+#' estimation.
 #' @param offset number of final points to exclude from the calculation.
-#' @param p_order polynomial order to fit to the data before estimating the standard deviation.
+#' @param p_order polynomial order to fit to the data before estimating the
+#' standard deviation.
 #' @return standard deviation array.
 #' @export
 est_noise_sd <- function(mrs_data, n = 100, offset = 100, p_order = 2) {
@@ -3283,15 +3289,18 @@ lw_obj_fn <- function(lb_val, mrs_data, lw, xlim) {
 #' Bilgic et al. JMRI 40(1):181-91 2014.
 #' @param mrs_data input data for artefact suppression.
 #' @param thresh threshold parameter to extract lipid signals from mrs_data
-#' based on the integration of the full spectral width in magnitude mode.
+#' based on the spectral integration of the thresh_xlim region in magnitude
+#' mode.
 #' @param b regularisation parameter.
 #' @param A set of spectra containing the artefact basis signals. The thresh
 #' parameter is ignored when A is specified.
 #' @param xlim spectral limits in ppm to restrict the reconstruction range.
 #' Defaults to the full spectral width.
+#' @param thresh_xlim spectral limits in ppm to integrate for the threshold map.
 #' @return l2 reconstructed mrs_data object.
 #' @export
-l2_reg <- function(mrs_data, thresh = 0.05, b = 1e-11, A = NA, xlim = NA) {
+l2_reg <- function(mrs_data, thresh = 0.05, b = 1e-11, A = NA, xlim = NA,
+                   thresh_xlim = NULL) {
   
   # generally done as a FD operation
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
@@ -3316,7 +3325,7 @@ l2_reg <- function(mrs_data, thresh = 0.05, b = 1e-11, A = NA, xlim = NA) {
     
     if (anyNA(A)) {
       # map <- drop(int_spec(mrs_data_coil, mode = "mod"))
-      map <- drop(spec_op(mrs_data_coil, mode = "mod"))
+      map <- drop(spec_op(mrs_data_coil, mode = "mod", xlim = thresh_xlim))
       map_bool <- map > (max(map) * thresh)
       mrsi_mask <- mask_xy_mat(mrs_data_coil, mask = !map_bool)
       A_coil <- t(stats::na.omit(mrs_data2mat(mrsi_mask)))
@@ -3495,4 +3504,76 @@ mean_mrs_list <- function(mrs_list) {
   for (n in (2:length(mrs_list))) mean_mrs <- sum_mrs(mean_mrs, mrs_list[[n]])
   mean_mrs <- mean_mrs / length(mrs_list)
   return(mean_mrs)
+}
+
+#' Reconstruct 2D MRSI data from a twix file loaded with read_mrs.
+#' @param twix_mrs raw dynamic data.
+#' @return reconstructed data.
+#' @export
+recon_twix_2d_mrsi <- function(twix_mrs) {
+  
+  # figure out the required output array size
+  max_lin <- max(twix_mrs$twix_inds$Lin) + 1
+  max_seg <- max(twix_mrs$twix_inds$Seg) + 1
+  
+  twix_recon      <- twix_mrs 
+  twix_recon$data <- array(0, c(1, max_lin, max_seg, 1, 1, Ncoils(twix_mrs),
+                                Npts(twix_mrs)))
+  
+  # map the twix indices to a full data array
+  for (n in 1:nrow(twix_mrs$twix_inds)) {
+    x_ind <- twix_mrs$twix_inds$Seg[n] + 1
+    y_ind <- twix_mrs$twix_inds$Lin[n] + 1
+    twix_recon$data[1, x_ind, y_ind, 1, 1, , ] <- twix_mrs$data[1, 1, 1, 1, n, , ]
+  }
+  
+  # invert every other k-space line (for some reason)
+  k_sp_corr_x <- array(1, dim(twix_recon$data))
+  k_sp_corr_y <- k_sp_corr_x
+  k_sp_corr_x[,c(T, F),,,,,] <- -1
+  k_sp_corr_y[,,c(F, T),,,,] <- -1
+  twix_recon$data <- twix_recon$data * k_sp_corr_x * k_sp_corr_y
+  
+  # kspace to image space
+  twix_recon <- kspace2img_xy(twix_recon)
+  
+  # mirror in the x-direction  
+  twix_recon <- get_subset(twix_recon, x_set = Nx(twix_recon):1)
+  
+  return(twix_recon)
+}
+
+#' Fade a spectrum to zero by frequency domain multiplication with a tanh
+#' function. Note this operation distorts data points at the end of the FID.
+#' @param mrs_data data to be faded.
+#' @param start_ppm start point of the fade in ppm units.
+#' @param end_ppm end point of the fade in ppm units.
+#' @return modified mrs_data object.
+#' @export
+zero_fade_spec <- function(mrs_data, start_ppm, end_ppm) {
+  
+  # fd operation
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  fade_spec <- get_voxel(mrs_data)
+  fade_spec$data[,,,,,,] <- 0
+  
+  ppm_scale <- ppm(mrs_data)
+  inds      <- get_seg_ind(ppm_scale, start_ppm, end_ppm)
+  
+  if (start_ppm < end_ppm) {
+    fade <- (tanh(seq(from = -3, to = 3, length.out = length(inds))) + 1) / 2
+    fade_spec$data[,,,,,,(inds[length(inds)] + 1):Npts(mrs_data)] <- 1
+  } else {
+    fade <- (tanh(seq(from = 3, to = -3, length.out = length(inds))) + 1) / 2
+    fade_spec$data[,,,,,,0:(inds[1] - 1)] <- 1
+  }
+
+  fade_spec$data[,,,,,,inds] <- fade
+  
+  fade_spec <- rep_mrs(fade_spec, x_rep = Nx(mrs_data), y_rep = Ny(mrs_data),
+                       z_rep = Nz(mrs_data), dyn_rep = Ndyns(mrs_data),
+                       coil_rep = Ncoils(mrs_data), warn = FALSE)
+  
+  return(mrs_data * fade_spec)
 }

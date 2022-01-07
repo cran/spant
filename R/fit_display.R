@@ -420,13 +420,27 @@ plot_slice_fit <- function(fit_res, map, map_denom = NULL, slice = 1,
   
   if (!is.null(map_denom)) map <- map / map_denom
   
+  inf_map <- is.infinite(map)
+  
+  if (any(inf_map)) {
+    warning("Inf values set to NA.")
+    map[inf_map] <- NA
+  }
+    
+  # set any nan values to NA
+  map[is.nan(map)] <- NA
+  
   plot_map <- map[1,,, slice, 1, 1]
   plot_map <- pracma::fliplr(plot_map)
   
   col <- viridisLite::viridis(64)
   
   if (interp != 1) {
-    plot_map <- mmand::rescale(plot_map, interp, mmand::mnKernel())
+    if (any(is.na(plot_map)) && (interp > 1)) {
+      plot_map <- interpolate_nas(plot_map, interp, 2)
+    } else {
+      plot_map <- mmand::rescale(plot_map, interp, mmand::mnKernel())
+    }
   }
   
   if (is.null(zlim)) { 
@@ -446,6 +460,12 @@ plot_slice_fit <- function(fit_res, map, map_denom = NULL, slice = 1,
 #' @param name name of the quantity to plot, eg "tNAA".
 #' @export
 get_fit_map <- function(fit_res, name) {
+  
+  # check name is valid
+  if (!(name %in% colnames(fit_res$res_tab))) {
+    stop("Following column not found in fit result : ", name)
+  }
+  
   result_map <- fit_res$res_tab[[name]]
   dim(result_map) <- c(1, dim(fit_res$data$data)[2:6])
   result_map

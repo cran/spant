@@ -39,6 +39,20 @@ read_mrs <- function(fname, format = NULL, ft = NULL, fs = NULL, ref = NULL,
                      omit_svs_ref_scans = TRUE, verbose = FALSE,
                      extra = NULL) {
   
+  # glob the input and check the result is sane
+  fname <- Sys.glob(fname)
+  
+  if (length(fname) == 0) stop("Error, read_mrs file not found.")
+  
+  if (length(fname) > 1) {
+    message <- c("Error, read_mrs input should only match one file, but multiple were found :", fname)
+    stop(paste(message, collapse = "\n"))
+  }
+  
+  if (!file.exists(fname)) stop("Error, read_mrs file does not exist.")
+  
+  if (dir.exists(fname)) stop("Error, read_mrs file is a directory.")
+  
   # try and guess the format from the filename extension
   if (is.null(format)) format <- guess_mrs_format(fname) 
   
@@ -52,7 +66,7 @@ read_mrs <- function(fname, format = NULL, ft = NULL, fs = NULL, ref = NULL,
     return(read_twix(fname, verbose, full_fid, omit_svs_ref_scans,
                      extra))
   } else if (format == "pfile") {
-    return(read_pfile(fname, n_ref_scans, extra))
+    return(read_pfile(fname, n_ref_scans, verbose, extra))
   } else if (format == "list_data") {
     if (is.null(ft)) stop("Please specify ft parameter for list_data format")
     if (is.null(fs)) stop("Please specify fs parameter for list_data format")
