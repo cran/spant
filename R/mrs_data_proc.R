@@ -1,6 +1,6 @@
 
 check_mrs_data <- function(mrs_data) {
-  in_class <- class(mrs_data)
+  in_class <- class(mrs_data)[1]
   if (in_class == "mrs_data") {
     return()
   } else if (in_class == "list") {
@@ -1781,8 +1781,13 @@ append_scan <- function(...) {
     first_dataset <- fd2td(first_dataset)
   }
   
+  dim_first_dataset <- dim(first_dataset$data)
+  
   # data needs to be in the same domain
   for (n in 1:length(x)) {
+    if (!identical(dim(x[[n]]$data), dim_first_dataset)) {
+      stop("Data dimensions passed to stackplot do not match.")
+    }
     if (is_fd(x[[n]])) {
         x[[n]] <- fd2td(x[[n]])
     }
@@ -2824,7 +2829,9 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
   if (metab_only) {
     return(metab_ps)
   } else {
-    return(list(metab = metab_ps, ref = ref_ps))
+    out <- list(metab = metab_ps, ref = ref_ps)
+    class(out) <- c("list", "mrs_data")
+    return(out)
   }
 }
 
@@ -3297,10 +3304,12 @@ lw_obj_fn <- function(lb_val, mrs_data, lw, xlim) {
 #' @param xlim spectral limits in ppm to restrict the reconstruction range.
 #' Defaults to the full spectral width.
 #' @param thresh_xlim spectral limits in ppm to integrate for the threshold map.
+#' @param A_append additional spectra to append to the A basis.
+#' @param ret_norms return the residual norm and solution norms.
 #' @return l2 reconstructed mrs_data object.
 #' @export
 l2_reg <- function(mrs_data, thresh = 0.05, b = 1e-11, A = NA, xlim = NA,
-                   thresh_xlim = NULL) {
+                   thresh_xlim = NULL, A_append = NULL, ret_norms = FALSE) {
   
   # generally done as a FD operation
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
@@ -3319,17 +3328,30 @@ l2_reg <- function(mrs_data, thresh = 0.05, b = 1e-11, A = NA, xlim = NA,
     A_coil <- t(stats::na.omit(mrs_data2mat(A)))
   }
   
+  # prepare any extra signals and convert to matrix
+  if (!is.null(A_append)) {
+    if (!anyNA(xlim)) A_append <- crop_spec(A_append, xlim)
+    A_append_mat <- t(stats::na.omit(mrs_data2mat(A_append)))
+  }
+  
+  if (ret_norms) {
+    resid_norm <- array(dim = Ncoils(mrs_data))
+    soln_norm  <- array(dim = Ncoils(mrs_data))
+  }
+  
   for (coil in 1:Ncoils(mrs_data)) {
     
     mrs_data_coil <- get_subset(mrs_data, coil_set = coil)
     
     if (anyNA(A)) {
-      # map <- drop(int_spec(mrs_data_coil, mode = "mod"))
       map <- drop(spec_op(mrs_data_coil, mode = "mod", xlim = thresh_xlim))
       map_bool <- map > (max(map) * thresh)
       mrsi_mask <- mask_xy_mat(mrs_data_coil, mask = !map_bool)
       A_coil <- t(stats::na.omit(mrs_data2mat(mrsi_mask)))
     }
+    
+    # Append any extra signals
+    if (!is.null(A_append)) A_coil <- cbind(A_coil, A_append_mat)
     
     # original data as a matrix
     x0 <- t(mrs_data2mat(mrs_data_coil))
@@ -3339,12 +3361,34 @@ l2_reg <- function(mrs_data, thresh = 0.05, b = 1e-11, A = NA, xlim = NA,
     
     # recon data
     x <- recon_mat %*% x0
-    x <- t(x) 
+    
+    if (ret_norms) {
+      # mrsi_mask <- mask_xy_mat(mrs_data_coil, mask = map_bool)
+      # x0_mask <- t(stats::na.omit(mrs_data2mat(mrsi_mask)))
+      # x_mask <-  recon_mat %*% x0_mask
+      
+      # residual norm
+      resid_norm[coil] <- norm(x - x0, "2")
+      # resid_norm[coil] <- sum(Mod(x - x0) ^ 2) ^ 0.5
+      # resid_norm[coil] <- sum(rowSums(Mod(x - x0) ^ 2) ^ 0.5)
+      
+      # solution norm
+      soln_norm[coil] <- norm(Conj(t(A_coil)) %*% x, "2")
+      # soln_norm[coil] <- sum(Mod(Conj(t(A_coil)) %*% x) ^ 2) ^ 0.5
+      # soln_norm[coil] <- sum(rowSums(Mod(Conj(t(A_coil)) %*% x) ^ 2) ^ 0.5)
+    }
+    
+    x <- t(x)
     dim(x) <- res_dim
     mrs_data$data[,,,,,coil,] <- x
   }
     
-  return(mrs_data)
+  if (ret_norms) {
+    return(list(mrs_data = mrs_data, resid_norm = resid_norm,
+                soln_norm = soln_norm))
+  } else {
+    return(mrs_data)
+  }
 }
 
 #' Signal space projection method for lipid suppression.
