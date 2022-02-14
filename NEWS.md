@@ -1,3 +1,13 @@
+# spant 1.19.0
+* Added sum_mrs_list function.
+* Bug fix for operating on mrs_data with single values that aren't numeric
+types.
+For example, multiplying mrs_data by a single complex number now works.
+* A number of common preprocessing functions now operate on lists of mrs_data
+objects.
+* Change to NIfTI MRS reader to fix a failing test when using the development
+version of RNifti.
+
 # spant 1.18.0
 * Better behavior when using stackplot with single spectra datasets.
 * Better behavior when using image with single spectra datasets.

@@ -417,6 +417,12 @@ shift <- function(mrs_data, shift, units = "ppm") {
 #' @export
 phase <- function(mrs_data, zero_order, first_order = 0) {
   
+  if (class(mrs_data) == "list") {
+    res <- lapply(mrs_data, phase, zero_order = zero_order,
+                  first_order = first_order)
+    return(res)
+  }
+  
   # check the input
   check_mrs_data(mrs_data)
   
@@ -459,6 +465,10 @@ phase <- function(mrs_data, zero_order, first_order = 0) {
 #' values.
 #' @export
 fp_phase_correct <- function(mrs_data, ret_phase = FALSE) {
+  
+  if (class(mrs_data) == "list") {
+    return(lapply(mrs_data, fp_phase_correct, ret_phase = ret_phase))  
+  }
   
   # needs to be a time-domain operation
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
@@ -554,6 +564,13 @@ lb <- function(x, lb, lg = 1) UseMethod("lb")
 
 #' @rdname lb
 #' @export
+lb.list <- function(x, lb, lg = 1) {
+  res <- lapply(x, lb, lb = lb, lg = lg)
+  return(res)
+}
+
+#' @rdname lb
+#' @export
 lb.mrs_data <- function(x, lb, lg = 1) {
   if (lg > 1 | lg < 0) {
     cat("Error, lg values not between 0 and 1.")  
@@ -621,6 +638,12 @@ re_weighting <- function(mrs_data, re, alpha) {
 #' @rdname zf
 #' @export
 zf <- function(x, factor = 2) UseMethod("zf")
+
+#' @rdname zf
+#' @export
+zf.list <- function(x, factor = 2) {
+  lapply(x, zf, factor = factor)
+}
 
 #' @rdname zf
 #' @export
@@ -1181,6 +1204,10 @@ crop_td_pts <- function(mrs_data, start = NULL, end = NULL) {
 #' @export
 crop_spec <- function(mrs_data, xlim = c(4, 0.2), scale = "ppm") {
   
+  if (class(mrs_data) == "list") {
+    return(lapply(mrs_data, crop_spec, xlim = xlim, scale = scale))
+  }
+  
   # needs to be a FD operation
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
@@ -1233,6 +1260,12 @@ crop_spec <- function(mrs_data, xlim = c(4, 0.2), scale = "ppm") {
 #' @export
 align <- function(mrs_data, ref_freq = 4.65, zf_factor = 2, lb = 2,
                   max_shift = 20, ret_df = FALSE, mean_dyns = FALSE) {
+  
+  if (class(mrs_data) == "list") {
+    return(lapply(mrs_data, align, ref_freq = ref_freq, zf_factor = zf_factor,
+                  lb = lb, max_shift = max_shift, ret_df = ret_df,
+                  mean_dyns = mean_dyns))
+  }
   
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
   
@@ -1880,6 +1913,8 @@ spec_op <- function(mrs_data, xlim = NULL, operator = "sum", freq_scale = "ppm",
     data_arr <- Im(data_arr)
   } else if (mode == "mod") {
     data_arr <- Mod(data_arr)
+  } else if (mode == "cplx") {
+    data_arr <- data_arr
   } else {
     stop("unknown mode for spec_op function")
   }
@@ -1962,6 +1997,12 @@ scale_mrs_amp <- function(mrs_data, amp) {
 scale_spec <- function(mrs_data, xlim = NULL, operator = "sum",
                        freq_scale = "ppm", mode = "re", mean_dyns = TRUE) {
   
+  if (class(mrs_data) == "list") {
+    res <- lapply(mrs_data, scale_spec, xlim = xlim, operator = operator,
+                  freq_scale = freq_scale, mode = mode, mean_dyns = mean_dyns)
+    return(res)
+  }
+  
   if (mean_dyns) {
     amp <- spec_op(mean_dyns(mrs_data), xlim, operator, freq_scale, mode)
     amp <- as.numeric(amp)
@@ -1981,8 +2022,10 @@ scale_spec <- function(mrs_data, xlim = NULL, operator = "sum",
       warning("sum warning, spectral domains do not match")
     }
     a$data <- a$data + b$data
-  } else if (class(b) == "numeric") {
+  } else if (class(b) %in% c("numeric", "integer", "complex")) {
     a$data <- a$data + b
+  } else {
+    stop("unrecognised type")
   }
   return(a)
 }
@@ -1996,8 +2039,10 @@ scale_spec <- function(mrs_data, xlim = NULL, operator = "sum",
     a$data = a$data - b$data
   } else if (is.null(b)) {
     a$data = -a$data
-  } else if ( class(b) == "numeric") {
+  } else if (class(b) %in% c("numeric", "integer", "complex")) {
     a$data = a$data - b
+  } else {
+    stop("unrecognised type")
   }
   return(a)
 }
@@ -2009,8 +2054,10 @@ scale_spec <- function(mrs_data, xlim = NULL, operator = "sum",
       warning("multiply warning, time/frequency domains do not match")
     }
     a$data <- a$data * b$data
-  } else if ( class(b) == "numeric") {
+  } else if (class(b) %in% c("numeric", "integer", "complex")) {
     a$data <- a$data * b
+  } else {
+    stop("unrecognised type")
   }
   return(a)
 }
@@ -2022,8 +2069,10 @@ scale_spec <- function(mrs_data, xlim = NULL, operator = "sum",
       warning("divide warning, time/frequency domains do not match")
     }
     a$data <- a$data / b$data
-  } else if (class(b) == "numeric") {
+  } else if (class(b) %in% c("numeric", "integer", "complex")) {
     a$data <- a$data / b
+  } else {
+    stop("unrecognised type")
   }
   return(a)
 }
@@ -2111,6 +2160,10 @@ collapse_to_dyns.fit_result <- function(x, rm_masked = FALSE) {
 #' @export
 mean_dyns <- function(mrs_data) {
   
+  if (class(mrs_data) == "list") {
+    return(lapply(mrs_data, mean_dyns))
+  }
+  
   # check the input
   check_mrs_data(mrs_data) 
   
@@ -2137,6 +2190,10 @@ sub_mean_dyns <- function(mrs_data) {
 #' @return dynamic data averaged in blocks.
 #' @export
 mean_dyn_blocks <- function(mrs_data, block_size) {
+  
+  if (class(mrs_data) == "list") {
+    return(lapply(mrs_data, mean_dyn_blocks, block_size = block_size))
+  }
   
   if ((Ndyns(mrs_data) %% block_size) != 0) {
     warning("Block size does not fit into the number of dynamics without truncation.")
@@ -2313,6 +2370,13 @@ fd_conv_filt <- function(mrs_data, K = 25, ext = 1) {
 #' @export
 hsvd_filt <- function(mrs_data, xlim = c(-30, 30), comps = 40, irlba = TRUE,
                       max_damp = 10, scale = "hz", return_model = FALSE) {
+  
+  if (class(mrs_data) == "list") {
+    res <- lapply(mrs_data, hsvd_filt, xlim = xlim, comps = comps,
+                  irlba = irlba, max_damp = max_damp, scale = scale,
+                  return_model = return_model)
+    return(res)
+  }
   
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
   
@@ -2544,8 +2608,18 @@ ecc_ref <- function(mrs_data) {
 #' @return corrected data in the time domain.
 #' @export
 ecc <- function(metab, ref, rev = FALSE) {
+  
+  if (class(metab) == "list") {
+    if (class(ref) != "list") stop("metab is a list but ref it not")
+    if (length(metab) != length(ref)) {
+      stop("metab and ref must have the same length")
+    }
+    return(mapply(ecc, metab = metab, ref = ref, MoreArgs = list(rev = rev),
+                  SIMPLIFY = FALSE))
+  } 
+  
   if (is_fd(metab)) metab <- fd2td(metab)
-  if (is_fd(ref)) ref <- fd2td(ref)
+  if (is_fd(ref))   ref <- fd2td(ref)
   
   if (rev) ref <- Conj(ref)
   
@@ -3066,12 +3140,13 @@ calc_peak_info_vec <- function(data_pts, interp_f) {
 #' offset.
 #' @return baseline corrected data.
 #' @export
-bc_constant <- function(mrs_data, xlim) {
+bc_constant <- function(mrs_data, xlim = NULL) {
+  
+  if (class(mrs_data) == "list") {
+    return(lapply(mrs_data, bc_constant, xlim = xlim))
+  }
   
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
-  
-  # offsets <- int_spec(mrs_data, xlim = xlim, mode = "cplx",
-  #                     summation = "mean")
   
   offsets <- spec_op(mrs_data, xlim = xlim, mode = "cplx", operator = "mean")
   offsets_rep <- array(rep(offsets, Npts(mrs_data)), dim = dim(mrs_data$data))
@@ -3088,6 +3163,10 @@ bc_constant <- function(mrs_data, xlim) {
 #' @return baseline corrected data.
 #' @export
 bc_als <- function(mrs_data, lambda = 1e4, p = 0.001) {
+  
+  if (class(mrs_data) == "list") {
+    return(lapply(mrs_data, bc_als, lambda = lambda, p = p))
+  }
   
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
@@ -3544,10 +3623,18 @@ pg_extrap_xy <- function(mrs_data, img_mask = NULL, kspace_mask = NULL,
 #' @return mean \code{mrs_data} object.
 #' @export
 mean_mrs_list <- function(mrs_list) {
-  mean_mrs <- mrs_list[[1]]
-  for (n in (2:length(mrs_list))) mean_mrs <- sum_mrs(mean_mrs, mrs_list[[n]])
-  mean_mrs <- mean_mrs / length(mrs_list)
+  mean_mrs  <- sum_mrs_list(mrs_list) / length(mrs_list)
   return(mean_mrs)
+}
+
+#' Return the sum of a list of mrs_data objects.
+#' @param mrs_list list of mrs_data objects.
+#' @return sum \code{mrs_data} object.
+#' @export
+sum_mrs_list <- function(mrs_list) {
+  sum_mrs <- mrs_list[[1]]
+  for (n in (2:length(mrs_list))) sum_mrs <- sum_mrs(sum_mrs, mrs_list[[n]])
+  return(sum_mrs)
 }
 
 #' Reconstruct 2D MRSI data from a twix file loaded with read_mrs.
