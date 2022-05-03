@@ -126,6 +126,8 @@ get_mrsi_voi <- function(mrs_data, target_mri = NULL, map = NULL,
                cols * mrs_data$resolution[3],
                slices * mrs_data$resolution[4])
   
+  voi_dim <- round(voi_dim)
+  
   if (is.null(map)) {
     raw_data <- array(1, voi_dim)
   } else {
@@ -135,12 +137,23 @@ get_mrsi_voi <- function(mrs_data, target_mri = NULL, map = NULL,
     # deal with Infs
     if (any(is.infinite(map))) map[is.infinite(map)] <- NA
     
+    # this is to keep dimensions consistent
+    rounded_res <- voi_dim[1] / rows
+    
     if (any(is.na(map)) && (ker$name != "box")) {
-      resamp_map <- interpolate_nas(drop(map), mrs_data$resolution[2], 2)
+      resamp_map <- interpolate_nas(drop(map), rounded_res, 2)
     } else {
-      resamp_map <- mmand::rescale(drop(map), mrs_data$resolution[2], ker)
+      resamp_map <- mmand::rescale(drop(map), rounded_res, ker)
     }
     
+    if (dim(resamp_map)[1] != voi_dim[1]) {
+      stop("get_mrsi_voi - inconsistent matrix dimensions found following interpolation.")
+    }
+    
+    if (dim(resamp_map)[2] != voi_dim[2]) {
+      stop("get_mrsi_voi - inconsistent matrix dimensions found following interpolation.")
+    }
+      
     raw_data <- array(resamp_map, voi_dim) 
   }
   

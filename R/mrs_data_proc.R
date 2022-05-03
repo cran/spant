@@ -2034,10 +2034,13 @@ scale_mrs_amp <- function(mrs_data, amp) {
 #' @param mode spectral mode, can be : "re", "im", "mod" or "cplx".
 #' @param mean_dyns mean the dynamic scans before applying the operator. The
 #' same scaling value will be applied to each individual dynamic.
+#' @param ret_scale_factor option to return the scaling factor in addition to
+#' the scaled data.
 #' @return normalised data.
 #' @export
 scale_spec <- function(mrs_data, xlim = NULL, operator = "sum",
-                       freq_scale = "ppm", mode = "re", mean_dyns = TRUE) {
+                       freq_scale = "ppm", mode = "re", mean_dyns = TRUE,
+                       ret_scale_factor = FALSE) {
   
   if (inherits(mrs_data, "list")) {
     res <- lapply(mrs_data, scale_spec, xlim = xlim, operator = operator,
@@ -2054,7 +2057,11 @@ scale_spec <- function(mrs_data, xlim = NULL, operator = "sum",
   
   mrs_data <- scale_mrs_amp(mrs_data, 1 / amp)
   
-  return(mrs_data)
+  if (ret_scale_factor) {
+    return(list(mrs_data = mrs_data, scale_factor = 1 / amp))
+  } else {
+    return(mrs_data)
+  }
 }
 
 #' @export
@@ -3801,4 +3808,45 @@ zero_fade_spec <- function(mrs_data, start_ppm, end_ppm) {
                        coil_rep = Ncoils(mrs_data), warn = FALSE)
   
   return(mrs_data * fade_spec)
+}
+
+#' Decompose an mrs_data object into white and gray matter spectra.
+#' 
+#' An implementation of the method published by Goryawala et al MRM 79(6)
+#' 2886-2895 (2018). "Spectral decomposition for resolving partial volume
+#' effects in MRSI".
+#' 
+#' @param mrs_data data to be decomposed into white and gray matter spectra.
+#' @param wm vector of white matter contributions to each voxel.
+#' @param gm vector of gray matter contributions to each voxel.
+#' @param norm_fractions option to normalise the wm, gm vectors for each voxel.
+#' @return a list of two mrs_data objects corresponding to the two tissue types.
+#' @export
+spec_decomp <- function(mrs_data, wm, gm, norm_fractions = TRUE) {
+  
+  # normally a FD operation
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  # convert mrs_data to a matrix
+  mrs_data_mat <- mrs_data2mat(mrs_data)
+  
+  # remove any masked voxels
+  mask_vec     <- !is.na(mrs_data_mat[,1])
+  mrs_data_mat <- mrs_data_mat[mask_vec,]
+  wm <- wm[mask_vec]
+  gm <- gm[mask_vec]
+  
+  D <- mrs_data_mat
+  W <- cbind(wm, gm)
+  
+  if (norm_fractions) W <- W / cbind(rowSums(W), rowSums(W)) * 100
+  
+  # decompose
+  S <- solve(t(W) %*% W) %*% t(W) %*% D
+  
+  # convert back to an mrs_data object
+  wm_gm_spec <- mat2mrs_data(S, fs(mrs_data), mrs_data$ft, mrs_data$ref,
+                             fd = TRUE)
+  
+  return(list(wm = get_dyns(wm_gm_spec, 1), gm = get_dyns(wm_gm_spec, 2)))
 }

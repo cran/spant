@@ -1,3 +1,12 @@
+# spant 1.21.0
+* Bug fix for get_mrsi_voi function due to incorrect rounding of MRSI matrix
+dimensions in some cases.
+* Added mask_fit_res function.
+* Option added to get_2d_psf function to ensure odd output dimensions.
+* Bug fix for using rats on datasets with masked voxels.
+* Added spec_decomp function.
+* Added ret_scale_factor option to scale_spec function.
+
 # spant 1.20.0
 * Options added to ft_dyns to return the modulus of the 2D spectra and to
 pre-transform the chemical shift axis if needed.
@@ -17,8 +26,8 @@ objects.
 version of RNifti.
 
 # spant 1.18.0
-* Better behavior when using stackplot with single spectra datasets.
-* Better behavior when using image with single spectra datasets.
+* Better behaviour when using stackplot with single spectra datasets.
+* Better behaviour when using image with single spectra datasets.
 * Bug fix for reading MEGA-PRESS data in TWIX format.
 * Better error checking for lists of spectra.
 * Bug fix for calculating NAA linewidth from MEGA-PRESS data.
