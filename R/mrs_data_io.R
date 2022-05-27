@@ -86,7 +86,7 @@ read_mrs <- function(fname, format = NULL, ft = NULL, fs = NULL, ref = NULL,
   } else if (format == "rds") {
     mrs_data <- readRDS(fname)
     mrs_data$extra <- extra
-    if (class(mrs_data) != "mrs_data") stop("rds file is not mrs_data format")
+    if (!inherits(mrs_data, "mrs_data")) stop("rds file is not mrs_data format")
     return(mrs_data)
   } else if (format == "nifti") {
     return(read_mrs_nifti(fname, extra))
@@ -138,15 +138,35 @@ guess_mrs_format <- function(fname) {
 }
 
 #' Write MRS data object to file.
-#' @param mrs_data object to be written to file.
-#' @param fname the filename of the output.
+#' @param mrs_data object to be written to file, or list of mrs_data objects.
+#' @param fname one or more filenames to output.
 #' @param format string describing the data format. Must be one of the 
 #' following : "nifti", "dpt", "lcm_raw", "rds". If not specified, the format
 #' will be guessed from the filename extension.
+#' @param force set to TRUE to overwrite any existing files.
 #' @export
-write_mrs <- function(mrs_data, fname, format = NULL) {
+write_mrs <- function(mrs_data, fname, format = NULL, force = FALSE) {
   
-  if (class(mrs_data) != "mrs_data") stop("data object is not mrs_data format")
+  # check if any files already exist
+  if (!force) {
+    if (any(file.exists(fname))) {
+      stop("One or more files already exist. Use the  force argment to
+            overwrite")
+    }
+  }
+  
+  if (inherits(mrs_data, "list")) {
+    if (length(fname) != length(mrs_data)) {
+      stop("Number of datasets and filenames differ.")
+    }
+    
+    # invisible stops unwanted console output
+    return(invisible(mapply(write_mrs, mrs_data = mrs_data, fname = fname, 
+           MoreArgs = list(format = format, force = force),
+           SIMPLIFY = FALSE)))
+  }
+  
+  if (!inherits(mrs_data, "mrs_data")) stop("data object is not mrs_data format")
   
   # try and guess the format from the filename extension
   if (is.null(format)) format <- guess_mrs_format(fname) 
@@ -370,6 +390,8 @@ write_mrs_lcm_raw <- function(fname, mrs_data, id = NA) {
 }
 
 write_mrs_rds <- function(fname, mrs_data) {
-  if (class(mrs_data) != "mrs_data") stop("data object is not mrs_data format")
+  if (!inherits(mrs_data, "mrs_data")) {
+    stop("data object is not mrs_data format")
+  }
   saveRDS(mrs_data, fname)
 }

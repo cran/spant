@@ -1,8 +1,8 @@
 Package: spant
 Type: Package
 Title: MR Spectroscopy Analysis Tools
-Version: 1.21.0
-Date: 2022-05-03
+Version: 1.22.0
+Date: 2022-05-27
 Authors@R: c(
     person("Martin", "Wilson", email = "martin@pipegrep.co.uk",
            role = c("cre", "aut"), comment = c(ORCID = "0000-0002-2089-3956")),
@@ -14,7 +14,7 @@ Description: Tools for reading, visualising and processing Magnetic Resonance
     <DOI:10.1002/mrm.27605>. 
 BugReports: https://github.com/martin3141/spant/issues/
 License: GPL-3
-RoxygenNote: 7.1.2
+RoxygenNote: 7.2.0
 NeedsCompilation: yes
 LazyData: yes
 Depends: R (>= 2.10)
@@ -28,10 +28,10 @@ Encoding: UTF-8
 Language: en-GB
 URL: https://martin3141.github.io/spant/,
         https://github.com/martin3141/spant/
-Packaged: 2022-05-03 10:35:21 UTC; marti
+Packaged: 2022-05-27 12:05:31 UTC; martin
 Author: Martin Wilson [cre, aut] (<https://orcid.org/0000-0002-2089-3956>),
   Yong Wang [ctb],
   John Muschelli [ctb]
 Maintainer: Martin Wilson <martin@pipegrep.co.uk>
 Repository: CRAN
-Date/Publication: 2022-05-03 13:10:02 UTC
+Date/Publication: 2022-05-27 12:40:02 UTC

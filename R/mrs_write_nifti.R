@@ -1,15 +1,14 @@
 #' Write MRS data object to file in NIFTI format.
 #' @param mrs_data object to be written to file.
 #' @param fname the filename of the output NIFTI MRS data.
-#' @export
 write_mrs_nifti <- function(mrs_data, fname) {
-  if (class(mrs_data) != "mrs_data") stop("data object is not mrs_data format")
+  if (!inherits(mrs_data, "mrs_data")) stop("data object is not mrs_data format")
   
   if (stringr::str_sub(fname, -7) != ".nii.gz") {
     stop("filename argument must end in .nii.gz")
   }
   
-  # convert to nii
+  # extract the raw data points
   data_points <- mrs_data$data
   
   # drop the first dummy dimension
@@ -25,7 +24,6 @@ write_mrs_nifti <- function(mrs_data, fname) {
   mrs_nii <- RNifti::asNifti(data_points)
   
   # get the geometry information
-  #affine  <- get_mrs_affine(mrs_data, 1.5, 1.5, 1.5) # old version
   affine  <- mrs_data$affine
   
   # voxel dimensions

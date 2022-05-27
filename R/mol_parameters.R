@@ -911,6 +911,32 @@ get_sins_paras <- function(lw = NULL, lg = 0, ...) {
   paras
 }
 
+get_msm_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 1
+  paras <- get_uncoupled_mol("MSM", 3.142, "1H", 6, lw, lg,
+                             "Methylsulfonylmethane")
+  
+  source <- "Kaiser LG, Russell D, Maschmeyer T, Redfern RL, Inglis BA.
+    Methylsulfonylmethane (MSM): A chemical shift reference for 1 H MRS of human
+    brain. Magn Reson Med. 2020 Apr;83(4):1157-1167. doi: 10.1002/mrm.27997.
+    Epub 2019 Sep 30. PMID: 31566256."
+  
+  paras$source <- source
+  paras
+}
+
+get_ace_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("Ace", 2.222, "1H", 3, lw, lg,
+                             "Acetone")
+  
+  source <- "In Vivo NMR Spectroscopy Principles and Techniques, Robin A. de
+             Graaf, Third Edition, 2019, Wiley."
+  
+  paras$source <- source
+  paras
+}
+
 get_suc_paras <- function(lw = NULL, lg = 0, ...) {
   if (is.null(lw)) lw = 2
   paras <- get_uncoupled_mol("Suc", 2.3920, "1H", 4, lw, lg, "Succinate")
