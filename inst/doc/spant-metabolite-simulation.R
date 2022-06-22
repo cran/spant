@@ -19,11 +19,11 @@ ins <- get_mol_paras("ins")
 print(ins)
 
 ## ---- message = FALSE---------------------------------------------------------
-sim_mol(ins, ft = 300e6, N = 4096) %>% lb(2) %>% plot(xlim = c(3.8, 3.1))
+sim_mol(ins, ft = 300e6, N = 4096) |> lb(2) |> plot(xlim = c(3.8, 3.1))
 
 ## ---- message = FALSE---------------------------------------------------------
 ins_sim <- sim_mol(ins, seq_spin_echo_ideal, ft = 300e6, N = 4086, TE = 0.03)
-ins_sim %>% lb(2) %>% plot(xlim = c(3.8, 3.1))
+ins_sim |> lb(2) |> plot(xlim = c(3.8, 3.1))
 
 ## ---- message = FALSE, fig.height = 8-----------------------------------------
 sim_fn <- function(TE) {
@@ -33,12 +33,12 @@ sim_fn <- function(TE) {
 
 te_vals <- seq(0, 2, 0.4)
 
-lapply(te_vals, sim_fn) %>% stackplot(y_offset = 150, xlim = c(3.8, 3.1),
-                                      labels = paste(te_vals * 100, "ms"))
+lapply(te_vals, sim_fn) |> stackplot(y_offset = 150, xlim = c(3.8, 3.1),
+                                     labels = paste(te_vals * 100, "ms"))
 
 ## ---- message = FALSE---------------------------------------------------------
 get_uncoupled_mol("Lip13", c(1.3, 1.4), c("1H", "1H"), c(2, 1), c(10, 10),
-                  c(1, 1)) %>% sim_mol %>% plot(xlim = c(2, 0.8))
+                  c(1, 1)) |> sim_mol() |> plot(xlim = c(2, 0.8))
 
 ## ---- message = FALSE---------------------------------------------------------
 nucleus_a <- rep("1H", 4)
@@ -71,5 +71,5 @@ class(custom_mol) <- "mol_parameters"
 
 ## ---- message = FALSE---------------------------------------------------------
 print(custom_mol)
-custom_mol %>% sim_mol %>% lb(2) %>% zf %>% plot(xlim = c(4.4, 0.5))
+custom_mol |> sim_mol() |> lb(2) |> zf() |> plot(xlim = c(4.4, 0.5))
 

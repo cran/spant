@@ -1,3 +1,10 @@
+# spant 2.0.0
+* magrittr pipe (%>%) is no longer loaded together with spant now the base pipe
+is part of R. Vignettes and tests have been updated to use the base pipe.
+* NIfTI MRS writer no longer fails when dealing with a NULL affine matrix.
+* Bug fix for NIfTI MRS writer, where frequency domain data was not correctly
+converted to time-domain before export.
+
 # spant 1.22.0
 * Added MSM and acetone to the set of internally defined molecules.
 * write_mrs_nifti function removed from userspace. write_mrs should be used

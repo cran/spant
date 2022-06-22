@@ -41,6 +41,6 @@ stackplot(list(mrs_data, mrs_data_shift), xlim = c(4, 0.5), y_offset = 10,
           col = c("black", "red"), labels = c("original", "shifted"))
 
 ## -----------------------------------------------------------------------------
-mrs_data_proc <- mrs_data %>% hsvd_filt %>% lb(2) %>% zf
+mrs_data_proc <- mrs_data |> hsvd_filt() |> lb(2) |> zf()
 plot(mrs_data_proc, xlim = c(5, 0.5))
 

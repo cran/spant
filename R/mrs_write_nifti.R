@@ -8,6 +8,9 @@ write_mrs_nifti <- function(mrs_data, fname) {
     stop("filename argument must end in .nii.gz")
   }
   
+  # NIfTI MRS stores data in the time-domain
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
   # extract the raw data points
   data_points <- mrs_data$data
   
@@ -33,6 +36,7 @@ write_mrs_nifti <- function(mrs_data, fname) {
   mrs_nii$pixdim <- c(-1, mrs_pixdim, dwell_time, dyn_interval, 0, -1)
   
   # set the sform
+  if (is.null(affine)) affine <- diag(1, 4, 4)
   mrs_nii <- RNifti::`sform<-`(mrs_nii, structure(affine, code = 2L))
   mrs_nii$intent_name <- "mrs_v0_2"
   

@@ -34,9 +34,10 @@ basis_mm <- sim_basis(mol_list_mm, pul_seq = seq_slaser_ideal,
 stackplot(basis_mm, xlim = c(4, 0.5), y_offset = 50, labels = basis_mm$names)
 
 ## -----------------------------------------------------------------------------
-sim_basis_1h_brain() %>% stackplot(xlim = c(4, 0.5), y_offset = 20, labels = .$names)
+basis <- sim_basis_1h_brain()
+stackplot(basis, xlim = c(4, 0.5), y_offset = 20, labels = basis$names)
 
 ## -----------------------------------------------------------------------------
-sim_basis_1h_brain(lcm_compat = TRUE) %>%
-  stackplot(xlim = c(4, 0.5), y_offset = 20, labels = .$names)
+lcm_basis <- sim_basis_1h_brain()
+stackplot(lcm_basis, xlim = c(4, 0.5), y_offset = 20, labels = basis$names)
 

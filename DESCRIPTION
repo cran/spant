@@ -1,8 +1,8 @@
 Package: spant
 Type: Package
 Title: MR Spectroscopy Analysis Tools
-Version: 1.22.0
-Date: 2022-05-27
+Version: 2.0.0
+Date: 2022-06-22
 Authors@R: c(
     person("Martin", "Wilson", email = "martin@pipegrep.co.uk",
            role = c("cre", "aut"), comment = c(ORCID = "0000-0002-2089-3956")),
@@ -19,8 +19,8 @@ NeedsCompilation: yes
 LazyData: yes
 Depends: R (>= 2.10)
 Imports: abind, plyr, pracma, stringr, expm, signal, minpack.lm, utils,
-        graphics, grDevices, smoother, magrittr, ptw, mmand, RNifti,
-        RNiftyReg, fields, numDeriv, nloptr, irlba, jsonlite
+        graphics, grDevices, smoother, ptw, mmand, RNifti, RNiftyReg,
+        fields, numDeriv, nloptr, irlba, jsonlite
 Suggests: viridisLite, shiny, miniUI, knitr, rmarkdown, testthat, ragg,
         doParallel
 VignetteBuilder: knitr
@@ -28,10 +28,10 @@ Encoding: UTF-8
 Language: en-GB
 URL: https://martin3141.github.io/spant/,
         https://github.com/martin3141/spant/
-Packaged: 2022-05-27 12:05:31 UTC; martin
+Packaged: 2022-06-22 08:55:20 UTC; wilsonmp
 Author: Martin Wilson [cre, aut] (<https://orcid.org/0000-0002-2089-3956>),
   Yong Wang [ctb],
   John Muschelli [ctb]
 Maintainer: Martin Wilson <martin@pipegrep.co.uk>
 Repository: CRAN
-Date/Publication: 2022-05-27 12:40:02 UTC
+Date/Publication: 2022-06-22 09:40:02 UTC
