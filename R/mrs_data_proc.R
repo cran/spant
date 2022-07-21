@@ -1535,16 +1535,32 @@ get_subset <- function(mrs_data, x_set = NULL, y_set = NULL, z_set = NULL,
 #' @export
 crop_xy <- function(mrs_data, x_dim, y_dim) {
   
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, crop_xy, x_dim = x_dim, y_dim = y_dim)
+    return(res)
+  }
+  
   # check the input
   check_mrs_data(mrs_data) 
   
   mid_pt_x <- Nx(mrs_data) / 2
   mid_pt_y <- Ny(mrs_data) / 2
+  
   x_set <- seq(from = mid_pt_x - x_dim / 2 + 1, by = 1, length.out = x_dim)
   y_set <- seq(from = mid_pt_y - y_dim / 2 + 1, by = 1, length.out = y_dim)
-  x_set <- floor(x_set) # could be floor or ceil, need to test
-  y_set <- floor(y_set) # could be floor or ceil, need to test
+  
+  if((Nx(mrs_data) %% 2) == 0) {
+    x_set <- floor(x_set)
+  } else {
+    x_set <- ceiling(x_set)
+  }
   x_offset <- x_set[1] - 1
+  
+  if((Ny(mrs_data) %% 2) == 0) {
+    y_set <- floor(y_set)
+  } else {
+    y_set <- ceiling(y_set)
+  }
   y_offset <- y_set[1] - 1
   
   affine <- mrs_data$affine
@@ -1570,10 +1586,22 @@ mask_xy <- function(mrs_data, x_dim, y_dim) {
   
   mid_pt_x <- Nx(mrs_data) / 2
   mid_pt_y <- Ny(mrs_data) / 2
+  
   x_set <- seq(from = mid_pt_x - x_dim / 2 + 1, by = 1, length.out = x_dim)
   y_set <- seq(from = mid_pt_y - y_dim / 2 + 1, by = 1, length.out = y_dim)
-  x_set <- floor(x_set) # could be floor or ceil, need to test
-  y_set <- floor(y_set) # could be floor or ceil, need to test
+  
+  if((Nx(mrs_data) %% 2) == 0) {
+    x_set <- floor(x_set)
+  } else {
+    x_set <- ceiling(x_set)
+  }
+  
+  if((Ny(mrs_data) %% 2) == 0) {
+    y_set <- floor(y_set)
+  } else {
+    y_set <- ceiling(y_set)
+  }
+  
   mask_mat <- matrix(TRUE, Nx(mrs_data), Ny(mrs_data))
   mask_mat[x_set, y_set] <- FALSE
   mrs_data <- mask_xy_mat(mrs_data, mask_mat)
@@ -1588,6 +1616,11 @@ mask_xy <- function(mrs_data, x_dim, y_dim) {
 #' @return masked dataset.
 #' @export
 mask_xy_mat <- function(mrs_data, mask, value = NA) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, mask_xy_mat, mask = mask, value = value)
+    return(res)
+  }
   
   # check the input
   check_mrs_data(mrs_data)
@@ -2148,6 +2181,15 @@ mean.mrs_data <- function(x, ...) {
   x$data <- colMeans(data_pts, ...)
   dim(x$data) <- c(1, 1, 1, 1, 1, 1, data_N)
   x
+}
+
+#' Calculate the mean spectrum from an mrs_data object.
+#' @param x object of class mrs_data.
+#' @param ... other arguments to pass to the colMeans function.
+#' @return mean mrs_data object.
+#' @export
+mean.list <- function(x, ...) {
+  return(lapply(x, mean, ...))
 }
 
 #' Calculate the standard deviation spectrum from an mrs_data object.

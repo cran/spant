@@ -61,6 +61,7 @@ print.mrs_data <- function(x, full = FALSE, ...) {
 #' been made.
 #' @param mar option to adjust the plot margins. See ?par.
 #' @param xaxis_lab x-axis label.
+#' @param yaxis_lab y-axis label.
 #' @param xat x-axis tick label values.
 #' @param xlabs x-axis tick labels.
 #' @param yat y-axis tick label values.
@@ -81,10 +82,10 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
                           y_scale = FALSE, x_ax = TRUE, mode = "re",
                           lwd = NULL, bty = NULL, label = "",
                           restore_def_par = TRUE, mar = NULL,
-                          xaxis_lab = NULL, xat = NULL, xlabs = TRUE,
-                          yat = NULL, ylabs = TRUE, show_grid = TRUE,
-                          grid_nx = NULL, grid_ny = NA, col = NULL,
-                          alpha = NULL, ...) {
+                          xaxis_lab = NULL, yaxis_lab = NULL, xat = NULL,
+                          xlabs = TRUE, yat = NULL, ylabs = TRUE,
+                          show_grid = TRUE, grid_nx = NULL, grid_ny = NA,
+                          col = NULL, alpha = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
  
@@ -94,7 +95,9 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
  
   # has this data element been masked? 
   if (anyNA(x$data)) {
+    graphics::par(mar = c(0, 0, 0 ,0))
     graphics::plot.new()
+    # plot(0, xaxt = 'n', yaxt = 'n', bty = 'n', pch = '', ylab = '', xlab = '')
     return(NULL)
   }
   
@@ -146,6 +149,8 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
   
   if (!is.null(xaxis_lab)) xlab <- xaxis_lab
   
+  if (is.null(yaxis_lab)) yaxis_lab <- "Intensity (au)"
+  
   if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[Npts(x)])
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
@@ -174,7 +179,7 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
   if (y_scale) {
     if (is.null(mar)) graphics::par(mar = c(3.5, 3.5, 1, 1))
     graphics::plot(x_scale[subset], plot_data[subset], type = 'l', xlim = xlim, 
-                   xlab = xlab, ylab = "Intensity (au)", lwd = lwd, bty = bty, 
+                   xlab = xlab, ylab = yaxis_lab, lwd = lwd, bty = bty, 
                    xaxt = "n", yaxt = "n", col = col,
                    panel.first = {if (show_grid) graphics::grid(nx = grid_nx,
                                                             ny = grid_ny)}, ...)
@@ -730,6 +735,10 @@ gridplot.mrs_data <- function(x, rows = NA, cols = NA, mar = c(0, 0, 0, 0),
   mrs_data_dyns <- collapse_to_dyns(x)
   Nspec <- Ndyns(mrs_data_dyns)
   
+  # auto choose rows and cols for MRSI
+  if (is.na(rows) && (Nx(x) + Ny(x) > 2)) rows <- Ny(x)
+  if (is.na(cols) && (Nx(x) + Ny(x) > 2)) cols <- Nx(x)
+  
   # set to rows and cols to be squareish if not specified
   if (is.na(rows) & is.na(cols)) {
     rows <- ceiling(Nspec ^ 0.5)
@@ -744,11 +753,11 @@ gridplot.mrs_data <- function(x, rows = NA, cols = NA, mar = c(0, 0, 0, 0),
   
   if (Ndyns(mrs_data_dyns) > rows * cols) {
     warning("not enough rows and columns to show all spectra")
-    mrs_data_dyns <- get_dyns(mrs_data_dyns, 1:(rows*cols))
+    mrs_data_dyns <- get_dyns(mrs_data_dyns, 1:(rows * cols))
   }
   
   for (n in 1:Ndyns(mrs_data_dyns)) {
-    if (n > (rows*cols - cols)) {
+    if (n > (rows * cols - cols)) {
       x_ax = TRUE
     } else {
       x_ax = FALSE
@@ -758,7 +767,7 @@ gridplot.mrs_data <- function(x, rows = NA, cols = NA, mar = c(0, 0, 0, 0),
                    bty = bty, x_ax = x_ax, ...)
   }
   
-  graphics::mtext(text="Chemical shift (ppm)", side=1, line=1.8, outer=TRUE,
+  graphics::mtext(text="Chemical shift (ppm)", side = 1, line = 1.8, outer=TRUE,
                   cex = 0.8)
   
   if (restore_def_par) graphics::par(.pardefault)

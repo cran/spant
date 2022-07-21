@@ -290,8 +290,16 @@ get_voi_seg <- function(voi, mri_seg) {
 get_voi_seg_psf <- function(psf, mri_seg) {
   # check the image orientation etc is the same
   check_geom(psf, mri_seg)
+  
+  # check the segmentation data has only integer values
+  if (!all(mri_seg == as.integer(mri_seg))) {
+    stop("Segmentation file has non-integer values.") 
+  }
+  
   mask <- (abs(psf) > 0)
   vals <- mri_seg[mask]
+  
+  
   other <- sum(as.numeric(vals == 0) * psf[mask])
   csf   <- sum(as.numeric(vals == 1) * psf[mask])
   gm    <- sum(as.numeric(vals == 2) * psf[mask])
@@ -432,9 +440,10 @@ nifti_flip_lr <- function(x) {
 #' Reslice a nifti object to match the orientation of mrs data.
 #' @param mri nifti object to be resliced.
 #' @param mrs mrs_data object for the target orientation.
+#' @param interp interpolation parameter, see nifyreg.linear definition.
 #' @return resliced imaging data.
 #' @export
-reslice_to_mrs <- function(mri, mrs) {
+reslice_to_mrs <- function(mri, mrs, interp = 3L) {
   mrs_affine <- RNifti::xform(get_mrsi_voi(mrs))
   dummy <- mri
   new_affine <- RNifti::xform(mri)
@@ -449,7 +458,7 @@ reslice_to_mrs <- function(mri, mrs) {
   new_affine[1:3, 4] <- new_pos
   #RNifti::sform(dummy) <- new_affine
   dummy <- RNifti::`sform<-`(dummy, structure(new_affine, code = 2L))
-  resample_img(mri, dummy)
+  resample_img(mri, dummy, interp)
 }
 
 #' Calculate the partial volume estimates for each voxel in a 2D MRSI dataset.
@@ -469,6 +478,11 @@ get_mrsi2d_seg <- function(mrs_data, mri_seg, ker) {
   # reformat seg data into the same space as the full MRSI voi
   voi <- get_mrsi_voi(mrs_data)
   mri_seg_crop <- resample_img(mri_seg, voi, interp = 0L)
+  
+  # check mri_seg_crop has only integer values
+  if (!all(mri_seg_crop == as.integer(mri_seg_crop))) {
+    stop("Segmentation file has non-integer values.") 
+  }
   
   mri_seg_0 <- rowMeans(mri_seg_crop == 0, dims = 2)
   mri_seg_1 <- rowMeans(mri_seg_crop == 1, dims = 2)
