@@ -776,7 +776,7 @@ td2fd <- function(mrs_data) {
   if (inherits(mrs_data, "list")) return(lapply(mrs_data, td2fd))
   
   if (mrs_data$freq_domain[7] == TRUE) {
-    warning("Data is alread in the frequency-domain.")
+    warning("Data is already in the frequency-domain.")
   }
   
   freq <- matrix(mrs_data$data, ncol = Npts(mrs_data))
@@ -798,7 +798,7 @@ fd2td <- function(mrs_data) {
   if (inherits(mrs_data, "list")) return(lapply(mrs_data, fd2td))
   
   if (mrs_data$freq_domain[7] == FALSE) {
-    warning("Data is alread in the time-domain.")
+    warning("Data is already in the time-domain.")
   }
   
   time <- matrix(mrs_data$data, ncol = Npts(mrs_data))
@@ -1236,7 +1236,38 @@ crop_td_pts <- function(mrs_data, start = NULL, end = NULL) {
   
   mrs_data$data <- mrs_data$data[,,,,,,start:end, drop = F]
   
-  mrs_data
+  return(mrs_data)
+}
+
+#' Crop \code{mrs_data} object data points in the time-domain rounding down to
+#' the next smallest power of two (pot). Data that already has a pot length will
+#' not be changed.
+#' @param mrs_data MRS data.
+#' @return cropped \code{mrs_data} object.
+#' @export
+crop_td_pts_pot <- function(mrs_data) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, crop_td_pts_pot)
+    return(res)
+  }
+  
+  # check to see if already a power of 2
+  len <- Npts(mrs_data) 
+  
+  if ((log2(len) == as.integer(log2(len)))) {
+    # nothing to do
+    return(mrs_data)
+  } else {
+    # needs to be a TD operation
+    if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+    
+    # not a power of two, so rounding down to the nearest
+    end <- 2 ^ floor(log2(len))
+    mrs_data$data <- mrs_data$data[,,,,,,1:end, drop = F]
+  }
+  
+  return(mrs_data)  
 }
 
 #' Crop \code{mrs_data} object based on a frequency range.
@@ -2529,6 +2560,8 @@ hsvd_filt_vec <- function(fid, fs, region = c(-30, 30), comps = 40,
 #' @export
 hsvd <- function(mrs_data, comps = 40, irlba = TRUE, max_damp = 10) {
   
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
   if (Nspec(mrs_data) > 1) {
     warning("Data contains multiple spectra, but only one has been processed.")
   }
@@ -2901,12 +2934,14 @@ zp_vec <- function(vector, n) {
 #' dimension before use.
 #' @param ref_pt_index time-domain point to use for estimating phase and scaling 
 #' values.
+#' @param ret_metab_only return the metabolite data only, even if reference data
+#' has been specified.
 #' @return MRS data.
 #' @export
 comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
                        scale_method = "sig_noise_sq", sum_coils = TRUE,
                        noise_region = c(-0.5, -2.5), average_ref_dyns = TRUE,
-                       ref_pt_index = 1) {
+                       ref_pt_index = 1, ret_metab_only = FALSE) {
   
   if (inherits(metab, "list")) {
     # if (class(ref) != "list") stop("metab is a list but ref is not")
@@ -2937,12 +2972,13 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
     more_args <- list(scale = scale, scale_method = scale_method,
                       sum_coils = sum_coils, noise_region = noise_region,
                       average_ref_dyns = average_ref_dyns,
-                      ref_pt_index = ref_pt_index)
+                      ref_pt_index = ref_pt_index,
+                      ret_metab_only = ret_metab_only)
     
     res <- mapply(comb_coils, metab = metab, ref = ref, noise = noise,
                   MoreArgs = more_args, SIMPLIFY = FALSE)
     
-    if (is.null(ref[[1]])) {
+    if (is.null(ref[[1]]) | ret_metab_only) {
       return(res)
     } else {
       metab_list <- lapply(res, '[[', 1)
@@ -3046,7 +3082,7 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
   
   if (sum_coils) metab_ps <- sum_coils(metab_ps)
   
-  if (metab_only) {
+  if (metab_only | ret_metab_only) {
     return(metab_ps)
   } else {
     out <- list(metab = metab_ps, ref = ref_ps)
@@ -3253,6 +3289,9 @@ peak_info <- function(mrs_data, xlim = c(4,0.5), interp_f = 4,
 #' value in the y axis, FWHM in the units of data points.
 #' @export
 calc_peak_info_vec <- function(data_pts, interp_f) {
+  
+  if (is.na(data_pts[1])) return(rep(NA, 3))
+  
   data_pts <- stats::spline(data_pts, n = interp_f * length(data_pts))
   data_pts_x <- data_pts$x
   data_pts <- data_pts$y
@@ -3285,7 +3324,7 @@ calc_peak_info_vec <- function(data_pts, interp_f) {
 #' offset.
 #' @return baseline corrected data.
 #' @export
-bc_constant <- function(mrs_data, xlim = NULL) {
+bc_constant <- function(mrs_data, xlim) {
   
   if (inherits(mrs_data, "list")) {
     return(lapply(mrs_data, bc_constant, xlim = xlim))
@@ -3299,15 +3338,19 @@ bc_constant <- function(mrs_data, xlim = NULL) {
   return(mrs_data)
 }
 
-
-
 #' Baseline correction using the ALS method.
+#'
+#' Eilers P. H. C. and Boelens H. F. M. (2005) Baseline correction with
+#' asymmetric least squares smoothing. Leiden Univ. Medical Centre Report.
+#'
 #' @param mrs_data mrs_data object.
-#' @param lambda lambda parameter.
-#' @param p p parameter.
+#' @param lambda controls the baseline flexibility.
+#' @param p controls the penalty for negative data points.
+#' @param ret_bc_only return the baseline corrected data only. When FALSE the
+#' baseline estimate and input data will be returned.
 #' @return baseline corrected data.
 #' @export
-bc_als <- function(mrs_data, lambda = 1e4, p = 0.001) {
+bc_als <- function(mrs_data, lambda = 1e4, p = 1e-3, ret_bc_only = TRUE) {
   
   if (inherits(mrs_data, "list")) {
     return(lapply(mrs_data, bc_als, lambda = lambda, p = p))
@@ -3315,7 +3358,14 @@ bc_als <- function(mrs_data, lambda = 1e4, p = 0.001) {
   
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
-  apply_mrs(mrs_data, 7, bc_als_vec, lambda, p)
+  bc_res <- apply_mrs(mrs_data, 7, bc_als_vec, lambda, p)
+
+  if (ret_bc_only) {
+    return(bc_res)  
+  } else {
+    bl <- mrs_data - bc_res
+    return(list(bc = bc_res, bl = bl, input = mrs_data))
+  }
 }
 
 bc_als_vec <- function(vec, lambda, p) {
@@ -3463,12 +3513,13 @@ kspace2img_xy <- function(mrs_data) {
 #' @param mrs_data data in.
 #' @param lw target linewidth in units of ppm.
 #' @param xlim region to search for peaks to obtain a linewidth estimate.
+#' @param lg Lorentz-Gauss lineshape parameter.
 #' @return line-broadened data.
 #' @export
-set_lw <- function(mrs_data, lw, xlim = c(4, 0.5)) {
+set_lw <- function(mrs_data, lw, xlim = c(4, 0.5), lg = 1) {
   
   if (inherits(mrs_data, "list")) {
-    res <- lapply(mrs_data, set_lw, lw = lw, xlim = xlim)
+    res <- lapply(mrs_data, set_lw, lw = lw, xlim = xlim, lg = lg)
     return(res)
   }
   
@@ -3482,16 +3533,16 @@ set_lw <- function(mrs_data, lw, xlim = c(4, 0.5)) {
   single_mrs <- get_subset(mrs_data, x_set = 1, y_set = 1, z_set = 1,
                            dyn_set = 1, coil_set = 1)
   
-  lb_res <- apply_mrs(mrs_data, 7, optim_set_lw, lw, xlim, single_mrs,
-                   data_only = TRUE)
+  lb_res <- apply_mrs(mrs_data, 7, optim_set_lw, lw, xlim, lg, single_mrs,
+                      data_only = TRUE)
   
   # apply the lb parameter to the full dataset
-  res <- lb(mrs_data, lb_res)
+  res <- lb(mrs_data, lb_res, lg)
   
   return(res)
 }
 
-optim_set_lw <- function(x, lw, xlim, single_mrs) {
+optim_set_lw <- function(x, lw, xlim, lg, single_mrs) {
   single_mrs$data[1,1,1,1,1,1,] <- x
   
   # return NA if the spectrum has been masked
@@ -3507,14 +3558,14 @@ optim_set_lw <- function(x, lw, xlim, single_mrs) {
   # convert lw to Hz to get the upper value for 1D search
   upper_lw <- lw * single_mrs$ft / 1e6
   
-  res <- stats::optim(0, lw_obj_fn, NULL, single_mrs, lw, xlim, lower = 0,
+  res <- stats::optim(0, lw_obj_fn, NULL, single_mrs, lw, xlim, lg, lower = 0,
                       upper = upper_lw, method = "Brent")
   
   return(res$par[1])
 }
 
-lw_obj_fn <- function(lb_val, mrs_data, lw, xlim) {
-  mrs_data <- lb(mrs_data, lb_val)
+lw_obj_fn <- function(lb_val, mrs_data, lw, xlim, lg) {
+  mrs_data <- lb(mrs_data, lb_val, lg)
   new_lw   <- peak_info(mrs_data, xlim)$fwhm_ppm[1]
   Mod(new_lw - lw)
 }
@@ -3952,4 +4003,16 @@ bin_spec <- function(mrs_data, width = 0.05, unit = "ppm") {
   mrs_data$data <- array(data_vec, dim = c(1, 1, 1, 1, 1, 1, length(data_vec)))
   
   return(mrs_data)
+}
+
+#' Apply the Modulus operator to the time-domain MRS signal.
+#' @param mrs_data MRS data input.
+#' @return time-domain modulus of input.
+#' @export
+mod_td <- function(mrs_data) {
+  # covert to time-domain
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  # return the Modulus
+  return(Mod(mrs_data))
 }
