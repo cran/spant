@@ -1,3 +1,17 @@
+# spant 2.3.0
+* Verbose option added to read_ima_coil_dir and read_ima_dyn_dir functions.
+* Support added for reading jMRUI txt formatted MRS data.
+* sim_brain_1h default sequence changed to semi-LASER and line-broadening option
+added.
+* Bug fix for reading LCModel RAW files.
+* Bug fix for HSVD filter when only 0 or 1 components are found in the filter
+region.
+* Improved removal of unwanted data points for reading TWIX formatted data.
+* A json sidecar is automatically written when exporting NIfTI MRS formatted
+data.
+* TWIX reader improved to only read data points from the last scan in the file.
+This also fixes a rare bug.
+
 # spant 2.2.0
 * peak_info function now works with masked datasets.
 * Bug fix for HSVD function not working with frequency domain data.

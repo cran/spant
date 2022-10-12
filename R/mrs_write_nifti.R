@@ -57,12 +57,29 @@ write_mrs_nifti <- function(mrs_data, fname) {
   json_list <- list(SpectrometerFrequency = mrs_data$ft / 1e6,
                     ResonantNucleus = mrs_data$nuc)
   
+  # these are in BIDS and are derived directly from the mrs object 
+  json_list <- c(json_list, list(SpectralWidth = 1 / mrs_data$res[7],
+                                 NumberOfSpectralPoints = Npts(mrs_data),
+                                 AcquisitionVoxelSize = mrs_data$res[2:4]),
+                                 ChemicalShiftOffset = mrs_data$ref)
+  
+  # if SVS this doesn't work yet as number of dynamics doesn't always equal
+  # the number of trasients, eg when dealing with averaged data
+  # if (is_svs(mrs_data)) {
+  #   json_list <- c(json_list, list(NumberOfTransients = Ndyns(mrs_data)))
+  # }
+  
   # append any additional meta information
   json_list <- c(json_list, mrs_data$meta)
   
-  RNifti::extension(mrs_nii, 44) <- jsonlite::toJSON(json_list, digits = NA,
-                                                     null = "null")
+  json_data <- jsonlite::toJSON(json_list, digits = NA, null = "null")
   
+  RNifti::extension(mrs_nii, 44) <- json_data
+                                                     
   # write nifti to disk
   RNifti::writeNifti(mrs_nii, fname, version = 2)
+  
+  # write json sidecar
+  jsonlite::write_json(json_list, sub('\\.nii\\.gz$', '.json', fname),
+                       pretty = TRUE, digits = NA, null = "null") 
 }

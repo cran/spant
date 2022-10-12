@@ -50,6 +50,9 @@ calc_siemens_paras <- function(vars, is_ima) {
 read_twix <- function(fname, verbose, full_fid = FALSE,
                       omit_svs_ref_scans = TRUE, extra) {
   
+  # see mapVBVD function from Will C's pymapvbvd for a better implementation
+  # of all this
+  
   # check the file size
   fbytes <- file.size(fname)
   
@@ -67,9 +70,18 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
     #print(measID)
     fileID <- read_uint32(con)
     #print(fileID)
-    measOffset <- read_uint64(con) # usually 10240 bytes
-    #print(measOffset)
-    measLength <- read_uint64(con)
+    
+    # offsets are available for each scan
+    # here we just keep the last one as this
+    # is the bit we are generally interested in
+    for (z in seq(Nscans)) {
+      measOffset <- read_uint64(con)
+      # print(measOffset)
+      measLength <- read_uint64(con)
+      # print(measLength)
+      seek(con, 152 - 16, "current")
+    }
+    
     seek(con, measOffset)
     hdrLength <- read_uint32(con)
     dataStart <- measOffset + hdrLength
@@ -81,6 +93,8 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
     Nscans <- 1
   }
   close(con)
+  
+  # read the text header
   vars <- read_siemens_txt_hdr(fname, version, verbose)
   
   # read data points 
@@ -98,7 +112,9 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
   
   if (verbose) cat(paste("Scans           :", Nscans, "\n"))
   
-  for (scans in 0:(Nscans - 1)) {
+  #for (scans in 0:(Nscans - 1)) {
+  for (scans in (Nscans - 1)) {
+    if (verbose) cat(paste("\nReading scan    :", scans + 1, "\n"))
     # the final scan is the one we are interested in, so clear the last one 
     raw_pts <- c(NA)
     inds <- NULL
@@ -107,7 +123,10 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
     
     n <- 0
     while (TRUE) {
-      if (verbose) cat(".")
+      if (verbose & !(n %% 10)) cat(".")
+      
+      # cat(paste("Cpos :", cPos))
+      
       seek(con, cPos, "start")
       n <- n + 1
       ulDMALength_bin <- intToBits(read_int32(con))
@@ -165,9 +184,11 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
       MDH_NOISEADJSCAN      <- info_bits[26]
       MDH_IMASCAN           <- TRUE
       
-      #print(info_bits)
-      #print(samples_in_scan)
-      #print(used_channels)
+      # if (n == 1) {
+      #   print(info_bits)
+      #   print(samples_in_scan)
+      #   print(used_channels)
+      # }
       
       if (MDH_ACQEND || MDH_RTFEEDBACK || MDH_HPFEEDBACK || MDH_PHASCOR || MDH_NOISEADJSCAN || MDH_SYNCDATA) {
         MDH_IMASCAN <- FALSE
@@ -229,6 +250,7 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
       
       if (MDH_ACQEND || (ulDMALength == 0)) { # break out to the next scan
         if (scans < (Nscans - 1)) {
+          # print(ulDMALength)
           cPos <- cPos + ulDMALength
           cPos <- cPos + 512 - (cPos %% 512)
           seek(con, cPos, "start")
@@ -259,34 +281,48 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
   
   if (verbose) cat("\n")
   raw_pts <- raw_pts[1:raw_pt_end]
-  fid_offset <- floor(ima_kspace_center_column / 2) + 1
+  # fid_offset <- floor(ima_kspace_center_column / 2) + 1
   dynamics <- length(raw_pts) / ima_coils / (ima_samples * 2)
   if (verbose) cat(paste("Raw data points :", length(raw_pts), "\n"))
   if (verbose) cat(paste("Coils           :", ima_coils, "\n"))
   if (verbose) cat(paste("Complex pts     :", ima_samples, "\n"))
   if (verbose) cat(paste("Dynamics        :", dynamics, "\n"))
   if (verbose) cat(paste("kspace center   :", ima_kspace_center_column, "\n"))
-  #if (verbose) cat(paste("FID offset pts  :", fid_offset, "\n"))
+  # if (verbose) cat(paste("FID offset pts  :", fid_offset, "\n"))
   
   # make complex
   data <- raw_pts[c(TRUE, FALSE)] - 1i * raw_pts[c(FALSE, TRUE)]
   
   data <- array(data, dim = c(ima_samples, ima_coils, dynamics, 1, 1, 1, 1))
-  data <- aperm(data, c(7,6,5,4,3,2,1))
+  data <- aperm(data, c(7, 6, 5, 4, 3, 2, 1))
    
-  if (!full_fid & (floor(ima_kspace_center_column / 2) > 0)) {
-    #data <- data[,,,,,,(fid_offset + 1):ima_samples, drop = FALSE]
-    data <- data[,,,,,,(ima_kspace_center_column + 1):ima_samples, drop = FALSE]
-  }
-  
   # freq domain vector vector
   freq_domain <- rep(FALSE, 7)
   
   # get the resolution and geom info
   paras <- calc_siemens_paras(vars, FALSE)
   
-  meta <- list(EchoTime = vars$te, RepetitionTime = vars$tr,
-               FlipAngle = vars$flip_ang)
+  Nvoxels <- vars$x_pts * vars$y_pts * vars$z_pts
+  
+  if (Nvoxels == 1) {
+    twix_is_svs <- TRUE
+  } else {
+    twix_is_svs <- FALSE
+  }
+  
+  if (verbose) {
+    if (twix_is_svs) {
+       cat(paste("Data is SVS.\n"))
+    } else {
+       cat(paste("Data is MRSI.\n"))
+    }
+  }
+  
+  meta <- list(EchoTime = vars$te,
+               RepetitionTime = vars$tr,
+               FlipAngle = vars$flip_ang,
+               SequenceName = vars$seq_fname,
+               ChemicalShiftReference = 4.7 + vars$delta_freq)
 
   mrs_data <- mrs_data(data = data, ft = vars$ft, resolution = paras$res,
                        ref = paras$ref, nuc = paras$nuc,
@@ -295,6 +331,9 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
   
   # some extra info specific to twix data
   mrs_data$twix_inds <- as.data.frame(matrix(inds, ncol = 14, byrow = TRUE))
+  
+  # mrs_data$ima_kspace_center_column <- ima_kspace_center_column
+  # mrs_data$fid_offset <- fid_offset
   
   ind_names <- c("Lin", "Ave", "Sli", "Par", "Eco", "Phs", "Rep", "Set", "Seg",
                  "Ida", "Idb", "Idc", "Idd", "Ide")
@@ -314,14 +353,46 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
   x_pts <- max(mrs_data$twix_inds$Seg) + 1
   y_pts <- max(mrs_data$twix_inds$Lin) + 1
   
-if (x_pts > 1 || y_pts > 1) {
-  mrs_data$resolution[2] <- vars$x_dim / x_pts
-  mrs_data$resolution[3] <- vars$y_dim / y_pts
+  if (x_pts > 1 || y_pts > 1) {
+    mrs_data$resolution[2] <- vars$x_dim / x_pts
+    mrs_data$resolution[3] <- vars$y_dim / y_pts
+    
+    # fix the affine
+    mrs_data$affine[,1] <- mrs_data$affine[,1] * vars$x_pts / x_pts
+    mrs_data$affine[,2] <- mrs_data$affine[,2] * vars$y_pts / y_pts
+  }
   
-  # fix the affine
-  mrs_data$affine[,1] <- mrs_data$affine[,1] * vars$x_pts / x_pts
-  mrs_data$affine[,2] <- mrs_data$affine[,2] * vars$y_pts / y_pts
-}
+  # crop the first few points of the FID and set the length to a power of two if 
+  # the full FID output is not requested
+  if (!full_fid) {
+    
+    # CMRR sLASER always starts with the first point
+    if (endsWith(vars$seq_fname, "%CustomerSeq%\\svs_slaser_dkd")) {
+      start_pt <- 1
+    } else if (vars$seq_fname == "%CustomerSeq%\\eja_svs_mpress") {
+      start_pt <- floor(ima_kspace_center_column / 2) + 1
+    } else if (vars$seq_fname == "%SiemensSeq%\\csi_slaser") {
+      start_pt <- ima_kspace_center_column + 1
+    } else if (vars$seq_fname == "%SiemensSeq%\\svs_se") {
+      start_pt <- 1
+    } else {
+      warning("TWIX seqeuence not recognised, guessing the echo start point.")
+      warning("Contact the developer if you're not sure if this is a problem.")
+      # find the max echo position from the first 50 data points in the FID
+      # start_chunk <- crop_td_pts(mrs_data, 1, 50)
+      # if (!twix_is_svs) start_chunk <- mean_dyns(start_chunk)
+      # start_chunk <- Mod(start_chunk$data)
+      # start_pt    <- arrayInd(which.max(start_chunk), dim(start_chunk))[7]
+      start_pt <- 1
+    }
+    
+    # trim the start point of the FID
+    mrs_data$data <- mrs_data$data[,,,,,,start_pt:ima_samples, drop = FALSE]
+    if (verbose) cat(paste("FID start adj.  :", start_pt, "\n"))
+    
+    # crop to a power of 2 if needed
+    mrs_data <- crop_td_pts_pot(mrs_data)
+  }
   
   return(mrs_data)
 }
@@ -333,16 +404,22 @@ if (x_pts > 1 || y_pts > 1) {
 #' @return a list of parameter values
 #' @export
 read_siemens_txt_hdr <- function(input, version = "vd", verbose) {
+  
   if (is.character(input)) {
     con <- file(input, 'rb', encoding = "UTF-8")
   } else {
     # assume binary
     con <- rawConnection(input, "rb")
   }
+ 
   while (TRUE) {
     line <- readLines(con, n = 1, skipNul = TRUE, warn = FALSE)
     if (length(line) == 0) break
-    if (startsWith(line, "ulVersion") && version == 'vb') break
+    
+    if (startsWith(line, "ulVersion") && version == 'vb') {
+      seq_fname <- NULL
+      break
+    }
 
     if (startsWith(line, "ulVersion") && version == 'vd') {
       line_no_sp <- gsub(" ", "", line)
@@ -350,6 +427,12 @@ read_siemens_txt_hdr <- function(input, version = "vd", verbose) {
       # skip if there isn't an equal sign once spaces have been removed
       if (!startsWith(line_no_sp_no_tab, "ulVersion=")) next
       tSequenceFilename <- readLines(con, n = 1)
+      
+      seq_fname <- strsplit(tSequenceFilename, "=")[[1]][2]
+      seq_fname <- gsub("\t", "", seq_fname)
+      seq_fname <- gsub("\"", "", seq_fname)
+      seq_fname <- gsub(" ", "", seq_fname)
+      
       tProtocolName <- readLines(con, n = 1)
       last_ulVersion_pos <- seek(con)
       #if ((tProtocolName != "tProtocolName\t = \t\"AdjCoilSens\"") && (tProtocolName != "tProtocolName\t = \t\"CBU_MPRAGE_32chn\"")) {
@@ -382,7 +465,8 @@ read_siemens_txt_hdr <- function(input, version = "vd", verbose) {
                pos_tra = 0,
                norm_sag = 0,
                norm_cor = 0,
-               norm_tra = 0)
+               norm_tra = 0,
+               seq_fname = seq_fname)
   
   # when a parameter is missing from an ima file it means it's zero (I think)
   slice_dPhaseFOV    <- 0
@@ -419,6 +503,10 @@ read_siemens_txt_hdr <- function(input, version = "vd", verbose) {
       vars$ft <- as.numeric(strsplit(line, "=")[[1]][2])
     } else if (startsWith(line, "alTE[0]")) {
       vars$te <- (as.numeric(strsplit(line, "=")[[1]][2])) / 1e6
+    } else if (startsWith(line, "alTE[1]")) {
+      vars$te <- vars$te + (as.numeric(strsplit(line, "=")[[1]][2])) / 1e6
+    } else if (startsWith(line, "alTE[2]")) {
+      vars$te <- vars$te + (as.numeric(strsplit(line, "=")[[1]][2])) / 1e6
     } else if (startsWith(line, "alTR[0]")) {
       vars$tr <- (as.numeric(strsplit(line, "=")[[1]][2])) / 1e6
     } else if (startsWith(line, "adFlipAngleDegree[0]")) {
@@ -475,10 +563,20 @@ read_siemens_txt_hdr <- function(input, version = "vd", verbose) {
       slice_norm_tra <- as.numeric(strsplit(line, "=")[[1]][2])
     } else if (startsWith(line, "sSpecPara.ucRemoveOversampling")) {
       vars$rm_oversampling <- as.numeric(strsplit(line, "=")[[1]][2])
+    } else if (startsWith(line, "sSpecPara.dDeltaFrequency")) {
+      vars$delta_freq <- as.numeric(strsplit(line, "=")[[1]][2])
+    } else if (startsWith(line, "tSequenceFileName")) {
+      vars$seq_fname <- strsplit(line, "=")[[1]][2]
+      vars$seq_fname <- gsub("\t", "", vars$seq_fname)
+      vars$seq_fname <- gsub("\"", "", vars$seq_fname)
+      vars$seq_fname <- gsub(" ", "", vars$seq_fname)
     }
   }
   
+  if (verbose) cat(paste("Sequence fname  :", vars$seq_fname, "\n"))
   if (verbose) cat(paste("Table position  :", scan_reg_pos_tra, "mm\n"))
+  if (verbose) cat(paste("Rm oversampling :", as.logical(vars$rm_oversampling),
+                         "\n"))
  
   # how many voxels do we expect?
   Nvoxels <- vars$x_pts * vars$y_pts * vars$z_pts
