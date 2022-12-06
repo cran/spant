@@ -71,7 +71,7 @@ sim_basis_tqn <- function(fs = def_fs(), ft = def_ft(), N = def_N(),
 print.basis_set <- function(x, ...) {
   cat("Basis set parameters\n")
   cat("-------------------------------\n")
-  cat(paste(c("Trans. freq (MHz)       : ", x$ft * 1e-6, "\n")), sep = "")
+  cat(paste(c("Trans. freq (MHz)       : ", round(x$ft * 1e-6, 1), "\n")), sep = "")
   cat(paste(c("Data points             : ", dim(x$data)[1], "\n")), sep = "")
   cat(paste(c("Sampling frequency (Hz) : ", x$fs, "\n")), sep = "")
   cat(paste(c("Elements                : ", dim(x$data)[2], "\n\n")), sep = "")
@@ -100,113 +100,48 @@ stackplot.basis_set <- function(x, ...) {
 #' @return basis object.
 #' @export
 read_basis <- function(basis_file, ref = def_ref(), sort_basis = TRUE) {
+  
+  # open the file
   con  <- file(basis_file, open = "r")
   names <- vector()
   data <- vector()
   
   while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
+    # reading main header
     if (startsWith(line, " NDATAB = ")) {
       N <- as.integer(strsplit(trimws(line), "\\s+")[[1]][3])
-      data_lines <- ceiling(2 * N / 6) # assume 6 cols
     } else if (startsWith(line, " HZPPPM = ")) {
       bas_ft <- strsplit(trimws(line), "\\s+")[[1]][3]
-      bas_ft <- as.double(gsub(",", "", bas_ft))*1e6
+      bas_ft <- as.double(gsub(",", "", bas_ft)) * 1e6
     } else if (startsWith(line, " BADELT = ")) {
       bas_fs <- strsplit(trimws(line), "\\s+")[[1]][3]
-      bas_fs <- 1 / as.double(gsub(",", "",bas_fs))
-    } else if (endsWith(line, "$BASIS")) {
+      bas_fs <- 1 / as.double(gsub(",", "", bas_fs))
+    } else if (startsWith(line, " FMTBAS = ")) {
+      format <- (strsplit(trimws(line), " ")[[1]][3])
+      format <- gsub(",", "", format)
+      format <- gsub("'", "", format)
+      format <- gsub("\\(", "", format)
+      format <- gsub("\\)", "", format)
+    } else if (endsWith(line, "$BASIS")) { # we're at the end of the main header
+      cols <- as.numeric(substr(format, 1, 1))
+      data_lines <- ceiling(2 * N / cols)
       while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
         if (startsWith(line, " ID = ")) {
+          # reading metabolite header
           id <- (strsplit(trimws(line), " ")[[1]][3])
-          id <- gsub(",", "",id)
-          id <- gsub("'", "",id)
+          id <- gsub(",", "", id)
+          id <- gsub("'", "", id)
           names <- c(names, id)
         } else if (endsWith(line, "$END")) {
-          x <- utils::read.fortran(con, "6F13.0", n = data_lines)
+          # read data points
+          x <- utils::read.table(con, nrows = data_lines, fill = TRUE)
           data_pts <- as.vector(t(as.matrix(x)))
           data_pts <- data_pts[seq(1, 2 * N, 2)] +
                       1i * data_pts[seq(2, 2 * N, 2)]
-          data_pts <- pracma::ifftshift(data_pts)
-          data <- cbind(data, data_pts)
-          break
-        }
-      }
-    }
-  }
-  close(con)
-  
-  basis_set <- list(data = data, N = N, fs = bas_fs, ft = bas_ft, 
-                    names = names, ref = ref)
-  
-  class(basis_set) <- "basis_set"
-  
-  if (sort_basis) basis_set <- sort_basis(basis_set)
-  
-  dimnames(basis_set$data) <- NULL
-
-  return(basis_set)
-}
-
-#' Read a basis file in LCModel .basis format (for testing only).
-#' @param basis_file path to basis file.
-#' @param ref assumed ppm reference value.
-#' @param sort_basis sort the basis set based on signal names.
-#' @return basis object.
-#' @export
-read_basis_ac <- function(basis_file, ref = def_ref(), sort_basis = TRUE) {
-  con  <- file(basis_file, open = "r")
-  names <- vector()
-  data <- vector()
-  
-  while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
-    
-    # ARC 2021-07-15 : handle varying parameter spacing and column layout 
-    line<-trimws(line);
-    # split by "=", surrounded by arbitrary whitespace.
-    # some lines have a "," suffix; we can cut this out in the same operation
-    tokens <- strsplit(line, "[[:space:]]*[=,][[:space:]]*")[[1]]
-    if (is.na(tokens[1])) {
-      # empty line
-      next;
-    }         
-    param <- toupper(tokens[1])
-    if (param=="NDATAB") {
-      N <- as.integer(tokens[2])
-    } else if (param=="HZPPPM") {
-      bas_ft <- as.double(tokens[2])*1e6
-    } else if (param=="BADELT") {
-      bas_fs <- 1/as.double(tokens[2])
-    } else if (endsWith(line, "$BASIS")) {
-      while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
-        line <- trimws(line);
-        tokens <- strsplit(line, "[[:space:]]*[=,][[:space:]]*")[[1]]
-        param <- toupper(tokens[1]);
-        if (is.na(tokens[1])) {
-          next;
-        }
-        if (param=="METABO") { # formerly ID
-          id <- trimws(gsub("'", "",tokens[2]))
-          names <- c(names, id)
-        } else if (endsWith(line, "$END")) {
-          # ARC 2021-07-15: auto-detect column layout {{{
-          # read a single line, then rewind
-          fp <- seek(con,origin='current')
-          l1 <- readLines(con,n=1,warn=FALSE); 
-          fpn <- seek(con,origin='start',where=fp);
           
-          tokens <- strsplit(trimws(l1),"[[:space:]]+")[[1]];
-          cols <- length(tokens);
-          width <- ceiling(nchar(l1)/cols);
-          fmt <- sprintf("%dF%d.0",cols,width);
-          # }}}
-          
-          data_lines <- ceiling(2 * N / cols)
-          x <- utils::read.fortran(con, fmt, n = data_lines)
-          data_pts <- as.vector(t(as.matrix(x)))
-          data_pts <- data_pts[seq(1, 2 * N, 2)] +
-            1i * data_pts[seq(2, 2 * N, 2)]
+          # ifftshift
           data_pts <- pracma::ifftshift(data_pts)
-          data <- cbind(data, data_pts)
+          data     <- cbind(data, data_pts) # slow?
           break
         }
       }
@@ -393,14 +328,110 @@ append_basis <- function(basis_a, basis_b) {
 #' Apply frequency shifts to basis set signals.
 #' @param basis the basis to apply the shift to.
 #' @param shifts a vector of frequency shifts to apply in ppm units. Must be the
-#' same length as there are basis elements.
+#' same length as there are basis elements, or one value to be applied to all
+#' elements.
 #' @return modified basis set object.
 #' @export
 shift_basis <- function(basis, shifts) {
   if (length(shifts) != ncol(basis$data)) {
-    stop("the length of shifts does not match the number of basis signals")
+    if (length(shifts == 1)) {
+      rep(shifts, ncol(basis$data))    
+    } else {
+      stop("the length of shifts does not match the number of basis signals")
+    }
   }
   basis_mrs_data <- basis2mrs_data(basis)
   basis_mrs_data <- shift(basis_mrs_data, shifts)
   mrs_data2basis(basis_mrs_data, basis$names)
+}
+
+#' Resample a basis-set to match a mrs_data acquisition.
+#' @param basis the basis to be resampled.
+#' @param mrs_data the mrs_data to match the number of data points and sampling
+#' frequency.
+#' @param ref_freq_match apply a frequency shift to the basis to match the
+#' reference frequency (usually 4.65 or 4.68) of the mrs_data.
+#' @return resampled basis set object.
+#' @export
+resample_basis <- function(basis, mrs_data, ref_freq_match = TRUE) {
+  N  <- basis$N
+  fs <- basis$fs
+  t_orig <- seq(from = 0, to = (N - 1) / fs, by = 1 / fs)
+  t_new  <- seconds(mrs_data)
+  
+  # create resampled basis 
+  basis_resamp    <- basis
+  basis_resamp$N  <- Npts(mrs_data)
+  basis_resamp$fs <- fs(mrs_data)
+  basis_resamp$data <- matrix(nrow = basis_resamp$N, ncol = length(basis$names))
+  
+  # inverse FT back to the time-domain
+  basis$data <- ift_shift_mat(basis$data)
+  
+  # loop through basis elements and resample
+  for (n in 1:length(basis$names)) {
+    
+    resamp_ele <- stats::spline(t_orig, Re(basis$data[,n]), xout = t_new)$y +
+                  1i * stats::spline(t_orig, Im(basis$data[,n]), xout = t_new)$y
+    basis_resamp$data[,n] <- resamp_ele
+  }
+  
+  # back to freq. domain
+  basis_resamp$data <- ft_shift_mat(basis_resamp$data)
+  
+  if (ref_freq_match) {
+    basis_resamp <- shift_basis(basis_resamp, basis$ref - mrs_data$ref)
+    basis_resamp$ref <- mrs_data$ref
+  }
+  
+  return(basis_resamp)
+}
+
+#' Return a subset of the input basis.
+#' @param basis input basis.
+#' @param names basis set elements to keep in the returned object. 
+#' @param invert set to true to return all basis elements except those given in
+#' the names argument.
+#' @return a subset of the input basis.
+#' @export
+get_basis_subset <- function(basis, names, invert = FALSE) {
+  matches <- rep(FALSE, length(basis$names))
+  for (n in 1:length(names)) {
+    match <- basis$names == names[n]
+    if (any(match)) {
+      matches <- matches | match
+    } else {
+      stop(names[n], " not found")
+    }
+  }
+  
+  if (invert) matches <- !matches
+  
+  basis$data  <- basis$data[, matches, drop = FALSE]
+  basis$names <- basis$names[matches]
+  return(basis)
+}
+
+#' Scale a basis-set to be consistent with spant assumptions for water scaling.
+#' 
+#' For correct water scaling, spant assumes the time-domain amplitude (t = 0)
+#' for a single proton is 0.5. Internally simulated basis-sets will be correctly
+#' scaled, however imported basis-sets should be assumed to be un-scaled and 
+#' this function should be used. Note that the singlet specified should only
+#' contain one resonance, and that any additional signals (eg TSP or residual 
+#' water) will result in incorrect scaling. Therefore, only simulated basis sets
+#' are appropriate for use with this function.
+#' 
+#' @param basis basis set to be scaled.
+#' @param name the name of the singlet to be used as a scaling reference.
+#' @param protons the number of MRS visible protons contributing to the singlet
+#' resonance.
+#' @return a scaled basis.
+#' @export
+scale_basis_from_singlet <- function(basis, name, protons) {
+  basis_singlet <- get_basis_subset(basis, name)
+  mrs_singlet   <- basis2mrs_data(basis_singlet)
+  sc_factor     <- get_td_amp(mrs_singlet, nstart = 2) / protons * 2
+  basis$data    <- basis$data / as.numeric(sc_factor)
+  return(basis)
 }

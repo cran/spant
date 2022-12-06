@@ -15,7 +15,7 @@ library(spant)
 fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT", package = "spant")
 
 ## -----------------------------------------------------------------------------
-mrs_data <- read_mrs(fname, format = "spar_sdat")
+mrs_data <- read_mrs(fname)
 
 ## -----------------------------------------------------------------------------
 print(mrs_data)
@@ -40,15 +40,34 @@ fit_res <- fit_mrs(mrs_proc, basis)
 plot(fit_res)
 
 ## -----------------------------------------------------------------------------
-amps <- fit_amps(fit_res)
-print(t(amps / amps$tCr))
+fit_res$res_tab
 
 ## -----------------------------------------------------------------------------
-fit_res$res_tab
+fit_res$res_tab$tNAA.sd / fit_res$res_tab$tNAA * 100
 
 ## -----------------------------------------------------------------------------
 fit_res$res_tab$SNR
 
 ## -----------------------------------------------------------------------------
 fit_res$res_tab$tNAA_lw
+
+## -----------------------------------------------------------------------------
+fit_res_tcr_sc <- scale_amp_ratio(fit_res, "tCr")
+amps <- fit_amps(fit_res_tcr_sc)
+print(t(amps))
+
+## -----------------------------------------------------------------------------
+fname_wref <- system.file("extdata", "philips_spar_sdat_W.SDAT", package = "spant")
+mrs_data_wref <- read_mrs(fname_wref)
+
+## -----------------------------------------------------------------------------
+p_vols <- c(WM = 100, GM = 0, CSF = 0)
+TE = 0.03
+TR = 2
+fit_res_molal <- scale_amp_molal_pvc(fit_res, mrs_data_wref, p_vols, TE, TR)
+fit_res_molal$res_tab$tNAA
+
+## -----------------------------------------------------------------------------
+fit_res_molar <- scale_amp_molar(fit_res, mrs_data_wref)
+fit_res_molar$res_tab$tNAA
 

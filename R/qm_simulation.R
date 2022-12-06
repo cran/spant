@@ -61,9 +61,11 @@ H <- function(spin_n, nucleus, chem_shift, j_coupling_mat, ft, ref) {
 #' @param rec_phase receiver phase in degrees.
 #' @param tol ignore resonance amplitudes below this threshold.
 #' @param detect detection nuclei.
+#' @param amp_scale scaling factor for the output amplitudes.
 #' @return a list of resonance amplitudes and frequencies.
 #' @export
-acquire <- function(sys, rec_phase = 180, tol = 1e-4, detect = NULL) {
+acquire <- function(sys, rec_phase = 180, tol = 1e-4, detect = NULL,
+                    amp_scale = 1) {
   if (is.null(detect)) {
     Fp <- gen_F(sys, "p")
   } else {
@@ -79,7 +81,7 @@ acquire <- function(sys, rec_phase = 180, tol = 1e-4, detect = NULL) {
   indx <- which(sig_amps, arr.ind = TRUE)
   amps <- amp_mat[indx] * (exp(1i * rec_phase * pi / 180) * amp_scaling_factor)
   freqs <- sys$H_eig_vals[indx[,1]] - sys$H_eig_vals[indx[,2]]
-  list(amps = amps, freqs = freqs)
+  list(amps = amps * amp_scale, freqs = freqs)
 }
 
 #' Generate the F product operator.
@@ -396,6 +398,32 @@ sim_basis_1h_brain <- function(pul_seq = seq_press_ideal,
   sim_basis(get_1h_brain_basis_paras(ft = acq_paras$ft, lcm_compat = lcm_compat), 
                                      pul_seq = pul_seq, acq_paras = acq_paras,
                                      xlim = xlim, ...)
+}
+
+#' Simulate a macromolecular and lipid basis-set suitable for 1H brain MRS
+#' analysis.
+#' 
+#' @param acq_paras list of acquisition parameters or an mrs_data object. See
+#' \code{\link{def_acq_paras}}
+#' @return basis object.
+#' @export
+sim_basis_mm_lip_lcm <- function(acq_paras = def_acq_paras()){
+  
+  ft <- acq_paras$ft 
+  
+  mol_list <- list(
+    get_lip09_paras(ft),
+    get_lip13a_paras(ft),
+    get_lip13b_paras(ft),
+    get_lip20_paras(ft),
+    get_mm09_paras(ft),
+    get_mm12_paras(ft),
+    get_mm14_paras(ft),
+    get_mm17_paras(ft),
+    get_mm20_paras(ft)
+  )
+  
+  return(sim_basis(mol_list, acq_paras = acq_paras))
 }
 
 #' Simulate a basis-set suitable for 1H brain MRS analysis acquired with a PRESS 
