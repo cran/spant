@@ -32,6 +32,25 @@ apply_axes <- function(x, axes, fun, ...) {
   x
 }
 
+#' Simulate an ideal pulse excitation profile by smoothing a top-hat function 
+#' with a Gaussian.
+#' @param bw top-hat bandwidth (Hz).
+#' @param sigma Gaussian width smoothing parameter (Hz).
+#' @param fa intended flip angle of the pulse.
+#' @return data frame containing the frequency scale, excitation profile and
+#' corresponding flip-angles.
+#' @export
+sim_th_excit_profile <- function(bw = 1500, sigma = 50, fa = 180) {
+  y <- c(rep(0, bw / 2), rep(1, bw), rep(0, bw / 2))
+  if (sigma != 0) y <- mmand::gaussianSmooth(y, sigma)
+  width <- length(y)
+  x <- seq(from = -width / 2, to = width / 2, length.out = width)
+  y[y >  1] <-  1 # acos doesn't like values gt 1
+  y[y < -1] <- -1 # acos doesn't like values lt -1
+  angle <- acos(1 - 2 * y) * fa / pi
+  return(data.frame(freq = x, Mxy = y, fa = angle))
+}
+
 #' Repeat an array over a given dimension.
 #' @param x array.
 #' @param rep_dim dimension to extend.
@@ -599,6 +618,11 @@ ginv <- function(X, tol = sqrt(.Machine$double.eps)) {
                                            t(Xsvd$u[, Positive, drop = FALSE]))
 }
 
+#' Matrix exponential function taken from complexplus package to reduce the
+#' number of spant dependencies.
+#' @param x a square complex matrix.
+#' @return the matrix exponential of x.
+#' @export
 matexp <- function(x) {
   d  <- dim(x)
   n  <- d[1]
@@ -607,15 +631,20 @@ matexp <- function(x) {
   Ai <- Im(x)
   E  <- rbind(cbind(Ar, -Ai), cbind(Ai, Ar))
   eE <- expm::expm(E)
-  eA <- eE[1:n, 1:n] + (0+1i) * eE[(1:n) + n, 1:n]
+  eA <- eE[1:n, 1:n] + (0 + 1i) * eE[(1:n) + n, 1:n]
   eA <- matrix(Imzap(eA), ncol = n)
   return(eA)
 }
 
-# fn taken from complexplus package
+#' Complex rounding function taken from complexplus package to reduce the number
+#' of spant dependencies.
+#' @param x a scalar or vector, real or complex.
+#' @param tol a tolerance, 10^-6 by default. Prevents possible numerical
+#' problems. Can be set to 0 if desired.
+#' @export
 Imzap <- function(x, tol = 1e-06) {
   if (all(abs(Im(z <- zapsmall(x))) <= tol)) 
-    as.double(x)
+    suppressWarnings(as.double(x))
   else x
 }
 

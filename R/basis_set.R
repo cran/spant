@@ -136,7 +136,8 @@ read_basis <- function(basis_file, ref = def_ref(), sort_basis = TRUE) {
           # read data points
           x <- utils::read.table(con, nrows = data_lines, fill = TRUE)
           data_pts <- as.vector(t(as.matrix(x)))
-          data_pts <- data_pts[seq(1, 2 * N, 2)] +
+          data_pts <- stats::na.omit(data_pts)
+          data_pts <-      data_pts[seq(1, 2 * N, 2)] +
                       1i * data_pts[seq(2, 2 * N, 2)]
           
           # ifftshift
@@ -433,5 +434,26 @@ scale_basis_from_singlet <- function(basis, name, protons) {
   mrs_singlet   <- basis2mrs_data(basis_singlet)
   sc_factor     <- get_td_amp(mrs_singlet, nstart = 2) / protons * 2
   basis$data    <- basis$data / as.numeric(sc_factor)
+  return(basis)
+}
+
+#' Make a basis-set object from a directory containing LCModel formatted RAW
+#' files.
+#' @param dir_path path to the directory containing LCModel RAW files. One file
+#' per signal.
+#' @param ft transmitter frequency in Hz.
+#' @param fs sampling frequency in Hz.
+#' @param ref reference value for ppm scale.
+#' @return a basis-set object.
+#' @export
+make_basis_from_raw <- function(dir_path, ft, fs, ref) {
+  files <- list.files(dir_path)
+  raw_files <- grep("\\.RAW$", files, value = TRUE, ignore.case = TRUE)
+  raw_path <- file.path(dir_path, raw_files)
+  mrs_data_list <- read_mrs(raw_path, ft = ft, fs = fs, ref = ref,
+                            format = "lcm_raw")
+  mrs_data_dynamic <- append_dyns(mrs_data_list)
+  names <- tools::file_path_sans_ext(raw_files)
+  basis <- mrs_data2basis(mrs_data_dynamic, names = names)
   return(basis)
 }

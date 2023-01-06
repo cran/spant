@@ -12,7 +12,7 @@ seq_pulse_acquire <- function(spin_params, ft, ref) {
   angle <- 90
   Fx <- gen_F(sys, "x", "1H")
   lhs_pulse <- matexp(-Fx * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fx * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fx * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # acquire
@@ -33,7 +33,7 @@ seq_pulse_acquire_31p <- function(spin_params, ft, ref) {
   angle <- 90
   Fx <- gen_F(sys, "x", "31P")
   lhs_pulse <- matexp(-Fx * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fx * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fx * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # acquire
@@ -69,7 +69,7 @@ seq_press_ideal <- function(spin_params, ft, ref, TE1 = 0.01, TE2 = 0.02) {
   angle <- 180
   Fy <- gen_F(sys, "y", "1H")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
@@ -86,7 +86,7 @@ seq_press_ideal <- function(spin_params, ft, ref, TE1 = 0.01, TE2 = 0.02) {
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
-  t = TE2/2
+  t <- TE2 / 2
   lhs <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*%
          eig_vec_inv
   
@@ -96,7 +96,7 @@ seq_press_ideal <- function(spin_params, ft, ref, TE1 = 0.01, TE2 = 0.02) {
   sys$rho <- lhs %*% sys$rho %*% rhs
   
   # acquire
-  acquire(sys,detect = "1H")
+  acquire(sys, detect = "1H")
 }
 
 #' Spin echo sequence with ideal pulses.
@@ -114,7 +114,7 @@ seq_spin_echo_ideal <- function(spin_params, ft, ref, TE = 0.03) {
   angle <- 90
   Fx <- gen_F(sys, "x", "1H")
   lhs_pulse <- matexp(-Fx * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fx * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fx * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
@@ -133,7 +133,7 @@ seq_spin_echo_ideal <- function(spin_params, ft, ref, TE = 0.03) {
   angle <- 180
   Fy <- gen_F(sys, "y", "1H")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
@@ -153,12 +153,12 @@ seq_spin_echo_ideal <- function(spin_params, ft, ref, TE = 0.03) {
 seq_spin_echo_ideal_31p <- function(spin_params, ft, ref, TE = 0.03) {
   sys <- spin_sys(spin_params, ft, ref)
   
-  sys$rho <- gen_F(sys, "z", "31P")
+  sys$rho <- gen_F(sys, "z")
    
   angle <- 90
   Fx <- gen_F(sys, "x", "31P")
   lhs_pulse <- matexp(-Fx * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fx * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fx * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
@@ -175,9 +175,9 @@ seq_spin_echo_ideal_31p <- function(spin_params, ft, ref, TE = 0.03) {
   
   # apply pulse
   angle <- 180
-  Fy <- gen_F(sys,"y","31P")
+  Fy <- gen_F(sys, "y", "31P")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
@@ -213,7 +213,7 @@ seq_cpmg_ideal <- function(spin_params, ft, ref, TE = 0.03, echoes = 4) {
   angle <- 180
   Fy <- gen_F(sys, "y", "1H")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
     
   sys$rho <- lhs %*% sys$rho %*% rhs
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
@@ -242,9 +242,9 @@ seq_cpmg_ideal <- function(spin_params, ft, ref, TE = 0.03, echoes = 4) {
 #' @param BW editing pulse bandwidth in Hz.
 #' @param steps number of hard pulses used to approximate the editing pulse.
 #' @return list of resonance amplitudes and frequencies.
-#' @export
-seq_mega_press_ideal <- function(spin_params, ft, ref, ed_freq = 1.89, TE1 = 0.015, 
-                             TE2 = 0.053, BW = 110, steps = 50) {
+seq_mega_press_ideal <- function(spin_params, ft, ref, ed_freq = 1.89,
+                                 TE1 = 0.015, TE2 = 0.053, BW = 110,
+                                 steps = 50) {
   
   # Probably need to do some phase cycling, see:
   # https://github.com/CIC-methods/FID-A/blob/master/simulationTools/sim_megapress_shapedEdit.m
@@ -273,7 +273,7 @@ seq_mega_press_ideal <- function(spin_params, ft, ref, ed_freq = 1.89, TE1 = 0.0
   angle <- 180
   Fy <- gen_F(sys, "y", "1H")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
@@ -302,7 +302,7 @@ seq_mega_press_ideal <- function(spin_params, ft, ref, ed_freq = 1.89, TE1 = 0.0
     angle <- x
     Fx <- gen_F(sys, "y", "1H")
     lhs_pulse_gaus <- matexp(-Fx * 1i * angle)
-    rhs_pulse_gaus <- matexp(Fx * 1i * angle)
+    rhs_pulse_gaus <- matexp( Fx * 1i * angle)
     sys$rho <- lhs_pulse_gaus %*% sys$rho %*% rhs_pulse_gaus
     sys$rho <- lhs_dt %*% sys$rho %*% rhs_dt
   }
@@ -329,7 +329,7 @@ seq_mega_press_ideal <- function(spin_params, ft, ref, ed_freq = 1.89, TE1 = 0.0
     angle <- x
     Fx <- gen_F(sys, "x", "1H")
     lhs_pulse_gaus <- matexp(-Fx * 1i * angle)
-    rhs_pulse_gaus <- matexp(Fx * 1i * angle)
+    rhs_pulse_gaus <- matexp( Fx * 1i * angle)
     sys$rho <- lhs_pulse_gaus %*% sys$rho %*% rhs_pulse_gaus
     sys$rho <- lhs_dt %*% sys$rho %*% rhs_dt
   }
@@ -359,11 +359,6 @@ seq_mega_press_ideal <- function(spin_params, ft, ref, ed_freq = 1.89, TE1 = 0.0
 seq_steam_ideal <- function(spin_params, ft, ref, TE = 0.03, TM = 0.02,
                             amp_scale = 2) {
   
-  # TODO, compare results with the method described by Young et al JMR 140,
-  # 146-152 (1999) where a rotation about the z-axis is used instead of 
-  # the Fxy operator. Current implementation reproduces Fig.2 in this paper
-  # pretty well (at first glance).
-  
   sys <- spin_sys(spin_params, ft, ref)
   sys$rho <- gen_F(sys, "z")
   
@@ -388,37 +383,42 @@ seq_steam_ideal <- function(spin_params, ft, ref, TE = 0.03, TM = 0.02,
   angle <- 90
   Fx <- gen_F(sys, "x", "1H")
   lhs_x_pulse <- matexp(-Fx * 1i * angle * pi / 180)
-  rhs_x_pulse <- matexp(Fx * 1i * angle * pi / 180)
+  rhs_x_pulse <- matexp( Fx * 1i * angle * pi / 180)
   
-  basis_size <- prod(sys$spin_n * 2 + 1)
+  basis_size   <- prod(sys$spin_n * 2 + 1)
   rho_combined <- matrix(0, basis_size, basis_size)
   
   # phase cycling loop
   for (n in 0:3) {
-    phase <- n * 360 / 4
-    #phase <- 270
+    phase <- n * 90
     
     # first and third 90 pulse operator
     angle <- 90
     Fxy <- gen_F_xy(sys, phase, "1H")
-    # these lines give warnings because cos(90*pi/180) isn't exactly zero
-    # but that's ok - so suppressWarnings
-    lhs_xy_pulse <- suppressWarnings(matexp(-Fxy * 1i * angle * pi / 180))
-    rhs_xy_pulse <- suppressWarnings(matexp(Fxy * 1i * angle * pi / 180))
     
-    # first 90
+    # XY rotation operator
+    lhs_xy_pulse <- matexp(-Fxy * 1i * angle * pi / 180)
+    rhs_xy_pulse <- matexp( Fxy * 1i * angle * pi / 180)
+    
+    # first 90 plus rotation
     rho <- lhs_xy_pulse %*% sys$rho %*% rhs_xy_pulse
-    # evole TE/2
+    
+    # evolve TE/2
     rho <- lhs_half_te %*% rho %*% rhs_half_te
+    
     # second 90
     rho <- lhs_x_pulse %*% rho %*% rhs_x_pulse
+    
     # zero non-zero-order coherences
-    rho <- zero_nzoc(sys, rho)
-    # evole TM
+    rho <- coherence_filter(sys, rho)
+    
+    # evolve TM
     rho <- lhs_tm %*% rho %*% rhs_tm
-    # third 90
+    
+    # third 90 plus rotation
     rho <- lhs_xy_pulse %*% rho %*% rhs_xy_pulse
-    # evole TE/2
+    
+    # evolve TE/2
     rho <- lhs_half_te %*% rho %*% rhs_half_te
     
     rho_combined <- rho_combined + rho / 4
@@ -428,7 +428,174 @@ seq_steam_ideal <- function(spin_params, ft, ref, TE = 0.03, TM = 0.02,
   
   # acquire, and double the output intensity to ensure consistent concentration
   # scaling
-  acquire(sys, detect = "1H", rec_phase = 0, amp_scale = amp_scale)
+  acquire(sys, rec_phase = 180, detect = "1H", amp_scale = amp_scale)
+}
+
+#' STEAM sequence with ideal pulses using the z-rotation gradient simulation
+#' method described by Young et al JMR 140, 146-152 (1999).
+#' @param spin_params spin system definition.
+#' @param ft transmitter frequency in Hz.
+#' @param ref reference value for ppm scale.
+#' @param TE sequence parameter in seconds.
+#' @param TM sequence parameter in seconds.
+#' @param amp_scale amplitude scaling factor. Set to 2 (default) to ensure
+#' correct scaling for water reference scaling. Set to 1 to maintain the
+#' inherent loss of signal associated with STEAM.
+#' @return list of resonance amplitudes and frequencies.
+#' @export
+seq_steam_ideal_young <- function(spin_params, ft, ref, TE = 0.03, TM = 0.02,
+                                  amp_scale = 2) {
+  
+  sys <- spin_sys(spin_params, ft, ref)
+  Fz  <- gen_F(sys, "z")
+  sys$rho <- Fz
+  
+  # TE/2 delay operator 
+  eig_vec_inv <- solve(sys$H_eig_vecs)
+  t <- (TE / 2)
+  lhs_half_te <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*% 
+    eig_vec_inv
+  
+  rhs_half_te <- sys$H_eig_vecs %*% diag(exp(-sys$H_eig_vals * 2i * pi * t)) %*% 
+    eig_vec_inv
+  
+  # TM delay operator 
+  t <- TM
+  lhs_tm <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*% 
+    eig_vec_inv
+  
+  rhs_tm <- sys$H_eig_vecs %*% diag(exp(-sys$H_eig_vals * 2i * pi * t)) %*% 
+    eig_vec_inv
+  
+  # 90 degree x pulse operator
+  angle <- 90
+  Fx <- gen_F(sys, "x", "1H")
+  lhs_x_pulse <- matexp(-Fx * 1i * angle * pi / 180)
+  rhs_x_pulse <- matexp( Fx * 1i * angle * pi / 180)
+  
+  basis_size   <- prod(sys$spin_n * 2 + 1)
+  rho_combined <- matrix(0, basis_size, basis_size)
+  
+  # apply first 90
+  sys$rho <- lhs_x_pulse %*% sys$rho %*% rhs_x_pulse
+  
+  # evolve TE/2
+  sys$rho <- lhs_half_te %*% sys$rho %*% rhs_half_te
+  
+  # phase cycling loop
+  for (n in 0:3) {
+    phase_ang <- n * 90
+    
+    # rotate about z
+    lhs_z_rot <- matexp(-Fz * 1i * phase_ang * pi / 180)
+    rhs_z_rot <- matexp( Fz * 1i * phase_ang * pi / 180)
+    rho <- lhs_z_rot %*% sys$rho %*% rhs_z_rot
+    
+    # second 90
+    rho <- lhs_x_pulse %*% rho %*% rhs_x_pulse
+    
+    # zero non-zero-order coherences
+    rho <- coherence_filter(sys, rho)
+    
+    # evolve TM
+    rho <- lhs_tm %*% rho %*% rhs_tm
+    
+    # third 90
+    rho <- lhs_x_pulse %*% rho %*% rhs_x_pulse
+    
+    # rotate about z
+    rho <- lhs_z_rot %*% rho %*% rhs_z_rot
+
+    rho_combined <- rho_combined + rho / 4
+  }
+  
+  # evolve TE/2
+  sys$rho <- lhs_half_te %*% rho_combined %*% rhs_half_te
+  
+  # acquire, and double the output intensity to ensure consistent concentration
+  # scaling
+  acquire(sys, detect = "1H", rec_phase = 180, amp_scale = amp_scale)
+}
+
+#' STEAM sequence with ideal pulses and coherence order filtering to simulate
+#' gradient crushers.
+#' 
+#' See Landheer et al NMR Biomed 2021 34(5):e4129 and Landheer et al MRM 2019
+#' Apr;81(4):2209-2222 for more details on the coherence order filtering method.
+#' 
+#' @param spin_params spin system definition.
+#' @param ft transmitter frequency in Hz.
+#' @param ref reference value for ppm scale.
+#' @param TE sequence parameter in seconds.
+#' @param TM sequence parameter in seconds.
+#' @param amp_scale amplitude scaling factor. Set to 2 (default) to ensure
+#' correct scaling for water reference scaling. Set to 1 to maintain the
+#' inherent loss of signal associated with STEAM.
+#' @return list of resonance amplitudes and frequencies.
+#' @export
+seq_steam_ideal_cof <- function(spin_params, ft, ref, TE = 0.03, TM = 0.02,
+                                    amp_scale = 2) {
+  
+  sys <- spin_sys(spin_params, ft, ref)
+  Fz  <- gen_F(sys, "z")
+  sys$rho <- Fz
+  
+  # TE/2 delay operator 
+  eig_vec_inv <- solve(sys$H_eig_vecs)
+  t <- (TE / 2)
+  lhs_half_te <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*% 
+    eig_vec_inv
+  
+  rhs_half_te <- sys$H_eig_vecs %*% diag(exp(-sys$H_eig_vals * 2i * pi * t)) %*% 
+    eig_vec_inv
+  
+  # TM delay operator 
+  t <- TM
+  lhs_tm <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*% 
+    eig_vec_inv
+  
+  rhs_tm <- sys$H_eig_vecs %*% diag(exp(-sys$H_eig_vals * 2i * pi * t)) %*% 
+    eig_vec_inv
+  
+  # 90 degree x pulse operator
+  angle <- 90
+  Fx <- gen_F(sys, "x", "1H")
+  lhs_x_pulse <- matexp(-Fx * 1i * angle * pi / 180)
+  rhs_x_pulse <- matexp( Fx * 1i * angle * pi / 180)
+  
+  basis_size   <- prod(sys$spin_n * 2 + 1)
+  rho_combined <- matrix(0, basis_size, basis_size)
+  
+  # apply first 90
+  sys$rho <- lhs_x_pulse %*% sys$rho %*% rhs_x_pulse
+  
+  # filter +1
+  sys$rho <- coherence_filter(sys, sys$rho, 1)
+  
+  # evolve TE/2
+  sys$rho <- lhs_half_te %*% sys$rho %*% rhs_half_te
+  
+  # second 90
+  sys$rho <- lhs_x_pulse %*% sys$rho %*% rhs_x_pulse
+  
+  # filter 0
+  sys$rho <- coherence_filter(sys, sys$rho, 0)
+  
+  # evolve TM
+  sys$rho <- lhs_tm %*% sys$rho %*% rhs_tm
+  
+  # third 90
+  sys$rho <- lhs_x_pulse %*% sys$rho %*% rhs_x_pulse
+  
+  # filter -1
+  sys$rho <- coherence_filter(sys, sys$rho, -1)
+  
+  # evolve TE/2
+  sys$rho <- lhs_half_te %*% sys$rho %*% rhs_half_te
+  
+  # acquire, and double the output intensity to ensure consistent concentration
+  # scaling
+  acquire(sys, rec_phase = 180, detect = "1H", amp_scale = amp_scale)
 }
 
 #' sLASER sequence with ideal pulses.
@@ -442,6 +609,7 @@ seq_steam_ideal <- function(spin_params, ft, ref, TE = 0.03, TM = 0.02,
 #' @export
 seq_slaser_ideal <- function(spin_params, ft, ref, TE1 = 0.008, TE2 = 0.011,
                              TE3 = 0.009) {
+  
   sys <- spin_sys(spin_params, ft, ref)
   
   sys$rho <- gen_F(sys, "z")
@@ -449,11 +617,11 @@ seq_slaser_ideal <- function(spin_params, ft, ref, TE1 = 0.008, TE2 = 0.011,
   angle <- 90
   Fx <- gen_F(sys, "x", "1H")
   lhs_pulse <- matexp(-Fx * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fx * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fx * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
-  t = TE1 / 2
+  t <- TE1 / 2
   # find the inverse of the eigenvector matrix
   eig_vec_inv <- solve(sys$H_eig_vecs)
   lhs <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*%
@@ -467,7 +635,7 @@ seq_slaser_ideal <- function(spin_params, ft, ref, TE1 = 0.008, TE2 = 0.011,
   angle <- 180
   Fy <- gen_F(sys, "y", "1H")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
@@ -485,11 +653,11 @@ seq_slaser_ideal <- function(spin_params, ft, ref, TE1 = 0.008, TE2 = 0.011,
   angle <- 180
   Fy <- gen_F(sys, "y", "1H")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
-  t = 2 * TE2 / 4
+  t <- 2 * TE2 / 4
   # find the inverse of the eigenvector matrix
   eig_vec_inv <- solve(sys$H_eig_vecs)
   lhs <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*%
@@ -503,11 +671,11 @@ seq_slaser_ideal <- function(spin_params, ft, ref, TE1 = 0.008, TE2 = 0.011,
   angle <- 180
   Fy <- gen_F(sys, "y", "1H")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
-  t = TE2 / 4 + TE3 /2
+  t <- TE2 / 4 + TE3 /2
   # find the inverse of the eigenvector matrix
   eig_vec_inv <- solve(sys$H_eig_vecs)
   lhs <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*%
@@ -521,11 +689,11 @@ seq_slaser_ideal <- function(spin_params, ft, ref, TE1 = 0.008, TE2 = 0.011,
   angle <- 180
   Fy <- gen_F(sys, "y", "1H")
   lhs_pulse <- matexp(-Fy * 1i * angle * pi / 180)
-  rhs_pulse <- matexp(Fy * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( Fy * 1i * angle * pi / 180)
   sys$rho <- lhs_pulse %*% sys$rho %*% rhs_pulse
   
   # apply delay
-  t = TE3 /2
+  t <- TE3 /2
   # find the inverse of the eigenvector matrix
   eig_vec_inv <- solve(sys$H_eig_vecs)
   lhs <- sys$H_eig_vecs %*% diag(exp(sys$H_eig_vals * 2i * pi * t)) %*%
@@ -534,7 +702,6 @@ seq_slaser_ideal <- function(spin_params, ft, ref, TE1 = 0.008, TE2 = 0.011,
   rhs <- sys$H_eig_vecs %*% diag(exp(-sys$H_eig_vals * 2i * pi * t)) %*%
     eig_vec_inv
   sys$rho <- lhs %*% sys$rho %*% rhs
-  
   
   # acquire
   acquire(sys, detect = "1H")

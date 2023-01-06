@@ -631,6 +631,31 @@ re_weighting <- function(mrs_data, re, alpha) {
   return(mrs_data)
 }
 
+#' Smooth data across the dynamic dimension with a Gaussian kernel.
+#' @param mrs_data data to be smoothed.
+#' @param sigma standard deviation of the underlying Gaussian kernel.
+#' @return smoothed mrs_data object.
+#' @export
+smooth_dyns <- function(mrs_data, sigma) {
+  
+  # covert data to the frequency domain if needed
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data) 
+ 
+  # generate a 1D Gaussian kernel 
+  gaus_ker <- mmand::gaussianKernel(sigma)
+  
+  # expand to 7D
+  dim(gaus_ker) <- c(1, 1, 1, 1, length(gaus_ker), 1, 1)
+  
+  # apply to Re and Im parts separately
+  mrs_data$data <-      mmand::morph(Re(mrs_data$data), gaus_ker,
+                                     operator = "*", merge = "sum")
+                   1i * mmand::morph(Im(mrs_data$data), gaus_ker,
+                                     operator = "*", merge = "sum")
+  
+  return(mrs_data)
+}
+
 #' Zero-fill MRS data in the time domain.
 #' @param x input mrs_data or basis_set object.
 #' @param factor zero-filling factor, factor of 2 returns a dataset with
@@ -1326,6 +1351,8 @@ crop_spec <- function(mrs_data, xlim = c(4, 0.2), scale = "ppm") {
 #' @param mrs_data data to be aligned.
 #' @param ref_freq reference frequency in ppm units. More than one frequency
 #' may be specified.
+#' @param ref_amp amplitude value for the reference signal. More than one value
+#' may be specified to match the number of ref_freq signals.
 #' @param zf_factor zero filling factor to increase alignment resolution.
 #' @param lb line broadening to apply to the reference signal.
 #' @param max_shift maximum allowable shift in Hz.
@@ -1334,13 +1361,21 @@ crop_spec <- function(mrs_data, xlim = c(4, 0.2), scale = "ppm") {
 #' dynamic.
 #' @return aligned data object.
 #' @export
-align <- function(mrs_data, ref_freq = 4.65, zf_factor = 2, lb = 2,
+align <- function(mrs_data, ref_freq = 4.65, ref_amp = 1, zf_factor = 2, lb = 2,
                   max_shift = 20, ret_df = FALSE, mean_dyns = FALSE) {
   
   if (inherits(mrs_data, "list")) {
-    return(lapply(mrs_data, align, ref_freq = ref_freq, zf_factor = zf_factor,
-                  lb = lb, max_shift = max_shift, ret_df = ret_df,
-                  mean_dyns = mean_dyns))
+    return(lapply(mrs_data, align, ref_freq = ref_freq, ref_amp = ref_amp,
+                  zf_factor = zf_factor, lb = lb, max_shift = max_shift,
+                  ret_df = ret_df, mean_dyns = mean_dyns))
+  }
+  
+  if (length(ref_freq) != length(ref_amp)) {
+    if (length(ref_amp) > 1) {
+      stop("Length missmatch between ref freqs and amps")
+    } else {
+      ref_amp <- rep(ref_amp, length(ref_freq)) 
+    }
   }
   
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
@@ -1355,10 +1390,19 @@ align <- function(mrs_data, ref_freq = 4.65, zf_factor = 2, lb = 2,
   freq <- ppm2hz(ref_freq, mrs_data$ft, mrs_data$ref)
   t_zf <- seconds(mrs_data_zf)
   
-  freq_mat <- matrix(freq, length(freq), length(t_zf), byrow = FALSE)
-  t_zf_mat <- matrix(t_zf, length(freq), length(t_zf), byrow = TRUE)
+  ref_data <- rep(0, length(t_zf))
   
-  ref_data <- colSums(exp(2i * t_zf_mat * pi * freq_mat - lb * t_zf_mat * pi))
+  for (n in 1:length(ref_freq)) {
+    ref_data <- ref_data +
+                exp(2i * pi * freq[n] * t_zf - lb * t_zf) * ref_amp[n]
+  }
+  
+  # first pt correction
+  ref_data[1] <- ref_data[1] * 0.5
+  
+  # freq_mat <- matrix(freq, length(freq), length(t_zf), byrow = FALSE)
+  # t_zf_mat <- matrix(t_zf, length(freq), length(t_zf), byrow = TRUE)
+  # ref_data <- colSums(exp(2i * t_zf_mat * pi * freq_mat - lb * t_zf_mat * pi))
   
   window <- floor(max_shift * Npts(mrs_data_zf) * mrs_data$resolution[7])
   
@@ -1374,7 +1418,8 @@ align <- function(mrs_data, ref_freq = 4.65, zf_factor = 2, lb = 2,
   mrs_data$data <- mrs_data$data * shift_array
   
   if (ret_df) {
-    return(list(data = mrs_data, shifts = abind::adrop(shifts, 7)))
+    return(list(data = mrs_data, shifts = abind::adrop(shifts, 7),
+                ref_data = ref_data))
   } else {
     return(mrs_data)
   }
@@ -1391,6 +1436,12 @@ align <- function(mrs_data, ref_freq = 4.65, zf_factor = 2, lb = 2,
 #' @export
 get_td_amp <- function(mrs_data, nstart = 10, nend = 50, method = "poly") {
   
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, get_td_amp, nstart = nstart, nend = nend,
+                  method = method)
+    return(res)
+  }
+  
   if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
   
   if (method == "spline") {
@@ -1405,7 +1456,7 @@ get_td_amp <- function(mrs_data, nstart = 10, nend = 50, method = "poly") {
   }
  
   amps <- abind::adrop(amps, 7)
-  amps
+  return(amps)
 }
 
 conv_align <- function(acq, ref, window, fs, fd) {
@@ -2002,6 +2053,12 @@ sum_mrs <- function(a, b, force = FALSE) {
 #' @export
 spec_op <- function(mrs_data, xlim = NULL, operator = "sum", freq_scale = "ppm",
                     mode = "re") {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, spec_op, xlim = xlim, operator = operator,
+                  freq_scale = freq_scale, mode = mode)
+    return(res)
+  }
   
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
     
@@ -3390,6 +3447,39 @@ bc_als_vec <- function(vec, lambda, p) {
     return(vec) 
   else {
     return(ptw::baseline.corr(Re(vec), lambda = lambda, p = p))
+  }
+}
+
+#' Fit and subtract a polynomial to each spectrum in a dataset.
+#' @param mrs_data mrs_data object.
+#' @param p_deg polynomial degree.
+#' @return polynomial subtracted data.
+#' @export
+bc_poly <- function(mrs_data, p_deg = 1) {
+  
+  if (inherits(mrs_data, "list")) {
+    return(lapply(mrs_data, bc_poly, p_deg = p_deg))
+  }
+  
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  bc_res <- apply_mrs(mrs_data, 7, bc_poly_vec, p_deg)
+
+  return(bc_res)
+}
+
+bc_poly_vec <- function(vec, p_deg) {
+  if (is.na(vec[1]))
+    return(vec) 
+  else {
+    if (p_deg > 0) {
+      x <- 1:length(vec)
+      lm_res <-      stats::lm(Re(vec) ~ poly(x, p_deg))$residuals
+                1i * stats::lm(Im(vec) ~ poly(x, p_deg))$residuals
+    } else {
+      lm_res <- Re(vec) - mean(Re(vec)) + 1i * (Im(vec) - mean(Im(vec)))
+    }
+    return(lm_res)
   }
 }
 

@@ -5,7 +5,6 @@
 #' @return spin system object.
 #' @export
 spin_sys <- function(spin_params, ft, ref) {
-  # TODO checks on input
   
   # force uppercase
   spin_params$nucleus <- toupper(spin_params$nucleus)
@@ -31,11 +30,12 @@ H <- function(spin_n, nucleus, chem_shift, j_coupling_mat, ft, ref) {
   for (n in (1:length(spin_n))) {
     # Convert chem shift to angular freq and apply to Iz
     H_mat <- H_mat + gen_I(n, spin_n, "z") * 
-             ((-chem_shift[n] + ref) * ft * 1e-6)
+             ((chem_shift[n] - ref) * ft * 1e-6)
   }
   
   # Find non-zero elements of j_coupling_mat
   inds <- which((j_coupling_mat != 0), arr.ind = TRUE)
+  
   if ((dim(inds)[1]) > 0)  {
     # j-coupling part
     for (n in 1:dim(inds)[1]) {
@@ -64,18 +64,20 @@ H <- function(spin_n, nucleus, chem_shift, j_coupling_mat, ft, ref) {
 #' @param amp_scale scaling factor for the output amplitudes.
 #' @return a list of resonance amplitudes and frequencies.
 #' @export
-acquire <- function(sys, rec_phase = 180, tol = 1e-4, detect = NULL,
+acquire <- function(sys, rec_phase = 0, tol = 1e-4, detect = NULL,
                     amp_scale = 1) {
+  
   if (is.null(detect)) {
-    Fp <- gen_F(sys, "p")
+    Fm <- gen_F(sys, "m")
   } else {
-    Fp <- gen_F(sys, "p", detect)
+    Fm <- gen_F(sys, "m", detect)
   }
     
   coherence <- Conj(t(sys$H_eig_vecs)) %*% sys$rho %*% sys$H_eig_vecs
-  coupled_coherence <- Conj(t(sys$H_eig_vecs)) %*% Fp %*% sys$H_eig_vecs
+  coupled_coherence <- Conj(t(sys$H_eig_vecs)) %*% Fm %*% sys$H_eig_vecs
   amp_mat <- coherence * coupled_coherence
   amp_scaling_factor <- 2i / nrow(coherence)
+  
   # find resonances
   sig_amps <- (Mod(amp_mat) > tol)
   indx <- which(sig_amps, arr.ind = TRUE)
@@ -99,8 +101,8 @@ gen_F <- function(sys, op, detect = NULL) {
     spin_indices <- which(toupper(sys$nucleus) == toupper(detect))
   }
     
-  for (n in spin_indices ) {
-    F_mat = F_mat + gen_I(n, sys$spin_num, op)
+  for (n in spin_indices) {
+    F_mat <- F_mat + gen_I(n, sys$spin_num, op)
   }
   F_mat
 }
@@ -120,23 +122,48 @@ gen_F_xy <- function(sys, phase, detect = NULL) {
 #' Get the quantum coherence matrix for a spin system.
 #' @param sys spin system object.
 #' @return quantum coherence number matrix.
+#' @export
 qn_states <- function(sys) {
   Fz <- gen_F(sys, "z")
   states_vec <- diag(Fz)
-  outer(states_vec, states_vec, '-')
+  states_mat <- outer(states_vec, states_vec, '-')
+  states_mat <- Re(states_mat)
+  mode(states_mat) <- "integer"
+  return(states_mat)
 }
 
-#' Zero all non-zero-order coherences.
+#' Zero all coherence orders other than the one supplied as an argument.
 #' @param sys spin system object.
 #' @param rho density matrix.
+#' @param order coherence order to keep (default is 0).
 #' @return density matrix.
 #' @export
-zero_nzoc <- function(sys, rho) {
+coherence_filter <- function(sys, rho, order = 0) {
   qn_states <- qn_states(sys)
-  rho[qn_states != 0] <- 0
-  rho
+  rho[qn_states != order] <- 0
+  return(rho)
 }
 
+#' Zero all coherences including and above a given order.
+#' @param sys spin system object.
+#' @param rho density matrix.
+#' @param order states higher than or equal to this argument will be set to
+#' zero.
+#' @return density matrix.
+#' @export
+zero_higher_orders <- function(sys, rho, order) {
+  order <- as.integer(order)
+  qn_states <- qn_states(sys)
+  rho[Mod(qn_states) >= order] <- 0
+  return(rho)
+}
+
+#' Generate the I product operator for a single spin.
+#' @param n spin index number for the required operator.
+#' @param spin_num vector of spin numbers in the system.
+#' @param op operator, one of "x", "y", "z", "p", "m".
+#' @return I product operator matrix.
+#' @export
 gen_I <- function(n, spin_num, op) {
   N <- length(spin_num)
   I <- spin_num[n]
@@ -199,6 +226,33 @@ Ix_pauli <- function(I) {
 
 Iy_pauli <- function(I) {
   -0.5i * (Ip_pauli(I) - Im_pauli(I))
+}
+
+#' Simulate an RF pulse on a single spin.
+#' @param sys spin system object.
+#' @param rho density matrix.
+#' @param spin_n spin index.
+#' @param angle RF flip angle in degrees.
+#' @param nuc nucleus influenced by the pulse.
+#' @param xy x or y pulse.
+#' @return density matrix.
+#' @export
+apply_pulse <- function(sys, rho, spin_n, angle, nuc, xy) {
+  
+  if (nuc != sys$nucleus[spin_n]) return(rho)
+  
+  if (is.na(angle)) return(rho)
+  
+  if (angle < 1) return(rho)
+  
+  F <- gen_I(spin_n, sys$spin_num, xy)
+  
+  lhs_pulse <- matexp(-F * 1i * angle * pi / 180)
+  rhs_pulse <- matexp( F * 1i * angle * pi / 180)
+  
+  rho_out <- lhs_pulse %*% rho %*% rhs_pulse
+  
+  return(rho_out)
 }
 
 get_spin_num <- function(nucleus) {
@@ -473,7 +527,7 @@ sim_basis <- function(mol_list, pul_seq = seq_pulse_acquire,
   fs  <- acq_paras$fs
   N   <- acq_paras$N
     
-basis_mrs_data <- sim_zero(ft = ft, ref = ref, fs = fs, N = N,
+  basis_mrs_data <- sim_zero(ft = ft, ref = ref, fs = fs, N = N,
                               dyns = length(mol_list))
   
   for (n in 1:length(mol_list)) {
@@ -521,9 +575,5 @@ sim_mol <- function(mol, pul_seq = seq_pulse_acquire, ft = def_ft(),
     }
   }
   
-  # first pt correction - shouldn't need this because already done in 
-  # sim_resonances_fast function
-  # mrs_data$data[,,,,,,1] <- 0.5 * mrs_data$data[,,,,,,1]
-  
-  mrs_data
+  return(mrs_data)
 }
