@@ -638,8 +638,14 @@ re_weighting <- function(mrs_data, re, alpha) {
 #' @export
 smooth_dyns <- function(mrs_data, sigma) {
   
+  if (inherits(mrs_data, "list")) {
+    return(lapply(mrs_data, smooth_dyns, sigma = sigma))
+  }
+  
   # covert data to the frequency domain if needed
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data) 
+  
+  if (sigma == 0) return(mrs_data)
  
   # generate a 1D Gaussian kernel 
   gaus_ker <- mmand::gaussianKernel(sigma)
@@ -660,26 +666,51 @@ smooth_dyns <- function(mrs_data, sigma) {
 #' @param x input mrs_data or basis_set object.
 #' @param factor zero-filling factor, factor of 2 returns a dataset with
 #' twice the original data points.
+#' @param offset number of points from the end of the FID to insert the zero
+#' values.
 #' @return zero-filled data.
 #' @rdname zf
 #' @export
-zf <- function(x, factor = 2) UseMethod("zf")
+zf <- function(x, factor = 2, offset = 0) UseMethod("zf")
 
 #' @rdname zf
 #' @export
-zf.list <- function(x, factor = 2) {
-  lapply(x, zf, factor = factor)
+zf.list <- function(x, factor = 2, offset = 0) {
+  lapply(x, zf, factor = factor, offset = offset)
 }
 
 #' @rdname zf
 #' @export
-zf.mrs_data <- function(x, factor = 2) {
-  set_td_pts(x, factor * Npts(x))
+zf.mrs_data <- function(x, factor = 2, offset = 0) {
+  
+  # needs to be a time-domain operation
+  if (is_fd(x)) x <- fd2td(x)
+  
+  pts_orig <- Npts(x)
+  
+  pts <- factor * pts_orig
+  
+  data_dim <- dim(x$data)
+  zero_dim <- data_dim
+  zero_dim[7] <- pts - data_dim[7]
+  zero_array <- array(0, dim = zero_dim)
+  x$data = abind::abind(x$data, zero_array, along = 7)
+  
+  if (offset > 0) {
+    orig_inds <- (pts_orig - offset + 1):pts_orig
+    new_inds  <- (pts - offset + 1):pts
+    x$data[,,,,,,new_inds]  <- x$data[,,,,,,orig_inds]
+    x$data[,,,,,,orig_inds] <- 0
+  }
+  
+  dimnames(x$data) <- NULL
+  
+  return(x)
 }
 
 #' @rdname zf
 #' @export
-zf.basis_set <- function(x, factor = 2) {
+zf.basis_set <- function(x, factor = 2, offset = 0) {
   x_mrs_data <- basis2mrs_data(x)
   mrs_data2basis(set_td_pts(x_mrs_data, factor * Npts(x_mrs_data)), x$names)
 }
@@ -720,6 +751,11 @@ set_td_pts <- function(mrs_data, pts) {
 #' @param ref reference value for ppm scale.
 #' @export
 set_ref <- function(mrs_data, ref) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, set_ref, ref = ref)
+    return(res)
+  }
   
   # check the input
   check_mrs_data(mrs_data)
@@ -836,7 +872,11 @@ fd2td <- function(mrs_data) {
   return(mrs_data)
 }
 
-# recon complex td data from real part of fd data
+#' Reconstruct complex time-domain data from the real part of frequency-domain
+#' data.
+#' @param mrs_data MRS data.
+#' @return reconstructed MRS data.
+#' @export
 recon_imag <- function(mrs_data) {
   # data needs to be in the FD
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
@@ -1264,6 +1304,43 @@ crop_td_pts <- function(mrs_data, start = NULL, end = NULL) {
   return(mrs_data)
 }
 
+#' Crop \code{mrs_data} object data points at the end of the FID.
+#' @param mrs_data MRS data.
+#' @param pts number of points to remove from the end of the FID.
+#' @return cropped \code{mrs_data} object.
+#' @export
+crop_td_pts_end <- function(mrs_data, pts) {
+  
+  end <- Npts(mrs_data) - pts
+  
+  cropped_data <- crop_td_pts(mrs_data, end = end)
+  
+  return(cropped_data) 
+}
+
+#' Set \code{mrs_data} object data points at the end of the FID to zero.
+#' @param mrs_data MRS data.
+#' @param pts number of end points to set to zero.
+#' @return modified \code{mrs_data} object.
+#' @export
+zero_td_pts_end <- function(mrs_data, pts) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, zero_td_pts_end, pts = pts)
+    return(res)
+  }
+  
+  # needs to be a TD operation
+  if (is_fd(mrs_data)) mrs_data <- fd2td(mrs_data)
+  
+  N_pts <- Npts(mrs_data)
+  start <- N_pts - pts + 1
+  
+  mrs_data$data[,,,,,,start:N_pts] <- 0
+  
+  return(mrs_data)
+}
+
 #' Crop \code{mrs_data} object data points in the time-domain rounding down to
 #' the next smallest power of two (pot). Data that already has a pot length will
 #' not be changed.
@@ -1666,6 +1743,11 @@ crop_xy <- function(mrs_data, x_dim, y_dim) {
 #' @export
 mask_xy <- function(mrs_data, x_dim, y_dim) {
   
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, mask_xy, x_dim = x_dim, y_dim = y_dim)
+    return(res)
+  }
+  
   # check the input
   check_mrs_data(mrs_data) 
   
@@ -1690,6 +1772,56 @@ mask_xy <- function(mrs_data, x_dim, y_dim) {
   mask_mat <- matrix(TRUE, Nx(mrs_data), Ny(mrs_data))
   mask_mat[x_set, y_set] <- FALSE
   mrs_data <- mask_xy_mat(mrs_data, mask_mat)
+  return(mrs_data)
+}
+
+#' Mask the four corners of an MRSI dataset in the x-y plane.
+#' @param mrs_data MRS data object.
+#' @return masked MRS data.
+#' @export
+mask_xy_corners <- function(mrs_data) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, mask_xy_corners)
+    return(res)
+  }
+  
+  # check the input
+  check_mrs_data(mrs_data) 
+  
+  x_dim <- Nx(mrs_data)
+  y_dim <- Nx(mrs_data)
+  
+  mask_mat <- matrix(FALSE, x_dim, y_dim)
+  mask_mat[c(1, x_dim), c(1, y_dim)] <- TRUE
+  mrs_data <- mask_xy_mat(mrs_data, mask_mat)
+  
+  return(mrs_data)
+}
+
+#' Mask the voxels outside an elliptical region spanning the MRSI dataset in the
+#' x-y plane.
+#' @param mrs_data MRS data object.
+#' @return masked MRS data.
+#' @export
+mask_xy_ellipse <- function(mrs_data) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, mask_xy_ellipse)
+    return(res)
+  }
+  
+  # check the input
+  check_mrs_data(mrs_data) 
+  
+  x_dim <- Nx(mrs_data)
+  y_dim <- Nx(mrs_data)
+  
+  mask_mat <- !elliptical_mask(x_dim, y_dim, -0.5, -0.5, x_dim / 2 - 0.1,
+                              y_dim / 2 - 0.1, 0)
+  
+  mrs_data <- mask_xy_mat(mrs_data, mask_mat)
+  
   return(mrs_data)
 }
 
@@ -2199,6 +2331,18 @@ scale_spec <- function(mrs_data, xlim = NULL, operator = "sum",
 }
 
 #' @export
+`+.basis_set` <- function(a, b) {
+  a$data <- a$data + b$data
+  return(a)
+}
+
+#' @export
+`-.basis_set` <- function(a, b) {
+  a$data <- a$data - b$data
+  return(a)
+}
+
+#' @export
 `+.mrs_data` <- function(a, b) {
   if (inherits(b, "mrs_data")) {
     if (is_fd(a) != is_fd(b)) {
@@ -2391,10 +2535,11 @@ mean_dyn_blocks <- function(mrs_data, block_size) {
     warning("Block size does not fit into the number of dynamics without truncation.")
   }
   
-  new_dyns <-  floor(Ndyns(mrs_data) / block_size)
-  mrs_out <- get_dyns(mrs_data, seq(1, new_dyns * block_size, block_size))
+  new_dyns <- floor(Ndyns(mrs_data) / block_size)
+  mrs_out <-  get_dyns(mrs_data, seq(1, new_dyns * block_size, block_size))
   for (n in 2:block_size) {
-    mrs_out <- mrs_out + get_dyns(mrs_data, seq(n, new_dyns * block_size, block_size))
+    mrs_out <- mrs_out + get_dyns(mrs_data, seq(n, new_dyns * 
+                                                block_size, block_size))
   }
   
   mrs_out / block_size
@@ -2454,7 +2599,11 @@ median_dyns <- function(mrs_data) {
   return(apply_mrs(mrs_data, 5, cplx_median))
 }
 
-# TODO correct first imaginary data point?
+#' Reconstruct complex time-domain data from the real part of frequency-domain
+#' data.
+#' @param data data points in the frequency domain.
+#' @return reconstructed signal.
+#' @export
 recon_imag_vec <- function(data) {
   data <- Conj(hilbert(Re(data)))
   data <- ift_shift(data)

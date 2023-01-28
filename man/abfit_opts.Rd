@@ -45,7 +45,11 @@ abfit_opts(
   ahat_calc_method = "lh_pnnls",
   prefit_phase_search = TRUE,
   freq_reg = NULL,
-  output_all_paras = FALSE
+  output_all_paras = FALSE,
+  output_all_paras_raw = FALSE,
+  input_paras_raw = NULL,
+  optim_lw_only = FALSE,
+  optim_lw_only_limit = 20
 )
 }
 \arguments{
@@ -154,6 +158,17 @@ prefit stage of the algorithm.}
 
 \item{output_all_paras}{include more fitting parameters in the fit table,
 e.g. individual shift and damping factors for each basis set element.}
+
+\item{output_all_paras_raw}{include raw fitting parameters in the fit table.
+For advanced diagnostic use only.}
+
+\item{input_paras_raw}{input raw fitting parameters. For advanced diagnostic
+use only.}
+
+\item{optim_lw_only}{optimize the global line-broadening term only.}
+
+\item{optim_lw_only_limit}{limits for the line-breading term as a percentage
+of the starting value when optim_lw_only is TRUE.}
 }
 \value{
 full list of options.
