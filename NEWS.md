@@ -1,3 +1,7 @@
+# spant 2.8.0
+* Bug fix when using align function with masked data.
+* mean_dyn_blocks returns the input data when block_size is set to 1.
+
 # spant 2.7.0
 * Added Manufacturer tag to metadata.
 * Added mask_xy_corners and mask_xy_ellipse functions.

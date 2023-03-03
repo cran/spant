@@ -219,9 +219,11 @@ scale_amp_water_ratio <- function(fit_result, ref_data, ...) {
 #' @param fit_result a result object generated from fitting.
 #' @param name the signal name to use as a denominator (usually, "tCr" or 
 #' "tNAA").
+#' @param use_mean_value scales the result by the mean of the signal when set to
+#' TRUE.
 #' @return a \code{fit_result} object with a rescaled results table.
 #' @export
-scale_amp_ratio <- function(fit_result, name) {
+scale_amp_ratio <- function(fit_result, name, use_mean_value = FALSE) {
   
   # check if res_tab_unscaled exists, and if not create it
   if (is.null(fit_result$res_tab_unscaled)) {
@@ -231,6 +233,8 @@ scale_amp_ratio <- function(fit_result, name) {
   }
   
   ratio_amp <- as.numeric(fit_result$res_tab[[name]])
+  
+  if (use_mean_value) ratio_amp <- mean(ratio_amp)
   
   amp_cols <- fit_result$amp_cols
   ws_cols <- 6:(5 + amp_cols * 2)
@@ -337,7 +341,7 @@ get_corr_factor <- function(te, tr, B0, gm_vol, wm_vol, csf_vol) {
 #' @param tr the MRS TR.
 #' @return a \code{fit_result} object with a rescaled results table.
 #' @export
-apply_pvc <- function(fit_result, p_vols, te, tr){
+scale_amp_molar2molal_pvc <- function(fit_result, p_vols, te, tr){
   
   # check if res_tab_unscaled exists, and if not create it
   if (is.null(fit_result$res_tab_unscaled)) {

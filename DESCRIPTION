@@ -1,8 +1,8 @@
 Package: spant
 Type: Package
 Title: MR Spectroscopy Analysis Tools
-Version: 2.7.0
-Date: 2023-02-28
+Version: 2.9.0
+Date: 2023-03-02
 Authors@R: c(
     person("Martin", "Wilson", email = "martin@pipegrep.co.uk",
            role = c("cre", "aut"), comment = c(ORCID = "0000-0002-2089-3956")),
@@ -28,10 +28,10 @@ Encoding: UTF-8
 Language: en-GB
 URL: https://martin3141.github.io/spant/,
         https://github.com/martin3141/spant/
-Packaged: 2023-01-28 07:33:18 UTC; martinwilson
+Packaged: 2023-03-03 13:01:34 UTC; martinwilson
 Author: Martin Wilson [cre, aut] (<https://orcid.org/0000-0002-2089-3956>),
   Yong Wang [ctb],
   John Muschelli [ctb]
 Maintainer: Martin Wilson <martin@pipegrep.co.uk>
 Repository: CRAN
-Date/Publication: 2023-01-28 09:40:02 UTC
+Date/Publication: 2023-03-03 13:20:02 UTC
