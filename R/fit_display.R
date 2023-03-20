@@ -472,3 +472,17 @@ get_fit_map <- function(fit_res, name) {
   dim(result_map) <- c(1, dim(fit_res$data$data)[2:6])
   result_map
 }
+
+#' Export a one-page pdf of a single fit result
+#' @param fit_res \code{fit_result} object.
+#' @param pdf_out_path path to the exported pdf file.
+#' @param title ouptut title.
+#' @export
+one_page_pdf <- function(fit_res, pdf_out_path, title = NULL) {
+  grDevices::pdf(pdf_out_path, paper = "a4r", width = 11, height = 7)
+  plot(fit_res, xlim = c(4, 0.5), mar = c(3, 1, 2, 10))
+  # table <- c("a", "b", "c", "d", "e", "f")
+  # legend(x = 0.85, y = 1.12, ncol = 3L, legend = table, bty = "y", xpd = TRUE)
+  if (!is.null(title)) graphics::text(0.5, 1.12, title, cex = 1.5, xpd = TRUE)
+  grDevices::dev.off()
+}

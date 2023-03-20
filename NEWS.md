@@ -1,4 +1,10 @@
-# spant 2.8.0
+# spant 2.10.0
+* Tentative support for UIH DICOM MRS format.
+* Improved support for reading GE p-files.
+* Added a WIP function to export a one-page summary pdf of the fit result
+"one_page_pdf".
+
+# spant 2.9.0
 * Bug fix when using align function with masked data.
 * mean_dyn_blocks returns the input data when block_size is set to 1.
 
