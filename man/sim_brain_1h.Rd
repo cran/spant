@@ -6,12 +6,14 @@
 \usage{
 sim_brain_1h(
   acq_paras = def_acq_paras(),
-  type = "normal_v1",
+  type = "normal_v2",
   pul_seq = seq_slaser_ideal,
   xlim = c(0.5, 4.2),
   full_output = FALSE,
   amps = NULL,
   basis_lb = NULL,
+  zero_lip_mm = FALSE,
+  remove_lip_mm = FALSE,
   ...
 )
 }
@@ -33,6 +35,12 @@ corresponding amplitudes.}
 output spectrum.}
 
 \item{basis_lb}{apply additional Gaussian line-broadening to the basis (Hz).}
+
+\item{zero_lip_mm}{zero the amplitudes of any lipid or macromolecular
+components based on their name starting with "MM" or "Lip".}
+
+\item{remove_lip_mm}{remove any lipid or macromolecular basis components
+based on their name starting with "MM" or "Lip".}
 
 \item{...}{extra parameters to pass to the pulse sequence function.}
 }

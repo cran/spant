@@ -1,22 +1,25 @@
 varpro_basic <- function(y, acq_paras, basis, opts = NULL) {
-  mrs_data <- vec2mrs_data(y, fs = acq_paras$fs, ft = acq_paras$ft, 
-                           ref = acq_paras$ref)
   
   # has this data been masked?
+  y <- drop(y)
   if (is.na(y[1])) return(list(amps = NA, crlbs = NA, diags = NA, fit = NA))
+  
+  mrs_data <- vec2mrs_data(y, fs = acq_paras$fs, ft = acq_paras$ft, 
+                           ref = acq_paras$ref)
   
   # use default fitting opts if not specified 
   if (is.null(opts)) opts <- varpro_basic_opts()
   
-  y <- drop(mrs_data$data)
-  
-  
   if (opts$method == "td") {
-    proj <- td_projection(y, basis, opts$nnls)
+    proj <- td_projection(mrs_data, basis, opts)
+    ppm_sc <- ppm(mrs_data, 2 * length(y))
   } else if (opts$method == "fd") {
-    proj <- fd_projection(y, basis, opts$nnls)
+    proj <- fd_projection(mrs_data, basis, opts)
+    ppm_sc <- ppm(mrs_data, 2 * length(y))
   } else if (opts$method == "fd_re") {
-    proj <- fd_re_projection(y, basis, opts$nnls)
+    mrs_data <- crop_spec(zf(mrs_data), c(opts$ppm_left, opts$ppm_right))
+    proj <- fd_re_projection(mrs_data, basis, opts)
+    ppm_sc <- ppm(mrs_data)
   } else {
     stop("unrecognised varpro method")
   }
@@ -24,8 +27,7 @@ varpro_basic <- function(y, acq_paras, basis, opts = NULL) {
   # create some common metabolite combinations
   amps <- append_metab_combs(proj$amps)
   
-  fit <- data.frame(PPMScale = ppm(mrs_data, N = 2 * length(y)),
-                    Data = Re(proj$Y), Fit = Re(proj$YHAT),
+  fit <- data.frame(PPMScale = ppm_sc, Data = Re(proj$Y), Fit = Re(proj$YHAT),
                     Baseline = Re(proj$BL))
   
   fit <- cbind(fit, proj$basis_frame)
@@ -37,7 +39,9 @@ varpro_basic <- function(y, acq_paras, basis, opts = NULL) {
   list(amps = amps, crlbs = t(rep(NA, length(amps))), diags = diags, fit = fit)
 }
 
-fd_projection <- function(y, basis, nnls) {
+fd_projection <- function(mrs_data, basis, opts) {
+  
+  y      <- drop(mrs_data$data)
   
   Npts   <- length(y)
   Nbasis <- dim(basis$data)[2]
@@ -48,7 +52,7 @@ fd_projection <- function(y, basis, nnls) {
   basis_fd   <- basis$data
   basis_real <- rbind(Re(basis_fd), Im(basis_fd))
   
-  if (nnls) {
+  if (opts$nnls) {
     ahat <- nnls(basis_real, Y_real)$x
   } else {
     ahat <- stats::.lm.fit(basis_real, Y_real)$coefficients
@@ -82,32 +86,28 @@ fd_projection <- function(y, basis, nnls) {
               basis_frame = basis_frame))
 }
 
-fd_re_projection <- function(y, basis, nnls) {
+fd_re_projection <- function(mrs_data, basis, opts) {
   
-  Npts   <- length(y)
+  Y        <- drop(mrs_data$data)
+  
+  Npts   <- length(Y)
   Nbasis <- dim(basis$data)[2]
   
-  # zf y 
-  y <- c(y, rep(0, Npts))
-  
-  Y <- ft_shift(y)
   Y_real <- Re(Y)
   
-  basis_td <- apply(basis$data, 2, ift_shift)
-  zero_mat <- matrix(0, nrow = Npts, ncol = Nbasis)
-  basis_td <- rbind(basis_td, zero_mat)
-  basis_fd <- apply(basis_td, 2, ft_shift)
+  basis <- zf(basis)
+  basis <- crop_basis(basis, c(opts$ppm_left, opts$ppm_right))
   
-  basis_real <- Re(basis_fd)
+  basis_real <- Re(basis$data)
   
-  if (nnls) {
+  if (opts$nnls) {
     ahat <- nnls(basis_real, Y_real)$x
   } else {
     ahat <- stats::.lm.fit(basis_real, Y_real)$coefficients
   }
   
   YHAT <- basis_real %*% ahat
-  amat <- matrix(ahat, nrow = Npts * 2, ncol = Nbasis, byrow = TRUE)
+  amat <- matrix(ahat, nrow = Npts, ncol = Nbasis, byrow = TRUE)
   BASIS_SC <- basis_real * amat
   
   basis_frame <- as.data.frame(Re(BASIS_SC), row.names = NA)
@@ -122,7 +122,9 @@ fd_re_projection <- function(y, basis, nnls) {
               basis_frame = basis_frame))
 }
 
-td_projection <- function(y, basis, nnls) {
+td_projection <- function(mrs_data, basis, opts) {
+  
+  y      <- drop(mrs_data$data)
   
   Npts   <- length(y)
   Nbasis <- dim(basis$data)[2]
@@ -132,7 +134,7 @@ td_projection <- function(y, basis, nnls) {
   basis_td   <- apply(basis$data, 2, ift_shift)
   basis_real <- rbind(Re(basis_td), Im(basis_td))
   
-  if (nnls) {
+  if (opts$nnls) {
     ahat <- nnls(basis_real, y_real)$x
   } else {
     ahat <- stats::.lm.fit(basis_real, y_real)$coefficients
@@ -203,8 +205,11 @@ append_metab_combs <- function(amps) {
 #' 
 #' @param method one of "td", "fd", "fd_re".
 #' @param nnls restrict basis amplitudes to non-negative values.
+#' @param ppm_left downfield frequency limit for the fitting range (ppm).
+#' @param ppm_right upfield frequency limit for the fitting range (ppm).
 #' @return full list of options.
 #' @export
-varpro_basic_opts <- function(method = "fd_re", nnls = TRUE) {
-  list(method = method, nnls = nnls)
+varpro_basic_opts <- function(method = "fd_re", nnls = TRUE, ppm_left = 4,
+                              ppm_right = 0.2) {
+  list(method = method, nnls = nnls, ppm_left = ppm_left, ppm_right = ppm_right)
 }

@@ -437,7 +437,9 @@ phase <- function(mrs_data, zero_order, first_order = 0) {
     phase_array <- array(zero_order, dim = c(1, 1, 1, 1, Ndyns(mrs_data), 1,
                                              Npts(mrs_data)))
     mrs_data$data = mrs_data$data * exp(1i * phase_array * pi / 180)
-  } else if ((first_order == 0) && (dim(zero_order)[1:6] == dim(mrs_data$data)[1:6])) {
+  } else if ((first_order == 0) && identical(dim(zero_order)[1:6],
+                                             dim(mrs_data$data)[1:6])) {
+    
     phase_array <- array(rep(zero_order, Npts(mrs_data)), 
                          dim = dim(mrs_data$data))
     mrs_data$data <- mrs_data$data * exp(1i * phase_array * pi / 180)
@@ -1372,6 +1374,21 @@ crop_td_pts_pot <- function(mrs_data) {
   return(mrs_data)  
 }
 
+#' Crop \code{basis_set} object based on a frequency range.
+#' @param basis basis_set object to be cropped in the spectral dimension.
+#' @param xlim range of values to crop in the spectral dimension eg 
+#' xlim = c(4, 0.2).
+#' @param scale the units to use for the frequency scale, can be one of: "ppm", 
+#' "hz" or "points".
+#' @return cropped \code{mrs_data} object.
+#' @export
+crop_basis <- function(basis, xlim = c(4, 0.2), scale = "ppm") {
+  mrs_data_basis <- basis2mrs_data(basis)  
+  mrs_data_basis_crop <- crop_spec(mrs_data_basis, xlim = xlim, scale = scale)
+  basis_cropped <- mrs_data2basis(mrs_data_basis_crop, basis$names)
+  return(basis_cropped)
+}
+
 #' Crop \code{mrs_data} object based on a frequency range.
 #' @param mrs_data MRS data.
 #' @param xlim range of values to crop in the spectral dimension eg 
@@ -1399,24 +1416,19 @@ crop_spec <- function(mrs_data, xlim = c(4, 0.2), scale = "ppm") {
     stop("Error, scale not recognised.")
   }
   
-  if (is.null(xlim)) {
-    xlim <- c(x_scale[1], x_scale[Npts(mrs_data)])
-  }
+  if (is.null(xlim)) xlim <- c(x_scale[1], x_scale[Npts(mrs_data)])
   
   subset <- get_seg_ind(x_scale, xlim[1], xlim[2])
   
   old_ppm <- ppm(mrs_data)
-  #old_ref <- mrs_data$ref
   
   # update fs
   mrs_data$resolution[7] <- (mrs_data$resolution[7] / length(subset) *
                              Npts(mrs_data))
   
   mrs_data$data <- mrs_data$data[,,,,,, subset, drop = F]
-  #print(length(subset))
   
-  # not sure why subset[2] works better than subset[1]
-  new_ppm = (old_ppm[subset[length(subset)]] + old_ppm[subset[2]])/2
+  new_ppm = (old_ppm[subset[length(subset)]] + old_ppm[subset[2]]) / 2
   mrs_data$ref <- new_ppm
   
   dimnames(mrs_data$data) <- NULL
@@ -2294,6 +2306,16 @@ scale_mrs_amp <- function(mrs_data, amp) {
   return(mrs_data)
 }
 
+#' Scale a basis object by a scalar.
+#' @param basis basis_set object to be scaled.
+#' @param amp multiplicative factor with length 1.
+#' @return basis_set object multiplied by the amplitude scale factor.
+#' @export
+scale_basis_amp <- function(basis, amp) {
+  basis$data <- basis$data * amp
+  return(basis)
+}
+
 #' Scale mrs_data to a spectral region.
 #' @param mrs_data MRS data.
 #' @param xlim spectral range to be integrated (defaults to full range).
@@ -2908,35 +2930,50 @@ hsvd_vec <- function(y, fs, comps = 40, irlba = TRUE, max_damp = 0) {
 #' spectrum.
 #' @param mrs_data an object of class \code{mrs_data}.
 #' @param xlim frequency range (default units of PPM) to including in the phase.
+#' @param smo_ppm_sd Gaussian smoother sd in ppm units.
 #' @param ret_phase return phase values (logical).
 #' @return MRS data object and phase values (optional).
 #' @export
-auto_phase <- function(mrs_data, xlim = NULL, ret_phase = FALSE) {
+auto_phase <- function(mrs_data, xlim = c(4, 1.8), smo_ppm_sd = 0.05,
+                       ret_phase = FALSE) {
   
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
   mrs_data_proc <- mrs_data
   
   if (!is.null(xlim)) mrs_data_proc <- crop_spec(mrs_data_proc, xlim)
-    
-  phases <- apply_mrs(mrs_data_proc, 7, auto_phase_vec, data_only = TRUE)
+  
+  if (is.null(smo_ppm_sd)) {
+    smo_pts_sd <- NULL 
+  } else {
+    ppm_scale  <- ppm(mrs_data)
+    smo_pts_sd <- smo_ppm_sd / (ppm_scale[1] - ppm_scale[2])
+  }
+  
+  phases <- apply_mrs(mrs_data_proc, 7, auto_phase_vec, data_only = TRUE,
+                      smo_pts_sd = smo_pts_sd)
   
   if (length(phases) == 1) phases <- as.numeric(phases)
   
-  # TODO update phase function and remove drop
   mrs_data <- phase(mrs_data, phases)
   
   if (ret_phase) {
-    return(list(mrs_data = mrs_data, phase = abind::adrop(phases, 7)))
+    return(list(mrs_data = mrs_data, phase = phases))
   } else {
     return(mrs_data)
   }
 }
 
-auto_phase_vec <- function(vec) {
+auto_phase_vec <- function(vec, smo_pts_sd) {
+  
+  if (!is.null(smo_pts_sd)) {
+    vec <- Re(vec) - mmand::gaussianSmooth(Re(vec), smo_pts_sd) +
+           1i * (Im(vec) - mmand::gaussianSmooth(Im(vec), smo_pts_sd))
+  }
+  
   res <- stats::optim(0, phase_obj_fn, gr = NULL, vec, method = "Brent",
                       lower = -180, upper = 180)
-  #vec * exp(1i * res$par / 180 * pi)
+  
   res$par
 }
 
