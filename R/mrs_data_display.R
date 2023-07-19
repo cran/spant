@@ -26,19 +26,26 @@ print.mrs_data <- function(x, full = FALSE, ...) {
               "x", round(x$resolution[4], 2), "\n")), sep = "")
   cat(paste(c("Sampling frequency (Hz) : ",
               1 / x$resolution[7], "\n")), sep = "")
+  cat(paste(c("Repetition time (s)     :", x$resolution[5], "\n")),
+      sep = " ")
   cat(paste(c("Reference freq. (ppm)   : ", x$ref, "\n")), sep = "")
   cat(paste(c("Nucleus                 : ", x$nuc, "\n")), sep = "")
   cat(paste(c("Spectral domain         : ", x$freq_domain[7], "\n")), sep = "")
+  
+  if (!is.null(x$meta$NumberOfTransients)) {
+     cat(paste(c("Number of transients    :", x$meta$NumberOfTransients, "\n")),
+         sep = " ")
+  }
   
   if (!is.null(x$meta$EchoTime)) {
     cat(paste(c("Echo time (s)           :", x$meta$EchoTime, "\n")),
         sep = " ")
   }
   
-  if (!is.null(x$meta$RepetitionTime)) {
-    cat(paste(c("Repetition time (s)     :", x$meta$RepetitionTime, "\n")),
-        sep = " ")
-  }
+  # if (!is.null(x$meta$RepetitionTime)) {
+  #   cat(paste(c("Repetition time (s)     :", x$meta$RepetitionTime, "\n")),
+  #       sep = " ")
+  # }
   
   if (!is.null(x$meta$Manufacturer)) {
     cat(paste(c("Manufacturer            :", x$meta$Manufacturer, "\n")),
@@ -429,6 +436,7 @@ stackplot.list <- function(x, ...) {
 #' corresponding direction.
 #' @param grid_ny as above.
 #' @param lwd plot linewidth.
+#' @param vline x-value to draw a vertical line.
 #' @param ... other arguments to pass to the matplot method.
 #' @export
 stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
@@ -438,7 +446,8 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
                                dyn = 1, coil = 1, bty = NULL, labels = NULL,
                                lab_cex = 1, right_marg = NULL, bl_lty = NULL,
                                restore_def_par = TRUE, show_grid = NULL,
-                               grid_nx = NULL, grid_ny = NA, lwd = NULL, ...) {
+                               grid_nx = NULL, grid_ny = NA, lwd = NULL,
+                               vline = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -656,6 +665,8 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   }
   
   # if (show_grid) graphics::grid(nx = grid_nx, ny = grid_ny)
+  
+  if (!is.null(vline)) graphics::abline(v = vline, col = "red")
   
   if (restore_def_par) graphics::par(.pardefault)
 }

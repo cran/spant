@@ -124,7 +124,7 @@ sim_resonances_fast <- function(freq = 0, amp = 1, freq_ppm = TRUE,
   data[1] <- data[1] * 0.5
   
   data <- array(data,dim = c(1, 1, 1, 1, 1, 1, N))
-  res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
+  res <- c(NA, NA, NA, NA, NA, NA, 1 / fs)
     
   mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = rep(FALSE, 7), affine = NULL,
@@ -168,7 +168,7 @@ sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
   data[1] <- data[1] * 0.5
   
   data <- array(data, dim = c(1, 1, 1, 1, 1, 1, N))
-  res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
+  res <- c(NA, NA, NA, NA, NA, NA, 1 / fs)
   
   mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = rep(FALSE, 7), affine = NULL,
@@ -193,7 +193,7 @@ vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
   data <- array(vec, dim = c(length(vec), dyns))
   data <- aperm(data,c(2, 1))
   dim(data) <- c(1, 1, 1, 1, dyns, 1, length(vec))
-  res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
+  res <- c(NA, NA, NA, NA, NA, NA, 1 / fs)
   
   mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
@@ -217,7 +217,7 @@ array2mrs_data <- function(data_array, fs = def_fs(), ft = def_ft(),
   
   if (length(dim(data_array)) != 7) stop("Incorrect number of dimensions.")
   
-  res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
+  res <- c(NA, NA, NA, NA, NA, NA, 1 / fs)
   
   mrs_data <- mrs_data(data = data_array, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
@@ -273,7 +273,7 @@ mat2mrs_data <- function(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(),
                          nuc = def_nuc(), fd = FALSE) {
   
   data <- array(mat, dim = c(1, 1, 1, 1, nrow(mat), 1, ncol(mat)))
-  res <- c(NA, 1, 1, 1, 1, NA, 1 / fs)
+  res <- c(NA, NA, NA, NA, NA, NA, 1 / fs)
   
   mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
                        nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
@@ -538,7 +538,21 @@ conv_mrs <- function(mrs_data, conv) {
     conv <- rep_dyn(conv, Ndyns(mrs_data))
   }
   
-  mrs_data * conv 
+  return(mrs_data * conv)
+}
+
+#' Deconvolve two MRS data objects.
+#' @param mrs_data_a MRS data to be deconvolved.
+#' @param mrs_data_b MRS data to be deconvolved.
+#' @return deconvolved data.
+#' @export
+deconv_mrs <- function(mrs_data_a, mrs_data_b) {
+  
+  # needs to be a time-domain operation
+  if (is_fd(mrs_data_a)) mrs_data_a <- fd2td(mrs_data_a)
+  if (is_fd(mrs_data_b)) mrs_data_b <- fd2td(mrs_data_b)
+  
+  return(mrs_data_b / mrs_data_a)
 }
 
 #' Return the phase of the first data point in the time-domain.
@@ -763,6 +777,24 @@ set_ref <- function(mrs_data, ref) {
   check_mrs_data(mrs_data)
   
   mrs_data$ref = ref
+  return(mrs_data)
+}
+
+#' Set the number of transients for an mrs_data object.
+#' @param mrs_data MRS data.
+#' @param n_trans number of acquired transients.
+#' @export
+set_Ntrans <- function(mrs_data, n_trans) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, set_Ntrans, n_trans = n_trans)
+    return(res)
+  }
+  
+  # check the input
+  check_mrs_data(mrs_data)
+  
+  mrs_data$meta$NumberOfTransients = n_trans
   return(mrs_data)
 }
 
@@ -1144,6 +1176,22 @@ Ndyns <- function(mrs_data) {
   dim(mrs_data$data)[5]
 }
 
+#' Return the total number of acquired transients for an MRS dataset.
+#' @param mrs_data MRS data.
+#' @export
+Ntrans <- function(mrs_data) {
+  
+  # check the input
+  check_mrs_data(mrs_data)
+  
+  if (is.null(mrs_data$meta$NumberOfTransients)) {
+    return(NA) 
+  } else {
+    mrs_data$meta$NumberOfTransients
+  }
+  
+}
+
 #' Return the total number of coil elements in an MRS dataset.
 #' @param mrs_data MRS data.
 #' @export
@@ -1179,6 +1227,38 @@ fs <- function(mrs_data) {
   1 / mrs_data$resolution[7]
 }
 
+#' Return the repetition time of an MRS dataset.
+#' @param mrs_data MRS data.
+#' @return repetition time in seconds.
+#' @export
+tr <- function(mrs_data) {
+  
+  # check the input
+  check_mrs_data(mrs_data)
+  
+  mrs_data$resolution[5]
+}
+
+#' Set the repetition time of an MRS dataset.
+#' @param mrs_data MRS data.
+#' @param tr repetition time in seconds.
+#' @return updated mrs_data set.
+#' @export
+set_tr <- function(mrs_data, tr) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, set_tr, tr = tr)
+    return(res)
+  }
+  
+  # check the input
+  check_mrs_data(mrs_data)
+  
+  mrs_data$resolution[5] = tr
+  
+  return(mrs_data)
+}
+
 #' Return the frequency scale of an MRS dataset in Hz.
 #' @param mrs_data MRS data.
 #' @param fs sampling frequency in Hz.
@@ -1205,8 +1285,8 @@ hz <- function(mrs_data, fs = NULL, N = NULL) {
 #' fit result.
 #' @param fs sampling frequency in Hz, does not apply when the object is a
 #' fit result.
-#' @param N number of data points in the spectral dimension, does not apply when the object is a
-#' fit result.
+#' @param N number of data points in the spectral dimension, does not apply when 
+#' the object is a fit result.
 #' @return ppm scale.
 #' @export
 ppm <- function(x, ft = NULL, ref = NULL, fs= NULL, N = NULL) UseMethod("ppm")
@@ -3686,6 +3766,93 @@ bc_poly_vec <- function(vec, p_deg) {
   }
 }
 
+#' Apply and subtract a Gaussian smoother in the spectral domain.
+#' @param mrs_data mrs_data object.
+#' @param smo_ppm_sd Gaussian smoother sd in ppm units.
+#' @return smoother subtracted data.
+#' @export
+bc_gauss <- function(mrs_data, smo_ppm_sd) {
+  
+  if (inherits(mrs_data, "list")) {
+    return(lapply(mrs_data, bc_gauss, smo_ppm_sd = smo_ppm_sd))
+  }
+  
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  ppm_scale  <- ppm(mrs_data)
+  smo_pts_sd <- smo_ppm_sd / (ppm_scale[1] - ppm_scale[2])
+  
+  bc_res <- apply_mrs(mrs_data, 7, bc_gauss_vec, smo_pts_sd)
+
+  return(bc_res)
+}
+
+bc_gauss_vec <- function(vec, smo_pts_sd) {
+  
+  vec <- Re(vec) - mmand::gaussianSmooth(Re(vec), smo_pts_sd) +
+         1i * (Im(vec) - mmand::gaussianSmooth(Im(vec), smo_pts_sd))
+  
+  return(vec)
+}
+
+#' Apply a Gaussian smoother in the spectral domain.
+#' @param mrs_data mrs_data object.
+#' @param smo_ppm_sd Gaussian smoother sd in ppm units.
+#' @return spectrally smoothed data.
+#' @export
+fd_gauss_smo <- function(mrs_data, smo_ppm_sd) {
+  
+  if (inherits(mrs_data, "list")) {
+    return(lapply(mrs_data, fd_gauss_smo, smo_ppm_sd = smo_ppm_sd))
+  }
+  
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  ppm_scale  <- ppm(mrs_data)
+  smo_pts_sd <- smo_ppm_sd / (ppm_scale[1] - ppm_scale[2])
+  
+  bc_res <- apply_mrs(mrs_data, 7, gauss_smo_vec, smo_pts_sd)
+
+  return(bc_res)
+}
+
+gauss_smo_vec <- function(vec, smo_pts_sd) {
+  
+  vec <- mmand::gaussianSmooth(Re(vec), smo_pts_sd) +
+         1i * ( mmand::gaussianSmooth(Im(vec), smo_pts_sd))
+  
+  return(vec)
+}
+
+#' Fit and subtract a smoothing spline to each spectrum in a dataset.
+#' @param mrs_data mrs_data object.
+#' @param spar smoothing parameter typically between 0 and 1.
+#' @param nknots number of spline knots.
+#' @return smoothing spline subtracted data.
+#' @export
+bc_spline <- function(mrs_data, spar = 0.5, nknots = 100) {
+  
+  if (inherits(mrs_data, "list")) {
+    return(lapply(mrs_data, bc_spline, spar = spar, nknots = nknots))
+  }
+  
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  bc_res <- apply_mrs(mrs_data, 7, bc_spline_vec, spar, nknots)
+
+  return(bc_res)
+}
+
+bc_spline_vec <- function(vec, spar, nknots) {
+  if (is.na(vec[1]))
+    return(vec) 
+  else {
+    sp_res <- stats::smooth.spline(Re(vec), spar = spar, nknots = nknots)$y +
+              1i * stats::smooth.spline(Im(vec), spar = spar, nknots = nknots)$y
+    return(vec - sp_res)
+  }
+}
+
 #' Back extrapolate time-domain data points using an autoregressive model.
 #' @param mrs_data mrs_data object.
 #' @param extrap_pts number of points to extrapolate.
@@ -4288,7 +4455,6 @@ bin_spec <- function(mrs_data, width = 0.05, unit = "ppm") {
   }
   
   if (Ncoils(mrs_data) > 1) stop("Unsuppored data type for bin_spec function.")
-  if (Ndyns(mrs_data) > 1) stop("Unsuppored data type for bin_spec function.")
   if (Nx(mrs_data) > 1) stop("Unsuppored data type for bin_spec function.")
   if (Ny(mrs_data) > 1) stop("Unsuppored data type for bin_spec function.")
   if (Nz(mrs_data) > 1) stop("Unsuppored data type for bin_spec function.")
@@ -4305,19 +4471,21 @@ bin_spec <- function(mrs_data, width = 0.05, unit = "ppm") {
     stop("Unrecognised unit for bin_spec")
   }
   
-  data_vec_orig <- as.vector(mrs_data$data)
+  bin_res <- apply_mrs(mrs_data, 7, bin_vec, width_pts)
   
-  N_old <- length(data_vec_orig)
+  return(bin_res)
+}
+
+bin_vec <- function(vec, width_pts) {
+  N_old <- length(vec)
   
   # check for remainder and pad with NA's
-  data_vec_orig <- c(data_vec_orig,
+  data_vec_orig <- c(vec,
                      rep(NA, ceiling(N_old / width_pts) * width_pts - N_old))
   
   data_vec <- colMeans(matrix(data_vec_orig, nrow = width_pts), na.rm = TRUE)
   
-  mrs_data$data <- array(data_vec, dim = c(1, 1, 1, 1, 1, 1, length(data_vec)))
-  
-  return(mrs_data)
+  return(data_vec) 
 }
 
 #' Apply the Modulus operator to the time-domain MRS signal.
