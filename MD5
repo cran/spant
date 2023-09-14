@@ -1,6 +1,6 @@
-07fc201eafad1b262d2ef4a4ace690ba *DESCRIPTION
+149231745dc4f5b89c5c16a61fe6a6f3 *DESCRIPTION
 18a3ecaa26eea1aad567c6241b921005 *NAMESPACE
-6e84b05003ba60f05ff8af095c4ddc29 *NEWS.md
+5cd16088e26052db705f1ba71f64b0cc *NEWS.md
 edcdbc81a968e0520d6dde1f5c1ddc4b *R/abfit.R
 32bd5fce5b7bf9536657cbeff169cdaa *R/amp_scaling.R
 8df20210b84b8deb015f55d3dca486f3 *R/basis_set.R
@@ -15,8 +15,8 @@ be62bf0d4a4615c9762a1a3c2ffc4046 *R/image_reg.R
 c4b0e2a1ad2c4ac50ad80fba73d0c2cc *R/lofdc.R
 f6a28178944707e218bf4db19a8ce618 *R/mol_parameters.R
 c80a0ceaec024516541083001ddcf29c *R/mrs_data_display.R
-7da8da8de58ef63cbbd24b0d9248a08f *R/mrs_data_io.R
-96baaf433e90dfd6da0d542b61f08d3c *R/mrs_data_proc.R
+08125fc75ce7fd97aec6557f2ee3995e *R/mrs_data_io.R
+eeb5318a0eb83fcabcb746c55471eae8 *R/mrs_data_proc.R
 7fa626dd624a4548b57a50ae461c1f5b *R/mrs_read_dicom.R
 b2b45582e7a40bb8794ae58cfa6919f9 *R/mrs_read_ima.R
 dbb60ca951fb622519c6c65cadaa364c *R/mrs_read_jmrui_txt.R
@@ -24,7 +24,7 @@ dbb60ca951fb622519c6c65cadaa364c *R/mrs_read_jmrui_txt.R
 6fa1d9b8e06535410ae6729530d9009d *R/mrs_read_list_data.R
 98e1ac9c3eac503219f5dd37a1ef826d *R/mrs_read_nifti.R
 9b9c8ee8a597f174f5a3db0b5122ae36 *R/mrs_read_paravis.R
-39033f2579d3b9645baed4d85b93438f *R/mrs_read_pfile.R
+9cfa7cbd17a85d27009ef454a58fc705 *R/mrs_read_pfile.R
 76d79a13d79c597b843b87eb0ccc1b34 *R/mrs_read_rda.R
 de33c601e51e310df9a833136745fea7 *R/mrs_read_spar_sdat.R
 f3b9c9ef90a81de4d1f4234137e300e4 *R/mrs_read_twix.R
@@ -40,7 +40,7 @@ b8c2373b7066f1e79e38acb6254d1d9f *R/relaxation_fitting.R
 13f4cc0b0db21944b8bac97379aba164 *R/spant.R
 762eee5ded5d63da0eeffe923fe726e6 *R/svs_batch_fit.R
 c31ced976a52037fc5fc1675b3c40c82 *R/tdsr.R
-5a4db96aa3897ad6467dfadfee8e28b8 *R/utils.R
+413818f583775f3da000c5d74f3fac40 *R/utils.R
 9ecac66835095008fa48597c88a8f992 *R/varpro.R
 a3cbdea30664aa551ca0a5ed022ce79f *R/varpro_3_para.R
 74b92d004777fc3f876bc637a8aa2dd0 *R/varpro_basic.R
@@ -56,13 +56,13 @@ acc0cbea1568a8234cd4ddfa0c29baf3 *inst/doc/spant-basis-simulation.Rmd
 c0befd8da8d6c40648388713eb3e8662 *inst/doc/spant-basis-simulation.html
 a1925952e30919809f4ae9e0404bd5e0 *inst/doc/spant-intro.R
 09cd186cd2f46c1b861d821dbc84071f *inst/doc/spant-intro.Rmd
-1c70b80394adf307a7266d0c32ee4a36 *inst/doc/spant-intro.html
+fc22759e9e51c8c15510d0fe8303558d *inst/doc/spant-intro.html
 f5e0c0cf9602d01ceb0bceed67a65970 *inst/doc/spant-metabolite-simulation.R
 c1c9609b710736e87f3cd2116081f273 *inst/doc/spant-metabolite-simulation.Rmd
 365a81d3b37b70c673198c52f22110b9 *inst/doc/spant-metabolite-simulation.html
 b028741bf51802c60a49042a26cedcee *inst/doc/spant-preprocessing.R
 50b0bc7a09f4a268ee51d0fc7868c16d *inst/doc/spant-preprocessing.Rmd
-8cb4b21b5225b0492a6f282cd3989ed7 *inst/doc/spant-preprocessing.html
+df225c7f029c014f4b9ff3fd1fde8a14 *inst/doc/spant-preprocessing.html
 a28286d8845dfdc9079b5da1f4d5a871 *inst/extdata/philips_spar_sdat_W.SDAT
 4fc1be43f9d80bb69396f5c5511c96b5 *inst/extdata/philips_spar_sdat_W.SPAR
 f3db42bffcb2b1043157a93fdbcbdf3c *inst/extdata/philips_spar_sdat_WS.SDAT
@@ -151,6 +151,7 @@ ba71d8c7e9c4cbf2cb85c6c5f17e2236 *man/est_noise_sd.Rd
 46d3e091b246af19fcbb2186c777856b *man/fd_conv_filt.Rd
 603939416ffbdbb4e902bf50be7f47fe *man/fd_gauss_smo.Rd
 b46f28818d230e071ef7b3accec70b49 *man/figures/logo.png
+797c582aa570e3817df3882cb232bb1c *man/find_mrs_files.Rd
 27a1816440ed9c644532b3bfeb9d3ef1 *man/fit_amps.Rd
 14eeb8e2e247b00975d8577021e30be3 *man/fit_diags.Rd
 f8727819e822d0523f39e65ad0bb4f05 *man/fit_mrs.Rd

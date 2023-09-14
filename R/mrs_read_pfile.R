@@ -1,5 +1,5 @@
 # TODO test MEGA-PRESS and CSI
-# when nechoes = 2 we're probally dealing with MEGA-PRESS data, where edited
+# when nechoes = 2 we're probably dealing with MEGA-PRESS data, where edited
 # pairs are not interleaved but occupy the first and second half of the data
 
 read_pfile <- function(fname, n_ref_scans = NULL, verbose, extra) {
@@ -35,7 +35,7 @@ read_pfile <- function(fname, n_ref_scans = NULL, verbose, extra) {
   expt_pts <- coils * (hdr$nframes * hdr$nechoes + hdr$nechoes) * hdr$frame_size * 2
   
   if (expt_pts != Npts) {
-    warning("Unexpected number of data points.")
+    warning("Unexpected number of data points. Check for data corruption due to autocoil selection bug.")
     cat(paste("Expecting   :", Npts, "points based on file size.\n"))
     cat(paste("Expecting   :", expt_pts, "points based on header information.\n"))
     cat(paste("Coils       :", coils, "\n"))
@@ -44,6 +44,13 @@ read_pfile <- function(fname, n_ref_scans = NULL, verbose, extra) {
     cat(paste("frame_size  :", hdr$frame_size), "\n")
     cat(paste("w_frames    :", hdr$rhuser19), "\n")
     cat(paste("Header rev. :", hdr$hdr_rev), "\n")
+    cat(paste("Seq. name   :", hdr$seq_name), "\n")
+    cat(paste("Prot. name  :", hdr$prot_name), "\n")
+    cat(paste("CSI dims    :", hdr$csi_dims), "\n")
+    cat(paste("xcsi        :", hdr$xcsi), "\n")
+    cat(paste("ycsi        :", hdr$ycsi), "\n")
+    cat(paste("zcsi        :", hdr$zcsi), "\n")
+    cat(paste("Data offset :", hdr$off_data), "\n")
   }
   
   if (verbose) {
@@ -281,6 +288,24 @@ get_pfile_dict <- function(hdr_rev, con) {
     loc$tr          <- 144572
     loc$seq_name    <- 145132
     loc$prot_name   <- 142318
+  } else if (floor(hdr_rev) == 20L) {
+    loc$hdr_rev     <- 0
+    loc$off_data    <- 1468
+    loc$nechoes     <- 70
+    loc$nframes     <- 74
+    loc$frame_size  <- 80
+    loc$rcv         <- 200
+    loc$rhuser19    <- 292
+    loc$spec_width  <- 368
+    loc$csi_dims    <- 372
+    loc$xcsi        <- 374
+    loc$ycsi        <- 376
+    loc$zcsi        <- 378
+    loc$ps_mps_freq <- 424
+    loc$te          <- 1212
+    loc$tr          <- 148396
+    loc$seq_name    <- 148972
+    loc$prot_name   <- 145762
   } else if (floor(hdr_rev) == 21L) {
     loc$hdr_rev     <- 0
     loc$off_data    <- 1468
