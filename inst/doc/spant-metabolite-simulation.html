@@ -347,15 +347,16 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <p>Output a list of pre-defined molecules available for simulation:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">get_mol_names</span>()</span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt;  [1] &quot;2hg&quot;      &quot;a_glc&quot;    &quot;ace&quot;      &quot;ala&quot;      &quot;asc&quot;      &quot;asp&quot;     </span></span>
-<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt;  [7] &quot;b_glc&quot;    &quot;bhb&quot;      &quot;cho&quot;      &quot;cit&quot;      &quot;cr_ch2&quot;   &quot;cr_ch3&quot;  </span></span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; [13] &quot;cr&quot;       &quot;gaba_jn&quot;  &quot;gaba&quot;     &quot;gaba_rt&quot;  &quot;glc&quot;      &quot;gln&quot;     </span></span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; [19] &quot;glu&quot;      &quot;glu_rt&quot;   &quot;gly&quot;      &quot;glyc&quot;     &quot;gpc&quot;      &quot;gsh&quot;     </span></span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt; [25] &quot;h2o&quot;      &quot;ins&quot;      &quot;ins_rt&quot;   &quot;lac&quot;      &quot;lac_rt&quot;   &quot;lip09&quot;   </span></span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt; [31] &quot;lip13a&quot;   &quot;lip13b&quot;   &quot;lip20&quot;    &quot;m_cr_ch2&quot; &quot;mm09&quot;     &quot;mm12&quot;    </span></span>
-<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt; [37] &quot;mm14&quot;     &quot;mm17&quot;     &quot;mm20&quot;     &quot;mm_3t&quot;    &quot;msm&quot;      &quot;naa2&quot;    </span></span>
-<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; [43] &quot;naa&quot;      &quot;naa_rt&quot;   &quot;naag_ch3&quot; &quot;naag&quot;     &quot;pch&quot;      &quot;pcr&quot;     </span></span>
-<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt; [49] &quot;peth&quot;     &quot;pyr&quot;      &quot;ser&quot;      &quot;sins&quot;     &quot;suc&quot;      &quot;tau&quot;     </span></span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt; [55] &quot;thr&quot;</span></span></code></pre></div>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt;  [7] &quot;atp_31p&quot;  &quot;b_glc&quot;    &quot;bhb&quot;      &quot;cho&quot;      &quot;cit&quot;      &quot;cr_ch2&quot;  </span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; [13] &quot;cr_ch3&quot;   &quot;cr&quot;       &quot;gaba_jn&quot;  &quot;gaba&quot;     &quot;gaba_rt&quot;  &quot;glc&quot;     </span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; [19] &quot;gln&quot;      &quot;glu&quot;      &quot;glu_rt&quot;   &quot;gly&quot;      &quot;glyc&quot;     &quot;gpc_31p&quot; </span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt; [25] &quot;gpc&quot;      &quot;gpe_31p&quot;  &quot;gsh&quot;      &quot;h2o&quot;      &quot;ins&quot;      &quot;ins_rt&quot;  </span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt; [31] &quot;lac&quot;      &quot;lac_rt&quot;   &quot;lip09&quot;    &quot;lip13a&quot;   &quot;lip13b&quot;   &quot;lip20&quot;   </span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt; [37] &quot;m_cr_ch2&quot; &quot;mm09&quot;     &quot;mm12&quot;     &quot;mm14&quot;     &quot;mm17&quot;     &quot;mm20&quot;    </span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; [43] &quot;mm_3t&quot;    &quot;msm&quot;      &quot;naa2&quot;     &quot;naa&quot;      &quot;naa_rt&quot;   &quot;naag_ch3&quot;</span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt; [49] &quot;naag&quot;     &quot;nadh_31p&quot; &quot;nadp_31p&quot; &quot;pch_31p&quot;  &quot;pch&quot;      &quot;pcr_31p&quot; </span></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt; [55] &quot;pcr&quot;      &quot;pe_31p&quot;   &quot;peth&quot;     &quot;pi_31p&quot;   &quot;pyr&quot;      &quot;ser&quot;     </span></span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co">#&gt; [61] &quot;sins&quot;     &quot;suc&quot;      &quot;tau&quot;      &quot;thr&quot;</span></span></code></pre></div>
 <p>Get and print the spin system for myo-inositol:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>ins <span class="ot">&lt;-</span> <span class="fu">get_mol_paras</span>(<span class="st">&quot;ins&quot;</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">print</span>(ins)</span>

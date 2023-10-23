@@ -1316,52 +1316,130 @@ get_cit_paras <- function(lw = NULL, lg = 0, ...) {
   paras
 }
 
+get_atp_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  nucleus <- rep("31P", 3)
+  chem_shift <- c(-7.56, -16.18, -2.53)
+  j_coupling_mat <- matrix(0, 3, 3)
+  j_coupling_mat[2,1] <- 16.3
+  j_coupling_mat[3,2] <- 15.4
+  
+  spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
+                       j_coupling_mat = j_coupling_mat, scale_factor = 1,
+                       lw = lw, lg = lg)
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras <- list(spin_groups = list(spin_group_a), name = "ATP", source = source,
+                full_name = "Adenosine triphosphate")
+  
+  class(paras) <- "mol_parameters"
+  paras
+}
 
-
-# get_10spin_paras <- function(lw = NULL, lg = 0) {
+# get_atp_31p_paras <- function(lw = NULL, lg = 0, ...) {
 #   if (is.null(lw)) lw = 2
-#   nucleus <- rep("1H", 10)
-#   chem_shift <- c(5.216, 3.519, 3.698, 3.395, 3.822, 3.826, 3.749, 1, 2, 3)
-#   j_coupling_mat <- matrix(0, 10, 10)
-#   j_coupling_mat[2,1] <- 3.8
-#   j_coupling_mat[3,2] <- 9.6
-#   j_coupling_mat[4,3] <- 9.4
-#   j_coupling_mat[5,4] <- 9.9
-#   j_coupling_mat[6,5] <- 1.5
-#   j_coupling_mat[7,5] <- 6
-#   j_coupling_mat[7,6] <- -12.1
+#   nucleus <- rep("31P", 3)
+#   chem_shift <- c(-7.616, -16.26, -2.6)
+#   j_coupling_mat <- matrix(0, 3, 3)
+#   j_coupling_mat[2,1] <- 16.3
+#   j_coupling_mat[3,2] <- 16.1
 #   
 #   spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
 #                        j_coupling_mat = j_coupling_mat, scale_factor = 1,
 #                        lw = lw, lg = lg)
 #   
-#   source <- "made up molecule"
+#   source <- "Unknown"
 #   
-#   paras <- list(spin_groups = list(spin_group_a), name = "Glc", source = source)
+#   paras <- list(spin_groups = list(spin_group_a), name = "ATP", source = source,
+#                 full_name = "Adenosine triphosphate")
+#   
 #   class(paras) <- "mol_parameters"
 #   paras
 # }
 
-# get_9spin_paras <- function(lw = NULL, lg = 0) {
-#   if (is.null(lw)) lw = 2
-#   nucleus <- rep("1H", 9)
-#   chem_shift <- c(5.216, 3.519, 3.698, 3.395, 3.822, 3.826, 3.749, 1, 2)
-#   j_coupling_mat <- matrix(0, 9, 9)
-#   j_coupling_mat[2,1] <- 3.8
-#   j_coupling_mat[3,2] <- 9.6
-#   j_coupling_mat[4,3] <- 9.4
-#   j_coupling_mat[5,4] <- 9.9
-#   j_coupling_mat[6,5] <- 1.5
-#   j_coupling_mat[7,5] <- 6
-#   j_coupling_mat[7,6] <- -12.1
-#   
-#   spin_group_a <- list(nucleus = nucleus, chem_shift = chem_shift, 
-#                        j_coupling_mat = j_coupling_mat, scale_factor = 1,
-#                        lw = lw, lg = lg)
-#   
-#   source <- "made up molecule"
-#   
-#   paras <- list(spin_groups = list(spin_group_a), name = "Glc", source = source)
-#   class(paras) <- "mol_parameters"
-#   paras
-# }
+get_gpc_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("GPC", 2.94, "31P", 1, lw, lg,
+                             "Glycerophosphocholine")
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras$source <- source
+  paras
+}
+
+get_gpe_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("GPE", 3.49, "31P", 1, lw, lg,
+                             "Glycerol phosphorylethanolamine")
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras$source <- source
+  paras
+}
+
+get_nadh_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("NADH", -8.13, "31P", 1, lw, lg,
+                             "Nicotinamide adenine dinucleotide, reduced")
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras$source <- source
+  paras
+}
+
+get_nadp_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("NAD+", -8.31, "31P", 1, lw, lg,
+                             "Nicotinamide adenine dinucleotide, oxidized")
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras$source <- source
+  paras
+}
+
+get_pch_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("PCh", 6.23, "31P", 1, lw, lg, "Phosphorylcholine")
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras$source <- source
+  paras
+}
+
+get_pcr_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("PCr", 0, "31P", 1, lw, lg, "Phosphocreatine")
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras$source <- source
+  paras
+}
+
+get_pe_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("PE", 6.77, "31P", 1, lw, lg,
+                             "Phosphorylethanolamine ")
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras$source <- source
+  paras
+}
+
+get_pi_31p_paras <- function(lw = NULL, lg = 0, ...) {
+  if (is.null(lw)) lw = 2
+  paras <- get_uncoupled_mol("PI", 4.84, "31P", 1, lw, lg,
+                             "Inorganic phosphate")
+  
+  source <- "NMR Biomed. 2015 June; 28(6): 633-641."
+  
+  paras$source <- source
+  paras
+}

@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 library(ragg)
 knitr::opts_chunk$set(
   collapse = TRUE,
@@ -8,24 +8,24 @@ knitr::opts_chunk$set(
   dev = "ragg_png"
 )
 
-## ---- message = FALSE---------------------------------------------------------
+## ----message = FALSE----------------------------------------------------------
 library(spant)
 
-## ---- message = FALSE---------------------------------------------------------
+## ----message = FALSE----------------------------------------------------------
 get_mol_names()
 
-## ---- message = FALSE---------------------------------------------------------
+## ----message = FALSE----------------------------------------------------------
 ins <- get_mol_paras("ins")
 print(ins)
 
-## ---- message = FALSE---------------------------------------------------------
+## ----message = FALSE----------------------------------------------------------
 sim_mol(ins, ft = 300e6, N = 4096) |> lb(2) |> plot(xlim = c(3.8, 3.1))
 
-## ---- message = FALSE---------------------------------------------------------
+## ----message = FALSE----------------------------------------------------------
 ins_sim <- sim_mol(ins, seq_spin_echo_ideal, ft = 300e6, N = 4086, TE = 0.03)
 ins_sim |> lb(2) |> plot(xlim = c(3.8, 3.1))
 
-## ---- message = FALSE, fig.height = 8-----------------------------------------
+## ----message = FALSE, fig.height = 8------------------------------------------
 sim_fn <- function(TE) {
   te_sim <- sim_mol(ins, seq_spin_echo_ideal, ft = 300e6, N = 4086, TE = TE)
   lb(te_sim, 2)
@@ -36,11 +36,11 @@ te_vals <- seq(0, 2, 0.4)
 lapply(te_vals, sim_fn) |> stackplot(y_offset = 150, xlim = c(3.8, 3.1),
                                      labels = paste(te_vals * 100, "ms"))
 
-## ---- message = FALSE---------------------------------------------------------
+## ----message = FALSE----------------------------------------------------------
 get_uncoupled_mol("Lip13", c(1.3, 1.4), c("1H", "1H"), c(2, 1), c(10, 10),
                   c(1, 1)) |> sim_mol() |> plot(xlim = c(2, 0.8))
 
-## ---- message = FALSE---------------------------------------------------------
+## ----message = FALSE----------------------------------------------------------
 nucleus_a <- rep("1H", 4)
 
 chem_shift_a <- c(4.0974, 1.3142, 1.3142, 1.3142)
@@ -69,7 +69,7 @@ custom_mol <- list(spin_groups = list(spin_group_a, spin_group_b), name = "Cus",
 
 class(custom_mol) <- "mol_parameters"
 
-## ---- message = FALSE---------------------------------------------------------
+## ----message = FALSE----------------------------------------------------------
 print(custom_mol)
 custom_mol |> sim_mol() |> lb(2) |> zf() |> plot(xlim = c(4.4, 0.5))
 

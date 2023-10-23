@@ -649,7 +649,7 @@ re_weighting <- function(mrs_data, re, alpha) {
 
 #' Smooth data across the dynamic dimension with a Gaussian kernel.
 #' @param mrs_data data to be smoothed.
-#' @param sigma standard deviation of the underlying Gaussian kernel.
+#' @param sigma standard deviation of the underlying Gaussian kernel in seconds.
 #' @return smoothed mrs_data object.
 #' @export
 smooth_dyns <- function(mrs_data, sigma) {
@@ -664,14 +664,14 @@ smooth_dyns <- function(mrs_data, sigma) {
   if (sigma == 0) return(mrs_data)
  
   # generate a 1D Gaussian kernel 
-  gaus_ker <- mmand::gaussianKernel(sigma)
+  gaus_ker <- mmand::gaussianKernel(sigma / tr(mrs_data))
   
   # expand to 7D
   dim(gaus_ker) <- c(1, 1, 1, 1, length(gaus_ker), 1, 1)
   
   # apply to Re and Im parts separately
   mrs_data$data <-      mmand::morph(Re(mrs_data$data), gaus_ker,
-                                     operator = "*", merge = "sum")
+                                     operator = "*", merge = "sum") +
                    1i * mmand::morph(Im(mrs_data$data), gaus_ker,
                                      operator = "*", merge = "sum")
   
@@ -2597,16 +2597,21 @@ collapse_to_dyns.fit_result <- function(x, rm_masked = FALSE) {
 
 #' Calculate the mean dynamic data.
 #' @param mrs_data dynamic MRS data.
+#' @param subset vector containing indices to the dynamic scans to be 
+#' averaged.
 #' @return mean dynamic data.
 #' @export
-mean_dyns <- function(mrs_data) {
+mean_dyns <- function(mrs_data, subset = NULL) {
   
   if (inherits(mrs_data, "list")) {
     return(lapply(mrs_data, mean_dyns))
   }
   
   # check the input
-  check_mrs_data(mrs_data) 
+  check_mrs_data(mrs_data)
+ 
+  # extract a subset if requested 
+  if (!is.null(subset)) mrs_data <- get_dyns(mrs_data, subset)
   
   mrs_data$data <- aperm(mrs_data$data, c(5, 1, 2, 3, 4, 6, 7))
   mrs_data$data <- colMeans(mrs_data$data, na.rm = TRUE)
