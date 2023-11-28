@@ -2,9 +2,12 @@
 #' @param spin_params an object describing the spin system properties.
 #' @param ft transmitter frequency in Hz.
 #' @param ref reference value for ppm scale.
+#' @param precomp_jc_H use a precomputed J-coupling H matrix to save time.
+#' @param precomp_Iz use precomputed Iz matrices to save time.
 #' @return spin system object.
 #' @export
-spin_sys <- function(spin_params, ft, ref) {
+spin_sys <- function(spin_params, ft, ref, precomp_jc_H = NULL,
+                     precomp_Iz = NULL) {
   
   # force uppercase
   spin_params$nucleus <- toupper(spin_params$nucleus)
@@ -12,25 +15,62 @@ spin_sys <- function(spin_params, ft, ref) {
   spin_num <- get_spin_num(spin_params$nucleus)
   
   # calculate the Hamiltonian
-  H_mat <- H(spin_num, spin_params$nucleus, spin_params$chem_shift, 
-             spin_params$j_coupling_mat, ft, ref)
+  if (!is.null(precomp_jc_H)) {
+    omit_jc <- TRUE
+  } else {
+    omit_jc <- FALSE
+  }
+      
+  H_mat_list <- H(spin_num, spin_params$nucleus, spin_params$chem_shift, 
+                  spin_params$j_coupling_mat, ft, ref, omit_jc, precomp_Iz)
+  
+  if (!is.null(precomp_jc_H)) {
+    H_mat_list$H_mat_jc <- precomp_jc_H
+    H_mat_list$H_mat    <- H_mat_list$H_mat + H_mat_list$H_mat_jc
+  }
   
   # perform a symmetric eigenvalue decomposition
-  res <- eigen(H_mat, symmetric = TRUE) 
+  H_mat_res <- eigen(H_mat_list$H_mat, symmetric = TRUE)
   
-  list(spin_num = spin_num, nucleus = spin_params$nucleus,
-       H_mat = H_mat, H_eig_vals = res$values, H_eig_vecs = res$vectors)
+  res <- list(spin_num = spin_num, nucleus = spin_params$nucleus,
+              H_mat = H_mat_list$H_mat, H_eig_vals = H_mat_res$values,
+              H_eig_vecs = H_mat_res$vectors, H_mat_jc = H_mat_list$H_mat_jc)
+  
+  return(res)
 }
 
-H <- function(spin_n, nucleus, chem_shift, j_coupling_mat, ft, ref) {
+H <- function(spin_n, nucleus, chem_shift, j_coupling_mat, ft, ref,
+              omit_jc = FALSE, precomp_Iz = NULL) {
+  
   basis_size <- prod(spin_n * 2 + 1)
+  
+  # chemical shift part
+  H_mat_cs <- matrix(0, basis_size, basis_size)
+  
+  # J-coupling part
+  H_mat_jc <- matrix(0, basis_size, basis_size)
+  
+  # Combined chemical shift and J-coupling
   H_mat <- matrix(0, basis_size, basis_size)
   
   # chemical shift part
-  for (n in (1:length(spin_n))) {
-    # Convert chem shift to angular freq and apply to Iz
-    H_mat <- H_mat + gen_I(n, spin_n, "z") * 
-             ((chem_shift[n] - ref) * ft * 1e-6)
+  if (is.null(precomp_Iz)) {
+    for (n in (1:length(spin_n))) {
+      # Convert chem shift to angular freq and apply to Iz
+      H_mat_cs <- H_mat_cs + gen_I(n, spin_n, "z") * 
+                  ((chem_shift[n] - ref) * ft * 1e-6)
+    }
+  } else {
+    for (n in (1:length(spin_n))) {
+      # Convert chem shift to angular freq and apply to Iz
+      H_mat_cs <- H_mat_cs + precomp_Iz[[n]] * 
+                  ((chem_shift[n] - ref) * ft * 1e-6)
+    }
+  }
+  
+  if (omit_jc) {
+    H_mat <- H_mat_cs
+    return(list(H_mat = H_mat, H_mat_cs = H_mat_cs, H_mat_jc = H_mat_jc))
   }
   
   # Find non-zero elements of j_coupling_mat
@@ -39,21 +79,24 @@ H <- function(spin_n, nucleus, chem_shift, j_coupling_mat, ft, ref) {
   if ((dim(inds)[1]) > 0)  {
     # j-coupling part
     for (n in 1:dim(inds)[1]) {
-      j <- j_coupling_mat[inds[n,1],inds[n,2]]
-      H_mat <- H_mat + j * gen_I(inds[n,1], spin_n, "z") %*%
-               gen_I(inds[n,2], spin_n, "z")
+      j <- j_coupling_mat[inds[n, 1],inds[n, 2]]
+      H_mat_jc <- H_mat_jc + j * gen_I(inds[n, 1], spin_n, "z") %*%
+                  gen_I(inds[n, 2], spin_n, "z")
      
       # strong coupling for homonuclear spins
-      if ( nucleus[inds[n,1]] == nucleus[inds[n,2]] ) {
-        H_mat <- H_mat + j * gen_I(inds[n,1], spin_n, "x") %*%
-                 gen_I(inds[n,2], spin_n, "x")
+      if (nucleus[inds[n, 1]] == nucleus[inds[n, 2]]) {
+        H_mat_jc <- H_mat_jc + j * gen_I(inds[n, 1], spin_n, "x") %*%
+                    gen_I(inds[n, 2], spin_n, "x")
         
-        H_mat <- H_mat + j * gen_I(inds[n,1], spin_n, "y") %*%
-                 gen_I(inds[n,2], spin_n, "y")
+        H_mat_jc <- H_mat_jc + j * gen_I(inds[n, 1], spin_n, "y") %*%
+                    gen_I(inds[n, 2], spin_n, "y")
       }
     }
   }
-  H_mat
+  
+  H_mat <- H_mat_cs + H_mat_jc
+  
+  return(list(H_mat = H_mat, H_mat_cs = H_mat_cs, H_mat_jc = H_mat_jc))
 }
 
 #' Simulate pulse sequence acquisition.
@@ -255,6 +298,10 @@ apply_pulse <- function(sys, rho, spin_n, angle, nuc, xy) {
   return(rho_out)
 }
 
+#' Return the spin number for a given nucleus.
+#' @param nucleus nucleus name, eg "1H".
+#' @return spin number.
+#' @export
 get_spin_num <- function(nucleus) {
   spin_lookup <- data.frame(nucleus = c("1H", "31P", "14N", "13C"),
                             spin = c(0.5, 0.5, 1.0, 0.5))
@@ -434,6 +481,56 @@ get_1h_brain_basis_paras <- function(ft, metab_lw = NULL, lcm_compat = FALSE) {
   get_1h_brain_basis_paras_v2(ft, metab_lw, lcm_compat)
 }
 
+#' Return a character vector of molecules included in the Gold Star Phantoms 
+#' SPECTRE phantom.
+#' @return a character vector of molecule names.
+#' @export
+get_1h_spectre_basis_names <- function() {
+  names <- c("cho_rt", "cr_ch2_rt", "cr_ch3_rt", "gaba", "glu_rt", "ins_rt", 
+             "lac_rt", "naa_rt")
+  return(names)
+}
+
+#' Return a character vector of molecules included in the GE BRAINO phantom.
+#' @return a character vector of molecule names.
+#' @export
+get_1h_braino_basis_names <- function() {
+  names <- c("cho_rt", "cr_ch2_rt", "cr_ch3_rt", "glu_rt", "ins_rt", "lac_rt",
+             "naa_rt")
+  return(names)
+}
+
+#' Return a character vector of common 1H molecules found in healthy human
+#' brain.
+#' 
+#' Note, this is a basic set and it may be appropriate to also include Asc, 
+#' Gly and PEth for high quality MRS data.
+#' 
+#' @param add optional character vector of additional molecular names. Eg
+#' c("asc", "gly", "peth").
+#' @param remove optional character vector of molecular names to remove from the
+#' set. Eg c("m_cr_ch2").
+#' @param inc_lip_mm include Lipid and MM basis signals.
+#' @return a character vector of molecule names.
+#' @export
+get_1h_brain_basis_names <- function(add = NULL, remove = NULL,
+                                     inc_lip_mm = TRUE) {
+  
+  names <- c("m_cr_ch2", "ala", "asp", "cr", "gaba", "glc", "gln", "gsh", "glu",
+             "gpc", "ins", "lac", "naa", "naag", "pch", "pcr", "sins", "tau")
+  
+  if (!is.null(add)) names <- sort(c(names, add))
+  
+  if (inc_lip_mm) {
+    names <- c(names, "lip09", "lip13a", "lip13b", "lip20", "mm09", "mm12",
+               "mm14", "mm17", "mm20")
+  }
+  
+  if (!is.null(remove)) names <- names[!(names %in% remove)]
+  
+  return(names)
+}
+
 #' Simulate a basis-set suitable for 1H brain MRS analysis acquired with a PRESS 
 #' sequence. Note, ideal pulses are assumed.
 #' @param pul_seq pulse sequence function to use.
@@ -509,7 +606,9 @@ get_mol_para_list_names <- function(mol_para_list) {
 }
 
 #' Simulate a basis set object.
-#' @param mol_list list of \code{mol_parameter} objects.
+#' @param mol_list list of \code{mol_parameter} objects. Alternatively, a 
+#' character vector matching molecules may also be provided. Use the 
+#' get_mol_names function for a full list of molecules.
 #' @param pul_seq pulse sequence function to use.
 #' @param acq_paras list of acquisition parameters or an mrs_data object. See
 #' \code{\link{def_acq_paras}}
@@ -528,6 +627,14 @@ sim_basis <- function(mol_list, pul_seq = seq_pulse_acquire,
   ref <- acq_paras$ref
   fs  <- acq_paras$fs
   N   <- acq_paras$N
+  
+  if (inherits(mol_list[[1]], "character")) {
+    if (length(mol_list) == 1) {
+      mol_list <- list(get_mol_paras(mol_list, ft = ft))
+    } else {
+      mol_list <- get_mol_paras(mol_list, ft = ft)
+    }
+  }
     
   basis_mrs_data <- sim_zero(ft = ft, ref = ref, fs = fs, N = N,
                               dyns = length(mol_list))
@@ -536,6 +643,7 @@ sim_basis <- function(mol_list, pul_seq = seq_pulse_acquire,
     cat("Simulation started.\n")
     start_time_full <- Sys.time()
   }
+  
   for (n in 1:length(mol_list)) {
     if (verbose) {
       cat(paste0("Simuating ", n, " of ", length(mol_list), " : ",
@@ -546,13 +654,13 @@ sim_basis <- function(mol_list, pul_seq = seq_pulse_acquire,
     basis_mrs_data <- set_dyns(basis_mrs_data, n, mrs_data)
     if (verbose) {
       end_time <- Sys.time()
-      print(end_time - start_time)
+      print(round(end_time - start_time, 2))
     }
   }
   if (verbose) {
     cat("Simulation finished.\n")
     end_time_full <- Sys.time()
-    print(end_time_full - start_time_full)
+    print(round(end_time_full - start_time_full, 2))
   }
   names <- get_mol_para_list_names(mol_list)
   mrs_data2basis(basis_mrs_data, names = names)
