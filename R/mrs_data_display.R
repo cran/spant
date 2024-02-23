@@ -67,6 +67,21 @@ print.mrs_data <- function(x, full = FALSE, ...) {
         sep = " ")
   }
   
+  if (!is.null(x$meta$SeriesDescription)) {
+    cat(paste(c("Series description      :", x$meta$SeriesDescription, "\n")),
+        sep = " ")
+  }
+  
+  if (!is.null(x$meta$SeriesNumber)) {
+    cat(paste(c("Series number           :", x$meta$SeriesNumber, "\n")),
+        sep = " ")
+  }
+  
+  if (!is.null(x$meta$TE3)) {
+    cat(paste0("TE1, TE2, TE3 (s)       : ", x$meta$TE1, ", ", x$meta$TE2,
+                 ", ", x$meta$TE3, "\n"))
+  }
+  
   if (full) {
     #cat(paste(c("Row vector              :", x$row_vec, "\n")), sep = " ")
     #cat(paste(c("Column vector           :", x$col_vec, "\n")), sep = " ")
@@ -283,13 +298,15 @@ plot.mrs_data <- function(x, dyn = 1, x_pos = 1, y_pos = 1, z_pos = 1, coil = 1,
 #' @param y_ticks a vector of indices specifying where to place tick marks.
 #' @param vline draw a vertical line at the value of vline.
 #' @param hline draw a horizontal line at the value of hline.
+#' @param legend add a colour bar to the plot using the imagePlot function
+#' from the fields package.
 #' @param ... other arguments to pass to the plot method.
 #' @export
 image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL, 
                            plot_dim = NULL, x_pos = NULL, y_pos = NULL,
                            z_pos = NULL, dyn = 1, coil = 1,
                            restore_def_par = TRUE, y_ticks = NULL, 
-                           vline = NULL, hline = NULL, ...) { 
+                           vline = NULL, hline = NULL, legend = FALSE, ...) { 
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -369,15 +386,21 @@ image.mrs_data <- function(x, xlim = NULL, mode = "re", col = NULL,
   # set masked spectra to zero
   plot_data[is.na(plot_data)] <- 0
   
-  
   yN <- ncol(plot_data)
   
   col <- viridisLite::viridis(128)
   
-  graphics::image(x_scale[subset][length(subset):1], (1:yN),
-                  plot_data[length(subset):1,,drop = F], xlim = xlim,
-                  xlab = "Chemical shift (ppm)", ylab = y_title, 
-                  col = col, ...)
+  if (legend == TRUE) {
+    fields::imagePlot(x_scale[subset][length(subset):1], (1:yN),
+                      plot_data[length(subset):1,,drop = F], xlim = xlim,
+                      xlab = "Chemical shift (ppm)", ylab = y_title, 
+                      col = col, ...)
+  } else {
+    graphics::image(x_scale[subset][length(subset):1], (1:yN),
+                    plot_data[length(subset):1,,drop = F], xlim = xlim,
+                    xlab = "Chemical shift (ppm)", ylab = y_title,
+                    col = col, ...)
+  }
   
   if (!is.null(y_ticks)) {
     graphics::axis(4, at = y_ticks, labels = F, col = NA, col.ticks = "red")
@@ -432,7 +455,6 @@ stackplot.list <- function(x, ...) {
 #' @param bty option to draw a box around the plot. See ?par.
 #' @param labels add labels to each data item.
 #' @param lab_cex label size.
-#' @param right_marg change the size of the right plot margin.
 #' @param bl_lty linetype for the y = 0 baseline trace. A default value NULL
 #' results in no baseline being plotted.
 #' @param restore_def_par restore default plotting par values after the plot has 
@@ -445,6 +467,7 @@ stackplot.list <- function(x, ...) {
 #' @param grid_ny as above.
 #' @param lwd plot linewidth.
 #' @param vline x-value to draw a vertical line.
+#' @param mar option to adjust the plot margins. See ?par.
 #' @param ... other arguments to pass to the matplot method.
 #' @export
 stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
@@ -452,10 +475,10 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
                                x_offset = 0, y_offset = 0, plot_dim = NULL,
                                x_pos = NULL, y_pos = NULL, z_pos = NULL,
                                dyn = 1, coil = 1, bty = NULL, labels = NULL,
-                               lab_cex = 1, right_marg = NULL, bl_lty = NULL,
+                               lab_cex = 1, bl_lty = NULL,
                                restore_def_par = TRUE, show_grid = NULL,
                                grid_nx = NULL, grid_ny = NA, lwd = NULL,
-                               vline = NULL, ...) {
+                               vline = NULL, mar = NULL, ...) {
   
   .pardefault <- graphics::par(no.readonly = T)
   
@@ -485,12 +508,14 @@ stackplot.mrs_data <- function(x, xlim = NULL, mode = "re", x_units = NULL,
   
   if (is.null(lwd)) lwd <- 2.0
   
-  if (is.null(right_marg) && is.null(labels)) right_marg = 1
-  if (is.null(right_marg) && !is.null(labels)) right_marg = 4
   
   graphics::par("xaxs" = "i") # tight axes limits
   graphics::par(mgp = c(1.8, 0.5, 0)) # distance between axes and labels
-  graphics::par(mar = c(3.5, 1, 1, right_marg)) # margins
+  
+  if (is.null(mar) && is.null(labels))  mar <- c(3.5, 1, 1, 1)
+  if (is.null(mar) && !is.null(labels)) mar <- c(3.5, 1, 1, 4)
+  
+  graphics::par(mar = mar) # margins
   
   if (fd) {
     xlab <- "Chemical shift"  

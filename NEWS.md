@@ -1,3 +1,9 @@
+# spant 2.18.0
+* Improved automated file type detection.
+* Bug fixes for DICOM MRS reader.
+* scale_spec function now works with basis set objects.
+* Added invert_fit option to plotting methods.
+
 # spant 2.17.0
 * Simulation duration output is now rounded to 2dp.
 * sim_basis now accepts a character vector of molecular names.
