@@ -1,3 +1,8 @@
+# spant 2.21.0
+* Fixed compiler warnings for Fortran code.
+* Added glm_spec function.
+* Added add_noise_spec_snr function.
+
 # spant 2.20.0
 * Added vertical line colour and linetype options for stackplots.
 * Added option to give Y axis labels in units of seconds for spectrograms.
