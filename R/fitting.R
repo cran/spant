@@ -130,6 +130,11 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
     # use default fitting opts if not specified 
     if (is.null(opts)) opts <- abfit_opts()
     
+    # check for FID distortion to adjust zero-filling method
+    if ((is_fid_filt_dist(metab) & is.null(opts$zf_offset))) {
+      opts$zf_offset <- 50
+    }
+    
     acq_paras <- get_acq_paras(metab)
     
     plyr <- TRUE
@@ -647,6 +652,7 @@ test_fit <- function(method = "VARPRO_3P", n = 10, preproc = TRUE) {
   system.time(replicate(n, fit_mrs(mrs_data, basis, method = method)))
 }
 
+#' @export
 dim.fit_result <- function(x) {
   dim(x$data$data)
 }

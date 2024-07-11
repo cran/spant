@@ -380,12 +380,15 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
   y_pts <- max(mrs_data$twix_inds$Lin) + 1
   
   if (x_pts > 1 || y_pts > 1) {
+    mrsi <- TRUE
     mrs_data$resolution[2] <- vars$x_dim / x_pts
     mrs_data$resolution[3] <- vars$y_dim / y_pts
     
     # fix the affine
     mrs_data$affine[,1] <- mrs_data$affine[,1] * vars$x_pts / x_pts
     mrs_data$affine[,2] <- mrs_data$affine[,2] * vars$y_pts / y_pts
+  } else {
+    mrsi <- FALSE
   }
   
   # crop the first few points of the FID and set the length to a power of two if 
@@ -431,7 +434,21 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
     mrs_data <- crop_td_pts_pot(mrs_data)
   }
   
-  return(mrs_data)
+  if (mrsi) {
+    mrs_data <- recon_twix_2d_mrsi(mrs_data)
+  }
+  
+  # deal with CMRR reference scans if needed
+  seq_name_upper <- toupper(mrs_data$meta$SequenceName)
+  if (startsWith(seq_name_upper, "%CUSTOMERSEQ%\\SVS_SLASER")) {
+    if (mrs_data$meta$NumberOfTransients == Ndyns(mrs_data)) {
+      return(mrs_data)
+    } else {
+      return(extract_dkd_wref_scans(mrs_data))
+    }
+  } else {
+    return(mrs_data)
+  }
 }
 
 #' Read the text format header found in Siemens IMA and TWIX data files.
@@ -441,7 +458,7 @@ read_twix <- function(fname, verbose, full_fid = FALSE,
 #' @param offset offset to begin searching for the text header.
 #' @return a list of parameter values
 #' @export
-read_siemens_txt_hdr <- function(input, version = "vd", verbose,
+read_siemens_txt_hdr <- function(input, version = "vd", verbose = FALSE,
                                  offset = 0) {
   
   if (is.character(input)) {
@@ -480,7 +497,9 @@ read_siemens_txt_hdr <- function(input, version = "vd", verbose,
                norm_tra = 0,
                seq_fname = NA,
                delta_freq = 0, # when missing then equals zero
-               rm_oversampling = NA)
+               rm_oversampling = NA,
+               ref_scan_mode = NA,
+               ref_scan_no = NA)
   
   # when a parameter is missing from an ima file it means it's zero (I think)
   slice_dPhaseFOV    <- 0
@@ -582,6 +601,10 @@ read_siemens_txt_hdr <- function(input, version = "vd", verbose,
       vars$rm_oversampling <- as.numeric(strsplit(line, "=")[[1]][2])
     } else if (startsWith(line, "sSpecPara.dDeltaFrequency")) {
       vars$delta_freq <- as.numeric(strsplit(line, "=")[[1]][2])
+    } else if (startsWith(line, "sSpecPara.lAutoRefScanMode")) {
+      vars$ref_scan_mode <- as.numeric(strsplit(line, "=")[[1]][2])
+    } else if (startsWith(line, "sSpecPara.lAutoRefScanNo")) {
+      vars$ref_scan_no <- as.numeric(strsplit(line, "=")[[1]][2])
     } else if (startsWith(line, "tSequenceFileName")) {
       vars$seq_fname <- strsplit(line, "=")[[1]][2]
       vars$seq_fname <- gsub("\t", "", vars$seq_fname)
@@ -591,6 +614,8 @@ read_siemens_txt_hdr <- function(input, version = "vd", verbose,
   }
   
   if (verbose) cat(paste("Sequence fname  :", vars$seq_fname, "\n"))
+  if (verbose) cat(paste("Ref scan mode   :", vars$ref_scan_mode, "\n"))
+  if (verbose) cat(paste("Ref scan no     :", vars$ref_scan_no, "\n"))
   if (verbose) cat(paste("Table position  :", scan_reg_pos_tra, "mm\n"))
   if (verbose) cat(paste("Rm oversampling :", as.logical(vars$rm_oversampling),
                          "\n"))

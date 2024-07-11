@@ -1,3 +1,8 @@
+# spant 2.22.0
+* Added find_bids_mrs and mrs_data2bids helper functions.
+* Improved handling of CMRR semi-LASER SVS water reference scans.
+* Added functions for GLS coil combination.
+
 # spant 2.21.0
 * Fixed compiler warnings for Fortran code.
 * Added glm_spec function.

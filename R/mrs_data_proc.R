@@ -179,16 +179,29 @@ sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
 
 #' Convert a vector into a mrs_data object.
 #' @param vec the data vector.
+#' @param mrs_data example data to copy acquisition parameters from.
 #' @param fs sampling frequency in Hz.
 #' @param ft transmitter frequency in Hz.
 #' @param ref reference value for ppm scale.
 #' @param nuc resonant nucleus.
 #' @param dyns replicate the data across the dynamic dimension.
-#' @param fd flag to indicate if the matrix is in the frequency domain (logical).
+#' @param fd flag to indicate if the vector is in the frequency domain (logical).
 #' @return mrs_data object.
 #' @export
-vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
-                         nuc = def_nuc(), dyns = 1, fd = FALSE) {
+vec2mrs_data <- function(vec, mrs_data = NULL, fs = NULL, ft = NULL, ref = NULL,
+                         nuc = NULL, dyns = 1, fd = FALSE) {
+  
+  if (!is.null(mrs_data)) {
+    if (is.null(fs))  fs  <- fs(mrs_data)
+    if (is.null(ft))  ft  <- mrs_data$ft
+    if (is.null(ref)) ref <- mrs_data$ref
+    if (is.null(nuc)) nuc <- mrs_data$nuc
+  } else {
+    if (is.null(fs))  stop("fs is missing")
+    if (is.null(ft))  stop("ft is missing")
+    if (is.null(ref)) stop("ref is missing")
+    if (is.null(nuc)) stop("nuc is missing")
+  }
   
   data <- array(vec, dim = c(length(vec), dyns))
   data <- aperm(data,c(2, 1))
@@ -202,9 +215,46 @@ vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
   return(mrs_data)
 }
 
+#' Convert a matrix (with spectral points in the column dimension and dynamics
+#' in the row dimensions) into a mrs_data object.
+#' @param mat data matrix.
+#' @param mrs_data example data to copy acquisition parameters from.
+#' @param fs sampling frequency in Hz.
+#' @param ft transmitter frequency in Hz.
+#' @param ref reference value for ppm scale.
+#' @param nuc resonant nucleus.
+#' @param fd flag to indicate if the matrix is in the frequency domain (logical).
+#' @return mrs_data object.
+#' @export
+mat2mrs_data <- function(mat, mrs_data = NULL, fs = NULL, ft = NULL, ref = NULL,
+                         nuc = NULL, fd = FALSE) {
+  
+  if (!is.null(mrs_data)) {
+    if (is.null(fs))  fs  <- fs(mrs_data)
+    if (is.null(ft))  ft  <- mrs_data$ft
+    if (is.null(ref)) ref <- mrs_data$ref
+    if (is.null(nuc)) nuc <- mrs_data$nuc
+  } else {
+    if (is.null(fs))  stop("fs is missing")
+    if (is.null(ft))  stop("ft is missing")
+    if (is.null(ref)) stop("ref is missing")
+    if (is.null(nuc)) stop("nuc is missing")
+  }
+  
+  data <- array(mat, dim = c(1, 1, 1, 1, nrow(mat), 1, ncol(mat)))
+  res <- c(NA, NA, NA, NA, NA, NA, 1 / fs)
+  
+  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
+                       nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
+                       affine = NULL, meta = NULL, extra = NULL)
+  
+  return(mrs_data)
+}
+
 #' Convert a 7 dimensional array in into a mrs_data object. The array dimensions
 #' should be ordered as : dummy, X, Y, Z, dynamic, coil, FID.
 #' @param data_array 7d data array.
+#' @param mrs_data example data to copy acquisition parameters from.
 #' @param fs sampling frequency in Hz.
 #' @param ft transmitter frequency in Hz.
 #' @param ref reference value for ppm scale.
@@ -212,8 +262,20 @@ vec2mrs_data <- function(vec, fs = def_fs(), ft = def_ft(), ref = def_ref(),
 #' @param fd flag to indicate if the matrix is in the frequency domain (logical).
 #' @return mrs_data object.
 #' @export
-array2mrs_data <- function(data_array, fs = def_fs(), ft = def_ft(),
-                           ref = def_ref(), nuc = def_nuc(), fd = FALSE) {
+array2mrs_data <- function(data_array, mrs_data = NULL, fs = NULL, ft = NULL,
+                           ref = NULL, nuc = NULL, fd = FALSE) {
+  
+  if (!is.null(mrs_data)) {
+    if (is.null(fs))  fs  <- fs(mrs_data)
+    if (is.null(ft))  ft  <- mrs_data$ft
+    if (is.null(ref)) ref <- mrs_data$ref
+    if (is.null(nuc)) nuc <- mrs_data$nuc
+  } else {
+    if (is.null(fs))  stop("fs is missing")
+    if (is.null(ft))  stop("ft is missing")
+    if (is.null(ref)) stop("ref is missing")
+    if (is.null(nuc)) stop("nuc is missing")
+  }
   
   if (length(dim(data_array)) != 7) stop("Incorrect number of dimensions.")
   
@@ -241,6 +303,28 @@ mrs_data2mat <- function(mrs_data, collapse = TRUE) {
   as.matrix(mrs_data$data[1,1,1,1,,1,])
 }
 
+#' Convert mrs_data object to a matrix, with spectral points in the column
+#' dimension and dynamics in the row dimension.
+#' @param mrs_data MRS data object or list of MRS data objects.
+#' @param collapse collapse all other dimensions along the dynamic dimension, eg
+#' a 16x16 MRSI grid would be first collapsed across 256 dynamic scans.
+#' @return MRS data matrix.
+#' @export
+mrs_data2spec_mat <- function(mrs_data, collapse = TRUE) {
+  if (inherits(mrs_data, "list")) mrs_data <- append_dyns(mrs_data)
+  
+  # needs to be a FD operation
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  if (collapse) mrs_data <- collapse_to_dyns(mrs_data)
+  
+  out_mat <- as.matrix(mrs_data$data[1,1,1,1,,1,])
+  
+  out_mat <- Re(out_mat)
+  
+  return(out_mat)
+}
+
 #' Convert mrs_data object to a vector.
 #' @param mrs_data MRS data object.
 #' @param dyn dynamic index.
@@ -251,35 +335,12 @@ mrs_data2mat <- function(mrs_data, collapse = TRUE) {
 #' @return MRS data vector.
 #' @export
 mrs_data2vec <- function(mrs_data, dyn = 1, x_pos = 1,
-                          y_pos = 1, z_pos = 1, coil = 1) {
+                         y_pos = 1, z_pos = 1, coil = 1) {
   
   # check the input
   check_mrs_data(mrs_data) 
   
   as.vector(mrs_data$data[1, x_pos, y_pos, z_pos, dyn, coil,])
-}
-
-#' Convert a matrix (with spectral points in the column dimension and dynamics
-#' in the row dimensions) into a mrs_data object.
-#' @param mat data matrix.
-#' @param fs sampling frequency in Hz.
-#' @param ft transmitter frequency in Hz.
-#' @param ref reference value for ppm scale.
-#' @param nuc resonant nucleus.
-#' @param fd flag to indicate if the matrix is in the frequency domain (logical).
-#' @return mrs_data object.
-#' @export
-mat2mrs_data <- function(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(),
-                         nuc = def_nuc(), fd = FALSE) {
-  
-  data <- array(mat, dim = c(1, 1, 1, 1, nrow(mat), 1, ncol(mat)))
-  res <- c(NA, NA, NA, NA, NA, NA, 1 / fs)
-  
-  mrs_data <- mrs_data(data = data, ft = ft, resolution = res, ref = ref,
-                       nuc = nuc, freq_domain = c(rep(FALSE, 6), fd),
-                       affine = NULL, meta = NULL, extra = NULL)
-  
-  return(mrs_data)
 }
 
 #' Simulate an mrs_data object containing simulated Gaussian noise.
@@ -288,17 +349,18 @@ mat2mrs_data <- function(mat, fs = def_fs(), ft = def_ft(), ref = def_ref(),
 #' @param ft transmitter frequency in Hz.
 #' @param N number of data points in the spectral dimension.
 #' @param ref reference value for ppm scale.
+#' @param nuc resonant nucleus.
 #' @param dyns number of dynamic scans to generate.
 #' @param fd return data in the frequency-domain (TRUE) or time-domain (FALSE)
 #' @return mrs_data object.
 #' @export
 sim_noise <- function(sd = 0.1, fs = def_fs(), ft = def_ft(), N = def_N(),
-                      ref = def_ref(), dyns = 1, fd = TRUE) {
+                      ref = def_ref(), nuc = def_nuc(), dyns = 1, fd = TRUE) {
  
   data_pts <- dyns * N 
   vec <- stats::rnorm(data_pts, 0, sd) + 1i*stats::rnorm(data_pts, 0, sd)
   data_array <- array(vec, dim = c(1, 1, 1, 1, dyns, 1, N))
-  array2mrs_data(data_array, fs = fs, ft = ft, ref = ref, fd = fd)
+  array2mrs_data(data_array, fs = fs, ft = ft, ref = ref, nuc = nuc, fd = fd)
 }
 
 #' Add noise to an mrs_data object.
@@ -335,19 +397,27 @@ add_noise <- function(mrs_data, sd = 0.1, fd = TRUE) {
 #' scan in the dataset and the same noise level is added to all spectra.
 #' @param sig_region spectral limits to search for the strongest spectral data
 #' point.
+#' @param ref_data measure the signal from the first scan in this reference data
+#' and apply the same target noise level to mrs_data.
 #' @return mrs_data object with additive normally distributed noise.
 #' @export
-add_noise_spec_snr <- function(mrs_data, target_snr, sig_region = c(4, 0.5)) {
+add_noise_spec_snr <- function(mrs_data, target_snr, sig_region = c(4, 0.5),
+                               ref_data = NULL) {
   
   if (inherits(mrs_data, "list")) {
     res <- lapply(mrs_data, add_noise_spec_snr, target_snr = target_snr,
-                  sig_region = sig_region)
+                  sig_region = sig_region, ref_data = ref_data)
     return(res)
   }
   
+  if (is.null(ref_data)) {
+    ref_data <- get_subset(mrs_data, 1, 1, 1, 1, 1)
+  } else {
+    ref_data <- get_subset(ref_data, 1, 1, 1, 1, 1)
+  }
+  
   # measure max signal from the first scan and add noise
-  first_scan  <- get_subset(mrs_data, 1, 1, 1, 1, 1)
-  peak_height <- calc_spec_snr(mrs_data, sig_region = sig_region,
+  peak_height <- calc_spec_snr(ref_data, sig_region = sig_region,
                                full_output = TRUE)$max_sig
   noise_sd    <- peak_height / target_snr
   mrs_data    <- add_noise(mrs_data, noise_sd)
@@ -359,16 +429,17 @@ add_noise_spec_snr <- function(mrs_data, target_snr, sig_region = c(4, 0.5)) {
 #' @param ft transmitter frequency in Hz.
 #' @param N number of data points in the spectral dimension.
 #' @param ref reference value for ppm scale.
+#' @param nuc resonant nucleus.
 #' @param dyns number of dynamic scans to generate.
 #' @return mrs_data object.
 #' @export
 sim_zero <- function(fs = def_fs(), ft = def_ft(), N = def_N(),
-                      ref = def_ref(), dyns = 1) {
+                     ref = def_ref(), nuc = def_nuc(), dyns = 1) {
   
   data_pts <- dyns * N 
   vec <- rep(0, data_pts) * 1i
   data_array <- array(vec, dim = c(1, 1, 1, 1, dyns, 1, N))
-  array2mrs_data(data_array, fs = fs, ft = ft, ref = ref)
+  array2mrs_data(data_array, fs = fs, ft = ft, ref = ref, nuc = nuc)
 }
 
 #' Apply a function across given dimensions of a MRS data object.
@@ -631,9 +702,8 @@ lb.mrs_data <- function(x, lb, lg = 1) {
   x <- collapse_to_dyns(x)
   
   # needs to be a time-domain operation
-  if (is_fd(x)) {
-    x <- fd2td(x)
-  }
+  if (is_fd(x)) x <- fd2td(x)
+    
   t <- rep(seconds(x), each = Nspec(x))
   
   if (lg < 1)  x$data = x$data * exp(-(1 - lg) * lb * t * pi)
@@ -730,6 +800,14 @@ zf.list <- function(x, factor = 2, offset = 0) {
   lapply(x, zf, factor = factor, offset = offset)
 }
 
+is_fid_filt_dist <- function(mrs_data) {
+  if (is.null(mrs_data$meta$fid_filt_dist)) {
+    return(FALSE)  
+  } else {
+    return(mrs_data$meta$fid_filt_dist)
+  }
+}
+
 #' @rdname zf
 #' @export
 zf.mrs_data <- function(x, factor = 2, offset = 0) {
@@ -746,6 +824,10 @@ zf.mrs_data <- function(x, factor = 2, offset = 0) {
   zero_dim[7] <- pts - data_dim[7]
   zero_array <- array(0, dim = zero_dim)
   x$data = abind::abind(x$data, zero_array, along = 7)
+  
+  if (is_fid_filt_dist(x) & is.null(offset)) offset <- 50
+  
+  if (is.null(offset)) offset <- 0
   
   if (offset > 0) {
     orig_inds <- (pts_orig - offset + 1):pts_orig
@@ -1150,6 +1232,7 @@ ift <- function(mrs_data, dims) {
   apply_mrs(mrs_data, dims, ift_shift)
 }
 
+#' @export
 dim.mrs_data <- function(x) {
   dim(x$data)
 }
@@ -1393,31 +1476,58 @@ seconds <- function(mrs_data) {
   seq(from = 0, to = (Npts(mrs_data) - 1) / fs, by = 1 / fs)
 }
 
+check_dyn_input <- function(mrs_data, tr, Ndyns, Ntrans) {
+  
+  if (is.null(mrs_data)) {
+    if (is.null(tr) | is.null(Ndyns)) {
+      stop("Specify mrs_data or tr and Ndyns")
+    }
+    if (is.null(Ntrans)) Ntrans = Ndyns
+  } else {
+    if (!is.null(tr) | !is.null(Ndyns) | !is.null(Ntrans)) {
+      stop("Specify mrs_data or tr, Ndyns and Ntrans")
+    }
+  }
+  
+  if (!is.null(mrs_data)) {
+    if (is.na(tr(mrs_data)) | is.null(tr(mrs_data))) {
+      stop("TR not set, use set_tr function to set the repetition time.")
+    }
+    
+    if (is.na(Ntrans(mrs_data)) | is.null(Ntrans(mrs_data))) {
+      stop("Number of transients not set, use set_Ntrans function to set the 
+         number of transients.")
+    }
+    
+    Ntrans <- Ntrans(mrs_data)
+    tr     <- tr(mrs_data)
+    Ndyns  <- Ndyns(mrs_data)
+    
+  }
+  
+  return(list(tr = tr, Ndyns = Ndyns, Ntrans = Ntrans))   
+}
+
 #' Return a time scale vector of acquisition times for a dynamic MRS scan. The
 #' first temporal scan is assigned a value of 0.
 #' @param mrs_data MRS data.
+#' @param tr repetition time.
+#' @param Ndyns number of dynamic scans stored, potentially less than Ntrans
+#' if block averaging has been performed.
+#' @param Ntrans number of dynamic scans acquired.
 #' @return time scale vector in units of seconds.
 #' @export
-dyn_acq_times <- function(mrs_data) {
+dyn_acq_times <- function(mrs_data = NULL, tr = NULL, Ndyns = NULL,
+                          Ntrans = NULL) {
   
-  if (is.na(tr(mrs_data)) | is.null(tr(mrs_data))) {
-    stop("TR not set, use set_tr function to set the repetition time.")
-  }
+  res <- check_dyn_input(mrs_data, tr, Ndyns, Ntrans) 
   
-  if (is.na(Ntrans(mrs_data)) | is.null(Ntrans(mrs_data))) {
-    stop("Number of transients not set, use set_Ntrans function to set the 
-         number of transients.")
-  }
-  
-  n_trans <- Ntrans(mrs_data)
-  TR      <- tr(mrs_data)
-  n_dyns  <- Ndyns(mrs_data)
-  t_acq   <- seq(from = 0, by = TR, length.out = n_trans)
+  t_acq   <- seq(from = 0, by = res$tr, length.out = res$Ntrans)
   
   # correct for missmatch between n_trans and n_dyns due to temporal averaging 
-  if (n_trans != n_dyns) {
-    if (n_trans%%n_dyns != 0) stop("Dynamics and transients do not match")
-    block_size <- n_trans / n_dyns
+  if (res$Ntrans != res$Ndyns) {
+    if (res$Ntrans%%res$Ndyns != 0) stop("Dynamics and transients do not match")
+    block_size <- res$Ntrans / res$Ndyns
     t_acq <- colMeans(matrix(t_acq, nrow = block_size))
   }
   
@@ -2350,8 +2460,8 @@ sum_mrs <- function(a, b, force = FALSE) {
 #' Perform a mathematical operation on a spectral region.
 #' @param mrs_data MRS data.
 #' @param xlim spectral range to be integrated (defaults to full range).
-#' @param operator can be "sum" (default), "mean", "l2", "max", "min" or
-#' "max-min".
+#' @param operator can be "sum" (default), "mean", "l2", "max", "max_cplx,
+#' "min" or "max-min".
 #' @param freq_scale units of xlim, can be : "ppm", "hz" or "points".
 #' @param mode spectral mode, can be : "re", "im", "mod" or "cplx".
 #' @return an array of integral values.
@@ -2405,6 +2515,8 @@ spec_op <- function(mrs_data, xlim = NULL, operator = "sum", freq_scale = "ppm",
     res <- apply(data_arr, c(1, 2, 3, 4, 5, 6), sum)
   } else if (operator == "max") {
     res <- apply(data_arr, c(1, 2, 3, 4, 5, 6), max)
+  } else if (operator == "max_cplx") {
+    res <- apply(data_arr, c(1, 2, 3, 4, 5, 6), max_cplx)
   } else if (operator == "min") {
     res <- apply(data_arr, c(1, 2, 3, 4, 5, 6), min)
   } else if (operator == "max-min") {
@@ -2415,6 +2527,12 @@ spec_op <- function(mrs_data, xlim = NULL, operator = "sum", freq_scale = "ppm",
   }
   
   return(res) 
+}
+
+max_cplx <- function(x) {
+  x_mod <- Mod(x)
+  max_ind <- which.max(x_mod)
+  return(x[max_ind])
 }
 
 #' Integrate a spectral region.
@@ -2694,7 +2812,7 @@ collapse_to_dyns.fit_result <- function(x, rm_masked = FALSE) {
 mean_dyns <- function(mrs_data, subset = NULL) {
   
   if (inherits(mrs_data, "list")) {
-    return(lapply(mrs_data, mean_dyns))
+    return(lapply(mrs_data, mean_dyns, subset = subset))
   }
   
   # check the input
@@ -2702,6 +2820,8 @@ mean_dyns <- function(mrs_data, subset = NULL) {
  
   # extract a subset if requested 
   if (!is.null(subset)) mrs_data <- get_dyns(mrs_data, subset)
+  
+  if (Ndyns(mrs_data) == 1) return(mrs_data)
   
   mrs_data$data <- aperm(mrs_data$data, c(5, 1, 2, 3, 4, 6, 7))
   mrs_data$data <- colMeans(mrs_data$data, na.rm = TRUE)
@@ -3237,7 +3357,7 @@ ecc <- function(metab, ref, rev = FALSE) {
 
 #' Apodise MRSI data in the x-y direction with a k-space filter.
 #' @param mrs_data MRSI data.
-#' @param func must be "hamming" or "gaussian".
+#' @param func must be "hamming", "hanning" or "gaussian".
 #' @param w the reciprocal of the standard deviation for the Gaussian function.
 #' @return apodised data.
 #' @export
@@ -3262,6 +3382,9 @@ apodise_xy <- function(mrs_data, func = "hamming", w = 2.5) {
   if (func == "hamming") {
     x_fun <- signal::hamming(x_dim)
     y_fun <- signal::hamming(y_dim)
+  } else if (func == "hanning") {
+    x_fun <- signal::hanning(x_dim)
+    y_fun <- signal::hanning(y_dim)
   } else if (func == "gaussian") {
     x_fun <- signal::gausswin(x_dim, w = w)
     y_fun <- signal::gausswin(y_dim, w = w)
@@ -3468,7 +3591,11 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
   
   # get the dynamic mean of the ref data (better to take the first dynamic in
   # some cases?)
-  if (average_ref_dyns) ref <- mean_dyns(ref)
+  if (average_ref_dyns) {
+    ref <- mean_dyns(ref)
+  } else {
+    ref <- get_dyns(ref, 1)
+  }
   
   # ref_pt <- get_fp(ref)
   ref_pt <- get_subset(ref, td_set = ref_pt_index)$data
@@ -3494,6 +3621,8 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
       
       if (scale_method == "sig_noise_sq") {
         amp <- amp / (noise_sd ^ 2)
+        #amp <- (amp / noise_sd) ^ 2
+        #amp <- amp ^ 2
       } else {
         amp <- amp / noise_sd
       }
@@ -3503,12 +3632,14 @@ comb_coils <- function(metab, ref = NULL, noise = NULL, scale = TRUE,
       metab_first <- get_dyns(metab, 1)
       noise_data  <- crop_spec(metab_first, noise_region)
       noise_sd    <- est_noise_sd(noise_data, offset = 0, n = Npts(noise_data),
-                               p_order = 2)
+                                  p_order = 2)
       
       if (any(noise_sd == 0)) stop("Some coil noise estimates are zero. Bad data?")
       
       if (scale_method == "sig_noise_sq") {
         amp <- amp / (noise_sd ^ 2)
+        #amp <- (amp / noise_sd) ^ 2
+        #amp <- amp ^ 2
       } else {
         amp <- amp / noise_sd
       }
@@ -3624,6 +3755,8 @@ est_noise_sd <- function(mrs_data, n = 100, offset = 100, p_order = 2) {
 }
 
 est_noise_sd_vec <- function(x, n = 100, offset = 100, p_order = 2) {
+  if (is.na(x[1])) return(NA)
+  
   N <- length(x)
   seg <- Re(x[(N - offset - n + 1):(N - offset)])
   if (p_order != 0) {
@@ -3685,17 +3818,18 @@ calc_coil_noise_sd <- function(noise_data) {
 #' @param full_output output signal, noise and SNR values separately.
 #' @return an array of SNR values.
 #' @export
-calc_spec_snr <- function(mrs_data, sig_region = c(4,0.5), 
-                          noise_region = c(-0.5,-2.5), p_order = 2,
+calc_spec_snr <- function(mrs_data, sig_region = c(4, 0.5), 
+                          noise_region = c(-0.5, -2.5), p_order = 2,
                           interp_f = 4, full_output = FALSE) {
   
-  sig_data <- crop_spec(mrs_data, sig_region)
+  sig_data   <- crop_spec(mrs_data, sig_region)
   noise_data <- crop_spec(mrs_data, noise_region)
   
   #max_sig <- apply_mrs(sig_data, 7, re_max, data_only = TRUE)
-  max_sig <- apply_mrs(sig_data, 7, re_max_interp, interp_f, data_only = TRUE)
+  max_sig    <- apply_mrs(sig_data, 7, re_max_interp, interp_f,
+                          data_only = TRUE)
   noise_mean <- apply_mrs(noise_data, 7, re_mean, data_only = TRUE)
-  max_sig <- max_sig - noise_mean
+  max_sig    <- max_sig - noise_mean
   
   #noise_sd <- apply_mrs(noise_data, 7, re_sd, data_only = TRUE)
   
@@ -3771,6 +3905,7 @@ calc_peak_info_vec <- function(data_pts, interp_f) {
   if (is.na(data_pts[1])) return(rep(NA, 3))
   
   data_pts <- stats::spline(data_pts, n = interp_f * length(data_pts))
+  
   data_pts_x <- data_pts$x
   data_pts <- data_pts$y
   peak_pos_n <- which.max(data_pts)
@@ -4473,6 +4608,8 @@ recon_twix_2d_mrsi <- function(twix_mrs) {
   # invert every other k-space line (for some reason)
   k_sp_corr_x <- array(1, dim(twix_recon$data))
   k_sp_corr_y <- k_sp_corr_x
+  # k_sp_corr_x[,c(T, F),,,,,] <- -1
+  # k_sp_corr_y[,,c(F, T),,,,] <- -1
   k_sp_corr_x[,c(T, F),,,,,] <- -1
   k_sp_corr_y[,,c(F, T),,,,] <- -1
   twix_recon$data <- twix_recon$data * k_sp_corr_x * k_sp_corr_y
@@ -4556,7 +4693,8 @@ spec_decomp <- function(mrs_data, wm, gm, norm_fractions = TRUE) {
   S <- solve(t(W) %*% W) %*% t(W) %*% D
   
   # convert back to an mrs_data object
-  wm_gm_spec <- mat2mrs_data(S, fs(mrs_data), mrs_data$ft, mrs_data$ref,
+  wm_gm_spec <- mat2mrs_data(S, fs = fs(mrs_data), ft = mrs_data$ft,
+                             ref = mrs_data$ref, nuc = mrs_data$nuc,
                              fd = TRUE)
   
   return(list(wm = get_dyns(wm_gm_spec, 1), gm = get_dyns(wm_gm_spec, 2)))
@@ -4620,3 +4758,181 @@ mod_td <- function(mrs_data) {
   # return the Modulus
   return(Mod(mrs_data))
 }
+
+#' Combine SVS coil data using the GLS method presented by An et al 
+#' JMRI 37:1445-1450 (2013).
+#' @param metab MRS data containing metabolite data.
+#' @param ref MRS data containing reference data (optional).
+#' @param noise_pts number of points from the end of the FIDs to use for noise
+#' covariance estimation.
+#' @param noise_mrs MRS data containing noise information for each coil.
+#' @param use_mean_sens use the dynamic mean to estimate coil sensitivities.
+#' @return coil combined MRS data.
+#' @export
+comb_coils_svs_gls <- function(metab, ref = NULL, noise_pts = 256,
+                               noise_mrs = NULL, use_mean_sens = TRUE) {
+  
+  # time-domain operation
+  if (is_fd(metab)) metab <- fd2td(metab)
+  
+  if (Ncoils(metab) == 1) {
+    warning("Data contains data for only one coil.")
+  }
+  
+  if (is.null(noise_mrs)) {
+    # use the last few points in each FID to estimate the noise covariance
+    # matrix
+    noise_mrs <- crop_td_pts(metab, start = Npts(metab) - noise_pts + 1)
+  } else {
+    noise_pts <- Npts(noise_mrs)
+  }
+  
+  noise_mat <- drop(noise_mrs$data)
+  if ((Ndyns(noise_mrs)) == 1) dim(noise_mat) <- c(1, Ncoils(noise_mrs), noise_pts)
+  noise_mat <- aperm(noise_mat, c(2, 3, 1))
+  dim(noise_mat) <- c(Ncoils(noise_mrs), noise_pts * Ndyns(noise_mrs))
+  psi <- noise_mat %*% Conj(t(noise_mat))
+  
+  if (use_mean_sens) {
+    # use the first point of the mean data to estimate the sensitivity vector
+    phase_ref_data <- mean_dyns(crop_td_pts(metab, end = 1, start = 1))
+    S <- drop(phase_ref_data$data)
+    
+    # construct matrices
+    psi_inv     <- solve(psi)
+    precomp_mat <- (Conj(S) %*% psi_inv / drop(Conj(S) %*% psi_inv %*% S))
+    comb_mat    <- matrix(nrow = Ndyns(metab), ncol = Npts(metab))
+    
+    # combine coils for each dynamic
+    for (n in 1:Ndyns(metab)) {
+      comb_mat[n, ] <- precomp_mat %*% drop(get_dyns(metab, n)$data)
+    }
+  } else {
+    # combine coils for each dynamic
+    comb_mat <- matrix(nrow = Ndyns(metab), ncol = Npts(metab))
+    psi_inv <- solve(psi)
+    for (n in 1:Ndyns(metab)) {
+      
+      # use the first point to estimate the sensitivity vector
+      phase_ref_data <- get_dyns(crop_td_pts(metab, end = 1, start = 1), n)
+      S <- drop(phase_ref_data$data)
+      
+      # construct matrices (can probably optimise this a bit)
+      precomp_mat <- (Conj(S) %*% psi_inv / drop(Conj(S) %*% psi_inv %*% S))
+      
+      comb_mat[n, ] <- precomp_mat %*% drop(get_dyns(metab, n)$data)
+    }
+  }
+  
+  # convert matrix back to an mrs_data object
+  mrs_data_temp <- mat2mrs_data(comb_mat, mrs_data = metab)
+  metab$data    <- mrs_data_temp$data
+  
+  if (!is.null(ref)) {
+    # time-domain operation
+    if (is_fd(ref)) ref <- fd2td(ref)
+    
+    comb_mat <- matrix(nrow = Ndyns(ref), ncol = Npts(metab))
+    
+    # combine coils for each dynamic
+    for (n in 1:Ndyns(ref)) {
+      comb_mat[n, ] <- precomp_mat %*% drop(get_dyns(ref, n)$data)
+    }
+  
+    mrs_data_temp <- mat2mrs_data(comb_mat)
+    ref$data      <- mrs_data_temp$data
+    
+    return(list(metab = metab, ref = ref)) 
+  } else {
+    return(metab) 
+  }
+}
+
+#' Combine MRSI coil data using the GLS method presented by An et al 
+#' JMRI 37:1445-1450 (2013).
+#' @param metab MRSI data containing metabolite data.
+#' @param noise_pts number of points from the end of the FIDs to use for noise
+#' covariance estimation.
+#' @param noise_mrs MRS data containing noise information for each coil.
+#' @return coil combined MRSI data.
+#' @export
+comb_coils_mrsi_gls <- function(metab, noise_pts = 30, noise_mrs = NULL) {
+  
+  # start in the time-domain
+  if (is_fd(metab)) metab <- fd2td(metab)
+  
+  if (Ncoils(metab) == 1) {
+    warning("Data contains data for only one coil.")
+  }
+  
+  if (is.null(noise_mrs)) {
+    # use the last few points in each FID to estimate the noise covariance
+    # matrix
+    noise_mrs <- crop_td_pts(metab, start = Npts(metab) - noise_pts + 1)
+  } else {
+    noise_pts <- Npts(noise_mrs)
+  }
+  
+  noise_dyns <- Nx(noise_mrs) * Ny(noise_mrs) * Nz(noise_mrs) * Ndyns(noise_mrs)
+  dim(noise_mrs$data) <- c(1, 1, 1, 1, noise_dyns, Ncoils(noise_mrs), noise_pts)
+  
+  noise_mat <- drop(noise_mrs$data)
+  if ((Ndyns(noise_mrs)) == 1) {
+    dim(noise_mat) <- c(1, Ncoils(noise_mrs), noise_pts)
+  }
+  noise_mat <- aperm(noise_mat, c(2, 3, 1))
+  dim(noise_mat) <- c(Ncoils(noise_mrs), noise_pts * Ndyns(noise_mrs))
+  psi <- noise_mat %*% Conj(t(noise_mat))
+  
+  # create output dataset
+  comb_data <- get_subset(metab, coil_set = 1)
+  comb_data$data[] <- NA
+  
+  psi_inv <- solve(psi)
+  for (x in 1:Nx(metab)) {
+    for (y in 1:Ny(metab)) {
+      for (z in 1:Nz(metab)) {
+        
+        temp_spec <- get_subset(metab, x_set = x, y_set = y, z_set = z)
+        temp_spec_orig <- temp_spec
+        
+        temp_spec <- td2fd(lb(temp_spec, 2))
+        temp_spec_mod <- sum_coils(Mod(temp_spec))
+        suppressWarnings({
+          peak_freq <- peak_info(temp_spec_mod, xlim = c(1.7, 3.4))$freq_ppm
+        })
+        peak_range <- c(peak_freq - 0.14, peak_freq + 0.14)
+        phase_ref_data <- spec_op(temp_spec, operator = "sum",
+                                  mode = "cplx", xlim = peak_range)
+        S <- drop(phase_ref_data)
+        
+        # use the max td point from the first 10 points to estimate the
+        # sensitivity vector
+        # temp_spec_cut  <- get_subset(temp_spec_ref, td_set = 1:10)
+        # init_pts       <- Mod(temp_spec_cut$data)
+        # max_td_pt      <- which(init_pts == max(init_pts), arr.ind = TRUE)[7]
+        # phase_ref_data <- crop_td_pts(temp_spec_cut, end = max_td_pt,
+        #                               start = max_td_pt)
+        #
+        # S <- drop(phase_ref_data$data)
+        
+        # use the first point to estimate the sensitivity vector
+        # phase_ref_data <- crop_td_pts(temp_spec_ref, end = 1, start = 1)
+        # S <- drop(phase_ref_data$data)
+        
+        # fixed ref frequency band
+        # phase_ref_data <- spec_op(temp_spec_ref, operator = "sum",
+        #                           mode = "cplx", xlim = c(2.1, 1.9))
+        # S <- drop(phase_ref_data)
+        
+        # construct matrices (can probably optimise this a bit)
+        precomp_mat <- (Conj(S) %*% psi_inv / drop(Conj(S) %*% psi_inv %*% S))
+        
+        comb_data$data[, x, y,,,,] <- precomp_mat %*% drop(temp_spec_orig$data)
+      }
+    }
+  }
+
+ return(comb_data)
+}
+

@@ -27,11 +27,21 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   }
  
   # zero pad input to twice length
-  if (opts$zp) y <- c(y, rep(0, length(y))) 
+  if (opts$zp) {
+    if (is.null(opts$zf_offset)) {
+      y <- c(y, rep(0, length(y))) 
+    } else {
+      if (opts$zf_offset == 0) {
+        y <- c(y, rep(0, length(y))) 
+      } else {
+        y <- append(y, rep(0, length(y)), after = (length(y) - opts$zf_offset))
+      }
+    } 
+  }
   
   # convert y vec to mrs_data object to use convenience functions
   mrs_data <- vec2mrs_data(y, fs = acq_paras$fs, ft = acq_paras$ft, 
-                           ref = acq_paras$ref)
+                           ref = acq_paras$ref, nuc = acq_paras$nuc)
   
   #### 1 coarse freq align ####
   if (opts$pre_align) {
@@ -335,7 +345,8 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
       mrs_data_corr_noise_est <- vec2mrs_data(y_mod_noise_est,
                                               fs = acq_paras$fs,
                                               ft = acq_paras$ft, 
-                                              ref = acq_paras$ref)
+                                              ref = acq_paras$ref,
+                                              nuc = acq_paras$nuc)
       
       # estimate the noise sd 
       noise_sd_est <- as.numeric(calc_spec_snr(mrs_data_corr_noise_est,
@@ -524,7 +535,7 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   
   # SNR calc
   mrs_data_corr <- vec2mrs_data(y_mod, fs = acq_paras$fs, ft = acq_paras$ft, 
-                                ref = acq_paras$ref)
+                                ref = acq_paras$ref, nuc = acq_paras$nuc)
   
   noise_sd  <- as.numeric(calc_spec_snr(mrs_data_corr,
                                         noise_region = opts$noise_region,
@@ -816,6 +827,9 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
 #' @param lb_init initial Lorentzian line broadening value for the individual 
 #' basis signals. Setting to 0 will clash with the minimum allowable value
 #' (eg hard constraint) during the detailed fit.
+#' @param zf_offset offset in number of data points from the end of the FID to 
+#' zero-fill. Default is NULL and will automatically set this to 50 points when
+#' the FID distortion flag is set for the mrs_data.
 #' @return full list of options.
 #' @examples
 #' opts <- abfit_opts(ppm_left = 4.2, noise_region = c(-1, -3))
@@ -844,7 +858,7 @@ abfit_opts <- function(init_damping = 5, maxiters = 1024, max_shift = 0.078,
                        lb_reg = NULL, output_all_paras = FALSE,
                        output_all_paras_raw = FALSE, input_paras_raw = NULL,
                        optim_lw_only = FALSE, optim_lw_only_limit = 20,
-                       lb_init = 0.001) {
+                       lb_init = 0.001, zf_offset = NULL) {
                          
   list(init_damping = init_damping, maxiters = maxiters,
        max_shift = max_shift, max_damping = max_damping, max_phase = max_phase,
@@ -871,7 +885,8 @@ abfit_opts <- function(init_damping = 5, maxiters = 1024, max_shift = 0.078,
        lb_reg = lb_reg, output_all_paras = output_all_paras,
        output_all_paras_raw = output_all_paras_raw,
        input_paras_raw = input_paras_raw, optim_lw_only = optim_lw_only,
-       optim_lw_only_limit = optim_lw_only_limit, lb_init = lb_init)
+       optim_lw_only_limit = optim_lw_only_limit, lb_init = lb_init,
+       zf_offset = zf_offset)
 }
 
 #' Return a list of options for an ABfit analysis to maintain comparability with
