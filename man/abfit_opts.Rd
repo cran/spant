@@ -18,6 +18,7 @@ abfit_opts(
   bl_ed_pppm = 2,
   auto_bl_flex = TRUE,
   bl_comps_pppm = 15,
+  adaptive_bl_comps_pppm = FALSE,
   export_sp_fit = FALSE,
   max_asym = 0.25,
   max_basis_shift = 0.0078,
@@ -48,6 +49,7 @@ abfit_opts(
   freq_reg = NULL,
   freq_reg_naa = NULL,
   lb_reg = NULL,
+  asym_reg = NULL,
   output_all_paras = FALSE,
   output_all_paras_raw = FALSE,
   input_paras_raw = NULL,
@@ -91,6 +93,10 @@ ppm).}
 \item{auto_bl_flex}{automatically determine the level of baseline smoothness.}
 
 \item{bl_comps_pppm}{spline basis density (signals per ppm).}
+
+\item{adaptive_bl_comps_pppm}{adjust the spline basis density in the detailed
+fit phase, based on the required level of smoothness, to reduce computation
+time.}
 
 \item{export_sp_fit}{add the fitted spline functions to the fit result.}
 
@@ -170,6 +176,8 @@ prefit stage of the algorithm.}
 \item{freq_reg_naa}{frequency shift parameter for NAA and NAAG.}
 
 \item{lb_reg}{individual line broadening parameter.}
+
+\item{asym_reg}{lineshape asymmetry parameter.}
 
 \item{output_all_paras}{include more fitting parameters in the fit table,
 e.g. individual shift and damping factors for each basis set element.}

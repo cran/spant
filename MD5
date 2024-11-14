@@ -1,7 +1,7 @@
-edbc78208ae6860696fb8f4eeeabc009 *DESCRIPTION
+e6f138053de9be4b2e3ddac9ba4958b4 *DESCRIPTION
 6ce79f8b3c163f89984a581613f88792 *NAMESPACE
-cb903112c6dff1e1e9770a5f0eb9db70 *NEWS.md
-24dd47725f4bc8dc63fb9cf1805489a8 *R/abfit.R
+049d39273ae19e761706efd536f206dc *NEWS.md
+4e4ea8172e8ef9fa5e0659456ddaf4e5 *R/abfit.R
 32bd5fce5b7bf9536657cbeff169cdaa *R/amp_scaling.R
 7e8b24bf182710f3395f41d1f393c4a3 *R/basis_set.R
 a5ea070c712c5c84667cfc68ff88c287 *R/benchmark.R
@@ -12,7 +12,7 @@ a5ea070c712c5c84667cfc68ff88c287 *R/benchmark.R
 1e7460d9c6935050fac401b08de6ba1d *R/fmrs.R
 653a96aedfb24a1af06ed69f5c549d32 *R/gsl_functions.R
 be62bf0d4a4615c9762a1a3c2ffc4046 *R/image_reg.R
-4faac9c8e6f19a26f80c17fdbc635ad8 *R/interactive_plotting.R
+722a5d844ced31f8290d5d4459201e26 *R/interactive_plotting.R
 c4b0e2a1ad2c4ac50ad80fba73d0c2cc *R/lofdc.R
 9ebbac915df9f033ae580f953788ffd8 *R/mol_parameters.R
 ccfdaa860a3ec1bc1a00a53a4d211094 *R/mrs_data_display.R
@@ -41,7 +41,7 @@ b8c2373b7066f1e79e38acb6254d1d9f *R/relaxation_fitting.R
 13f4cc0b0db21944b8bac97379aba164 *R/spant.R
 2855dc1c16ddb92f6e7c3d5ab3d66b84 *R/svs_batch_fit.R
 c31ced976a52037fc5fc1675b3c40c82 *R/tdsr.R
-c4c456c865c9182e0bda6092136ac583 *R/utils.R
+7b2d586f11a0b510db5a034fa90d36df *R/utils.R
 42622a9be16636819405e283f2b28d45 *R/varpro.R
 167381e8710bc5eda1489e1c8ac9bc19 *R/varpro_3_para.R
 74b92d004777fc3f876bc637a8aa2dd0 *R/varpro_basic.R
@@ -57,13 +57,13 @@ acc0cbea1568a8234cd4ddfa0c29baf3 *inst/doc/spant-basis-simulation.Rmd
 367ad480165f9eca09fe5690980a177a *inst/doc/spant-basis-simulation.html
 6f99a633432579f12f1e78e6e1979270 *inst/doc/spant-intro.R
 09cd186cd2f46c1b861d821dbc84071f *inst/doc/spant-intro.Rmd
-9c85b70b8a296dc7a1007adb9d1a5603 *inst/doc/spant-intro.html
+3a75a655de82b24806d4a6310dec7aec *inst/doc/spant-intro.html
 5d721628b11108357b3cc09ce31e0551 *inst/doc/spant-metabolite-simulation.R
 c1c9609b710736e87f3cd2116081f273 *inst/doc/spant-metabolite-simulation.Rmd
 aa7d904711a58bd4b72b6773939489f5 *inst/doc/spant-metabolite-simulation.html
 1af1d6c940cd0fe2499f1bb9c922b15d *inst/doc/spant-preprocessing.R
 50b0bc7a09f4a268ee51d0fc7868c16d *inst/doc/spant-preprocessing.Rmd
-886cdd5e42fb9cb5a5a50b491e8003ac *inst/doc/spant-preprocessing.html
+575dd168eeb032e33745f485fd54dd8f *inst/doc/spant-preprocessing.html
 a28286d8845dfdc9079b5da1f4d5a871 *inst/extdata/philips_spar_sdat_W.SDAT
 4fc1be43f9d80bb69396f5c5511c96b5 *inst/extdata/philips_spar_sdat_W.SPAR
 f3db42bffcb2b1043157a93fdbcbdf3c *inst/extdata/philips_spar_sdat_WS.SDAT
@@ -86,7 +86,7 @@ a44dccee4a901f05f78a2afdb1b2f27a *man/Ntrans.Rd
 a24e0a29e50314af2669dfd9f4995af6 *man/Ny.Rd
 58540414b0ad055776a362716ad9238c *man/Nz.Rd
 13b5ac27a8477305620ce8ee65a81c8c *man/Re.mrs_data.Rd
-ff014ed5002e02b439927decc3e18ad4 *man/abfit_opts.Rd
+d74ed7097557e5a024d824221a815569 *man/abfit_opts.Rd
 d6458cf2126d8f3da71c414c88aa637e *man/abfit_opts_v1_9_0.Rd
 133cce603fa8fd8338896b8e6a1eebfb *man/acquire.Rd
 4b4721894aad11f5b15af1bdd68b1784 *man/add_noise.Rd
@@ -290,7 +290,7 @@ ffd27ab2c0cb1bc0c812ae6bfc981b5a *man/mrs_data2vec.Rd
 ef01427a3096981aa02a9a55d72d51ae *man/n2coord.Rd
 6a026a53d2890d86655b987b0f36b7b5 *man/nifti_flip_lr.Rd
 5836b27bd90eb2f071c630c4c9b92fb1 *man/one_page_pdf.Rd
-43e12a70c105bdfe7f65d17f28be8ae3 *man/ortho3.Rd
+3e02010413f0ae1a24b7ed75e351db4f *man/ortho3.Rd
 12c82cd40f57b3ffc67bf3b9592fb03e *man/ortho3_inter.Rd
 2be1313026004ba2d4c5f464c21640d9 *man/peak_info.Rd
 5bbfd0860f213fb29bc96fd65ff8086e *man/pg_extrap_xy.Rd
@@ -439,10 +439,10 @@ a544f4e1e1567e03254f515a369aec88 *man/zf.Rd
 69b290bff80b74e0be0fa1fe262dc5ca *src/lsei.f
 4d2f1ffad947b47fdad0496a8df44f9b *src/pnnls.f
 4cf8032359d648921008af5dd818c197 *tests/testthat.R
-dff476de1a1b7d845e4b3d2982b37098 *tests/testthat/abfit_res_coarse.rds
-07b99920b0c50485cfb867f3e280a5db *tests/testthat/abfit_res_default.rds
-232d0cd96f77de483a074bd11cdc3b3d *tests/testthat/abfit_res_fine.rds
-e94e6b7ec0bbc13bd481c9d6cb266a99 *tests/testthat/abfit_res_no_optim.rds
+7a4ee71eab6eaf646f82846623f2e881 *tests/testthat/abfit_res_coarse.rds
+c35c721cfd0adcc048083d27fe2774dc *tests/testthat/abfit_res_default.rds
+c55dbc4eef02c134b3d6624112316838 *tests/testthat/abfit_res_fine.rds
+b86cd4576df4a515f88badeb32dd6b98 *tests/testthat/abfit_res_no_optim.rds
 3ee7f5461a40f46f23e941186bddd985 *tests/testthat/abfit_sim_mrs_data.rds
 06e2107723c4eeb827b19584a81a2627 *tests/testthat/abfit_sim_res.rds
 b844512cd1eeab02b0d66a03e85c9266 *tests/testthat/def_basis.rds
