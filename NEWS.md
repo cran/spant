@@ -1,3 +1,14 @@
+# spant 3.1.0
+* Tentative implementation of a standard single voxel MRS processing pipeline
+function: fit_svs.
+* spant user guide has been added to the project: 
+https://spantdoc.wilsonlab.co.uk/
+* Implemented basis caching for sim_basis.
+* scale_amp_molar function has been depreciated. Please use scale_amp_legacy
+for LCModel style concentration scaling instead.
+* Assumed T1 and T2 relaxation values for molal concentration scaling have been
+updated. See the user guide for details.
+
 # spant 2.24.0
 * Added argument to adjust the legend font size in ortho3 function.
 * Improved metabolite simulation performance thanks to the expm package recently

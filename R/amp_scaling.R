@@ -140,9 +140,66 @@ scale_amp_molal <- function(fit_result, ref_data, te, tr, water_t1, water_t2,
   
   return(fit_result)
 }
+
+#' Apply water reference scaling to a fitting results object to yield metabolite 
+#' quantities in units of "mmol per Kg wet weight".
+#' 
+#' See the LCModel manual (section 10.2) on water-scaling for details on the
+#' assumptions and relevant references. Use this type of concentration scaling
+#' to compare fit results with LCModel and TARQUIN defaults. Otherwise
+#' scale_amp_molal_pvc is the preferred method. Note, the LCModel manual 
+#' (section 1.3) states: 
+#' 
+#' "Concentrations should be labelled 'mmol per Kg wet weight'. We use the
+#' shorter (incorrect) abbreviation mM. The actual mM is the mmol per Kg wet
+#' weight multiplied by the specific gravity of the tissue, typically 1.04 in 
+#' brain."
+#' 
+#' @param fit_result a result object generated from fitting.
+#' @param ref_data water reference MRS data object.
+#' @param w_att water attenuation factor (default = 0.7). Assumes water T2 of
+#' 80ms and a TE = 30 ms. exp(-30ms / 80ms) ~ 0.7.
+#' @param w_conc assumed water concentration (default = 35880). Default value
+#' corresponds to typical white matter. Set to 43300 for gray matter, and 55556 
+#' for phantom measurements.
+#' @param ... additional arguments to get_td_amp function.
+#' @return a \code{fit_result} object with a rescaled results table.
+#' @export
+scale_amp_legacy <- function(fit_result, ref_data, w_att = 0.7, w_conc = 35880,
+                                ...) {
+  
+  # check if res_tab_unscaled exists, and if not create it
+  if (is.null(fit_result$res_tab_unscaled)) {
+    fit_result$res_tab_unscaled <- fit_result$res_tab
+  } else {
+    fit_result$res_tab <- fit_result$res_tab_unscaled
+  }
+  
+  w_amp <- as.numeric(get_td_amp(ref_data, ...))
+  
+  # if there is only one water ref amp, extend if needed, eg for fMRS
+  if ((length(w_amp) == 1) & (nrow(fit_result$res_tab) > 1)) {
+    w_amp <- rep(w_amp, nrow(fit_result$res_tab)) 
+  }
+  
+  if (length(w_amp) != nrow(fit_result$res_tab)) {
+    stop("Mismatch between fit result and reference data.")
+  }
+  
+  fit_result$res_tab$w_amp <- w_amp
+  
+  amp_cols <- fit_result$amp_cols
+  ws_cols <- 6:(5 + amp_cols * 2)
+  
+  fit_result$res_tab[, ws_cols] <- (fit_result$res_tab[, ws_cols] * w_att *
+                                    w_conc / w_amp)
+    
+  fit_result
+}
   
 #' Apply water reference scaling to a fitting results object to yield metabolite 
-#' quantities in millimolar (mM) units (mol / Litre of tissue).
+#' quantities in millimolar (mM) units (mol / Litre of tissue). This function is
+#' depreciated, please use scale_amp_legacy instead.
 #' 
 #' See the LCModel manual (section 10.2) on water-scaling for details on the
 #' assumptions and relevant references. Use this type of concentration scaling
@@ -165,6 +222,8 @@ scale_amp_molar <- function(fit_result, ref_data, w_att = 0.7, w_conc = 35880,
   # if (!identical(dim(fit_result$data$data)[2:6], dim(ref_data$data)[2:6])) {
   #   stop("Mismatch between fit result and reference data dimensions.")
   # }
+  
+  warning("Function name (scale_amp_molar) is missleading and has been replaced with scale_amp_legacy.")
   
   # check if res_tab_unscaled exists, and if not create it
   if (is.null(fit_result$res_tab_unscaled)) {
@@ -289,30 +348,45 @@ scale_amp_ratio_value <- function(fit_result, value) {
 }
 
 get_corr_factor <- function(te, tr, B0, gm_vol, wm_vol, csf_vol) {
-  # Correction factor calcualted according to the method of Gasparovic et al (MRM 55:1219-1226 2006)
-  # NOTE - gives concs as Mol/kg of water NOT Mol/liter of tissue like default LCM/TQN analysis.
-  if ((B0 == 3.0) | (B0 == 2.9)) {
-    # Wanasapura values given in Harris paper
-    t1_gm    <- 1.331
-    t2_gm    <- 0.110
-    t1_wm    <- 0.832
-    t2_wm    <- 0.0792
-    t1_csf   <- 3.817
-    t2_csf   <- 0.503
-    t1_metab <- 1.15
-    t2_metab <- 0.3
-  } else if (B0 == 1.5) {
-    # values from Gasparovic 2006 MRM paper
-    t1_gm    <- 1.304
-    t2_gm    <- 0.093
-    t1_wm    <- 0.660
-    t2_wm    <- 0.073
-    t1_csf   <- 2.93
-    t2_csf   <- 0.23
-    t1_metab <- 1.15
-    t2_metab <- 0.3
+  # Correction factor calculated according to the method of Gasparovic et al
+  # (MRM 55:1219-1226 2006)
+  # see online docs for references to these numbers
+  
+  if (B0 == 1.5) {
+    t1_gm    <- 1.304 # Gasparovic et al, page 1223
+    t2_gm    <- 0.093 # Gasparovic et al, page 1223
+    t1_wm    <- 0.660 # Gasparovic et al, page 1223
+    t2_wm    <- 0.073 # Gasparovic et al, page 1223
+    t1_csf   <- 2.39  # Ibrahim et al, Abstract
+    t2_csf   <- 0.23  # Ibrahim et al, Abstract
+    t1_metab <- 1.153 # Gasparovic et al, page 1223
+                      # (1.28+1.09+1.09)/3
+    t2_metab <- 0.347 # Gasparovic et al, page 1223
+                      # (0.34+0.35+0.35)/3
+  } else if ((B0 == 3.0) | (B0 == 2.9)) {
+    t1_gm    <- 1.331  # Wansapura et al, Table 7
+    t2_gm    <- 0.110  # Wansapura et al, Table 2
+    t1_wm    <- 0.832  # Wansapura et al, Table 7
+    t2_wm    <- 0.0796 # Wansapura et al, Table 2
+    t1_csf   <- 3.817  # Lu et at, Discussion
+    t2_csf   <- 0.503  # Piechnik et al, Table 1
+    t1_metab <- 1.317  # Mlynarik et al, Table 1 
+                       # (1.47+1.46+1.30+1.35+1.24+1.08)/6
+    t2_metab <- 0.207  # Mlynarik et al, Table 2
+                       # (247+152+207+295+156+187)/6000
+  } else if (B0 == 7.0) {
+    t1_gm    <- 2.132 # Rooney et al, Table 1
+    t2_gm    <- 0.050 # Bartha et al, Table 1, LASER
+    t1_wm    <- 1.220 # Rooney et al, Table 1
+    t2_wm    <- 0.055 # Bartha et al, Table 1, LASER
+    t1_csf   <- 4.425 # Rooney et al, Table 1
+    t2_csf   <- 1.050 # Spijkerman et al, supp. materials S3, 1x1x4
+    t1_metab <- 1.583 # Li et al, Table 1
+                      # (1.24+1.78+1.73)/3
+    t2_metab <- 0.141 # Li et al, Table 1
+                      # (131+121+170)/3000
   } else {
-    stop("Error. Relaxation values not available for this field strength.")
+    warning("Error. Relaxation values not available for this field strength. Assuming values for 3 Telsa.")
   }
   
   # MR-visible water densities
@@ -333,12 +407,7 @@ get_corr_factor <- function(te, tr, B0, gm_vol, wm_vol, csf_vol) {
   f_csf <- csf_vol * csf_vis / 
           (gm_vol * gm_vis + wm_vol * wm_vis + csf_vol * csf_vis)
   
-  # This might give the result in Mol/kg?
-  # f_gm  <- gm_vol  * gm_vis   / ( gm_vol + wm_vol + csf_vol )
-  # f_wm  <- wm_vol  * wm_vis   / ( gm_vol + wm_vol + csf_vol )
-  # f_csf <- csf_vol * csf_vis  / ( gm_vol + wm_vol + csf_vol )
-  
-  # Relaxtion attenuation factors
+  # Relaxation attenuation factors
   R_h2o_gm  <- exp(-te / t2_gm)    * (1.0 - exp(-tr / t1_gm))
   R_h2o_wm  <- exp(-te / t2_wm)    * (1.0 - exp(-tr / t1_wm))
   R_h2o_csf <- exp(-te / t2_csf)   * (1.0 - exp(-tr / t1_csf))
