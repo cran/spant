@@ -2,7 +2,7 @@
 #' 
 #' Note this function is still under development and liable to changes.
 #' 
-#' @param metab path or mrs_data object containing MRS metabolite data.
+#' @param input path or mrs_data object containing MRS data.
 #' @param w_ref path or mrs_data object containing MRS water reference data.
 #' @param output_dir directory path to output fitting results.
 #' @param external_basis precompiled basis set object to use for analysis.
@@ -15,7 +15,7 @@
 #' following values : "press", "press_ideal", "press_shaped", "steam" or
 #' "slaser". If "press" then "press_ideal" will be assumed unless the magnetic
 #' field is stronger that 2.8 Tesla, "press_shaped" will be assumed for 2.9 
-#' Tesla and above. 
+#' Tesla and above.
 #' @param TE metabolite mrs data echo time in seconds. If not supplied this will
 #' be guessed from the metab data file.
 #' @param TR metabolite mrs data repetition time in seconds. If not supplied
@@ -35,15 +35,16 @@
 #' @param dfp_corr perform dynamic frequency and phase correction using the RATS
 #' method.
 #' @param output_ratio optional string to specify a metabolite ratio to output.
-#' Defaults to "tCr" and multiple metabolites may be specified for multiple
-#' outputs. Set as NULL to omit.
+#' Defaults to "tCr". Multiple metabolites may be specified for multiple
+#' outputs. Set to NA to omit.
 #' @param ecc option to perform water reference based eddy current correction,
 #' defaults to FALSE.
 #' @param hsvd_width set the width of the HSVD filter in Hz. Note the applied
 #' width is between -width and +width Hz, with 0 Hz being defined at the centre
 #' of the spectral width. Default is disabled (set to NULL), 30 Hz is a
 #' reasonable value.
-#' @param fit_opts options to pass to ABfit.
+#' @param fit_method can be "ABFIT-REG" or "LCMODEL. Defaults to "ABFIT-REG".
+#' @param fit_opts options to pass to the fitting method.
 #' @param fit_subset specify a subset of dynamics to analyse, for example
 #' 1:16 would only fit the first 16 dynamic scans.
 #' @param legacy_ws perform and output legacy water scaling compatible with
@@ -62,31 +63,49 @@
 #' metabolite levels, eg c("tNAA", "tNAA/tCr", "tNAA/tCho", "Lac/tNAA").
 #' @param dyn_av_block_size perform temporal averaging with the specified block
 #' size. Defaults to NULL, eg average across all dynamic scans.
-#' @param dyn_av_scheme a numerical vector of sequential integers starting at 1,
+#' @param dyn_av_scheme a numeric vector of sequential integers (starting at 1),
 #' with the same length as the number of dynamic scans in the metabolite data.
 #' For example: c(1, 1, 2, 1, 1, 3, 1, 1).
+#' @param dyn_av_scheme_file a file path containing a single column of
+#' sequential integers (starting at 1) with the same length as the number of
+#' dynamic scans in the metabolite data. File may be formatted as .xlsx, .xls,
+#' text or csv format.
+#' @param lcm_bin_path set the path to LCModel binary.
+#' @param plot_ppm_xlim plotting ppm axis limits in the html results.
+#' results.
 #' @param verbose output potentially useful information.
 #' @examples
 #' metab <- system.file("extdata", "philips_spar_sdat_WS.SDAT",
 #'                      package = "spant")
 #' w_ref <- system.file("extdata", "philips_spar_sdat_W.SDAT",
 #'                      package = "spant")
+#' out_dir <- file.path("~", "fit_svs_result")
 #' \dontrun{
-#' fit_result <- svs_1h_brain_analysis(metab, w_ref, "fit_res_dir")
+#' fit_result <- fit_svs(metab, w_ref, out_dir)
 #' }
 #' @export
-fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
+fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
                     external_basis = NULL, p_vols = NULL, format = NULL,
                     pul_seq = NULL, TE = NULL, TR = NULL, TE1 = NULL,
                     TE2 = NULL, TE3 = NULL, TM = NULL, append_basis = NULL,
                     remove_basis = NULL, pre_align = TRUE, dfp_corr = TRUE,
-                    output_ratio = "tCr", ecc = FALSE, hsvd_width = NULL,
-                    fit_opts = NULL, fit_subset = NULL,  legacy_ws = FALSE,
-                    w_att = 0.7, w_conc = 35880, use_basis_cache = "auto",
-                    summary_measures = NULL, dyn_av_block_size = NULL,
-                    dyn_av_scheme = NULL, verbose = FALSE) {
+                    output_ratio = NULL, ecc = FALSE, hsvd_width = NULL,
+                    fit_method = NULL, fit_opts = NULL, fit_subset = NULL,
+                    legacy_ws = FALSE, w_att = 0.7, w_conc = 35880,
+                    use_basis_cache = "auto", summary_measures = NULL,
+                    dyn_av_block_size = NULL, dyn_av_scheme = NULL,
+                    dyn_av_scheme_file = NULL, lcm_bin_path = NULL,
+                    plot_ppm_xlim = NULL, verbose = FALSE) {
   
-  argg <- c(as.list(environment()))
+  argg  <- c(as.list(environment()))
+  
+  metab <- input
+  
+  if (!is.null(dyn_av_scheme) & !is.null(dyn_av_scheme_file)) {
+    print(dyn_av_scheme)
+    print(dyn_av_scheme_file)
+    stop("dyn_av_scheme and dyn_av_scheme_file options cannot both be set. Use one or the other.")
+  }
   
   if (!is.null(external_basis) & !is.null(append_basis)) {
     stop("external_basis and append_basis options cannot both be set. Use one or the other.")
@@ -100,6 +119,10 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
     stop("dyn_av_block_size and dyn_av_scheme options cannot both be set. Use one or the other.")
   }
   
+  if (!is.null(dyn_av_block_size) & !is.null(dyn_av_scheme_file)) {
+    stop("dyn_av_block_size and dyn_av_scheme_file options cannot both be set. Use one or the other.")
+  }
+  
   # read the data file if not already an mrs_data object
   if (class(metab)[[1]] == "mrs_data") {
     if (is.null(output_dir)) {
@@ -107,6 +130,7 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
     }
   } else {
     metab_path <- metab
+    if (verbose) cat(paste0("Reading MRS input data : ", metab,"\n"))
     metab      <- read_mrs(metab, format = format)
     if (is.null(output_dir)) {
       output_dir <- gsub("\\.", "_", basename(metab_path))
@@ -144,7 +168,11 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
   }
   
   # create the output dir if it doesn't exist
-  if(!dir.exists(output_dir)) dir.create(output_dir)
+  if(!dir.exists(output_dir)) {
+    dir.create(output_dir)
+  } else {
+    warning(paste0("Output directory already exists : ", output_dir))
+  }
   
   # try to get TE and TR parameters from the data if not passed in
   if (is.null(TR)) TR <- tr(metab)
@@ -188,12 +216,26 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
   
   if (!exists("metab_post_dfp_corr")) metab_post_dfp_corr <- NULL
   
+  # read the dynamic averaging scheme from a file if specified
+  if (!is.null(dyn_av_scheme_file)) {
+    file_ext <- tools::file_ext(dyn_av_scheme_file)
+    if (file_ext == "xls" | file_ext == "xlsx") {
+      scheme_tab <- suppressMessages(readxl::read_excel(dyn_av_scheme_file,
+                                     col_names = FALSE, col_types = "numeric"))
+      dyn_av_scheme <- as.integer(scheme_tab[[1]])
+    } else {
+      dyn_av_scheme <- as.integer(utils::read.csv(dyn_av_scheme_file,
+                                                  header = FALSE)[[1]])
+    }
+  }
+  
   # take the mean of the metabolite data
   if (!is.null(dyn_av_block_size)) {
     metab <- mean_dyn_blocks(metab, dyn_av_block_size)
   } else if (!is.null(dyn_av_scheme)) {
     if (length(dyn_av_scheme) != Ndyns(metab)) {
-      stop("dyn_av_scheme is the wrong length")
+      stop(paste0("dyn_av_scheme is the wrong length. Currently : ",
+                  length(dyn_av_scheme),", should be : ", Ndyns(metab)))
     }
     dyn_av_scheme <- as.integer(dyn_av_scheme)
     max_dyn       <- max(dyn_av_scheme)
@@ -240,7 +282,10 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
     # option to remove signals
     if (!is.null(remove_basis)) {
         inds <- grep(remove_basis, mol_list_chars)
-        if (length(inds) == 0) stop("No signals matching remove_basis found.")
+        if (length(inds) == 0) {
+          print(mol_list_chars)
+          stop("No signals (as listed above) matching remove_basis found.")
+        }
         mol_list_chars <- mol_list_chars[-inds]
     }
     
@@ -306,7 +351,39 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
     basis <- external_basis
   }
   
-  if (is.null(fit_opts)) fit_opts <- abfit_reg_opts()
+  # check the fit_method is sane
+  if (!is.null(fit_method)) {
+    fit_method <- toupper(fit_method)
+    allowed <- c("ABFIT-REG", "LCMODEL")
+    if (!(fit_method %in% allowed)) {
+      print(allowed)
+      stop("Error, incorrect fit method, must be one of the above.")
+    }
+  }
+  
+  if (is.null(fit_method)) {
+    fit_method <- "ABFIT"
+    if (is.null(fit_opts)) fit_opts <- abfit_reg_opts()
+  } else {
+    if (fit_method == "ABFIT-REG") {
+      fit_method <- "ABFIT"
+      if (is.null(fit_opts)) fit_opts <- abfit_reg_opts()
+    }
+  }
+  
+  # ask LCModel not to simulate any additional signals by defaults
+  if (fit_method == "LCMODEL" & is.null(fit_opts)) fit_opts <- c("NSIMUL=0")
+  
+  if (is.null(output_ratio)) {
+    if (fit_method == "LCMODEL") {
+      output_ratio <- "Cr.PCr"
+    } else {
+      output_ratio <- "tCr"
+    }
+  }
+  
+  # output_ratio of NA means we only want unscaled values
+  if (anyNA(output_ratio)) output_ratio <- NULL
   
   # filter residual water
   if (!is.null(hsvd_width)) {
@@ -314,8 +391,21 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
     metab <- hsvd_filt(metab, xlim = c(-hsvd_width, hsvd_width))
   }
   
+  # set path to the LCModel binary
+  if (!is.null(lcm_bin_path)) set_lcm_cmd(lcm_bin_path)
+  
+  # water referencing is performed internally by LCModel
+  if (fit_method == "LCMODEL" & w_ref_available) {
+    w_ref_fit <- w_ref 
+  } else {
+    w_ref_fit <- NULL
+  }
+  
   # fitting
-  fit_res <- fit_mrs(metab, basis = basis, opts = fit_opts)
+  if (verbose) cat("Starting fitting.\n")
+  fit_res <- fit_mrs(metab = metab, basis = basis, method = fit_method,
+                     w_ref = w_ref_fit, opts = fit_opts)
+  if (verbose) cat("Fitting complete.\n")
     
   phase_offset <- fit_res$res_tab$phase
   shift_offset <- fit_res$res_tab$shift
@@ -328,7 +418,8 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
   # output ratio results if requested 
   if (!is.null(output_ratio)) {
     for (output_ratio_element in output_ratio) {
-      fit_res_rat <- scale_amp_ratio(fit_res, output_ratio_element)
+      fit_res_rat <- scale_amp_ratio(fit_res, output_ratio_element,
+                                     use_mean_value = TRUE)
       
       res_tab_ratio <- fit_res_rat$res_tab
       file_out <- file.path(output_dir, paste0("fit_res_", output_ratio_element,
@@ -343,17 +434,26 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
   if (w_ref_available) {
     # assume 100% white matter unless told otherwise
     if (is.null(p_vols)) p_vols <- c(WM = 100, GM = 0, CSF = 0)
-    fit_res_molal <- scale_amp_molal_pvc(fit_res, w_ref, p_vols, TE, TR)
-    res_tab_molal <- fit_res_molal$res_tab
-    file_out <- file.path(output_dir, "fit_res_molal_conc.csv")
-    utils::write.csv(res_tab_molal, file_out)
-    if (legacy_ws) {
-      fit_res_legacy <- scale_amp_legacy(fit_res, w_ref, w_att, w_conc)
-      res_tab_legacy <- fit_res_legacy$res_tab
-      file_out <- file.path(output_dir, "fit_res_legacy_conc.csv")
-      utils::write.csv(res_tab_legacy, file_out)
+    
+    if (fit_method != "LCMODEL") {
+      fit_res_molal <- scale_amp_molal_pvc(fit_res, w_ref, p_vols, TE, TR)
+      res_tab_molal <- fit_res_molal$res_tab
+      file_out <- file.path(output_dir, "fit_res_molal_conc.csv")
+      utils::write.csv(res_tab_molal, file_out)
+      if (legacy_ws) {
+        fit_res_legacy <- scale_amp_legacy(fit_res, w_ref, w_att, w_conc)
+        res_tab_legacy <- fit_res_legacy$res_tab
+        file_out <- file.path(output_dir, "fit_res_legacy_conc.csv")
+        utils::write.csv(res_tab_legacy, file_out)
+      } else {
+        res_tab_legacy <- NULL
+      }
     } else {
-      res_tab_legacy <- NULL
+      fit_res_molal <- scale_amp_molar2molal_pvc(fit_res, p_vols, TE, TR)
+      res_tab_molal <- fit_res_molal$res_tab
+      file_out <- file.path(output_dir, "fit_res_molal_conc.csv")
+      utils::write.csv(res_tab_molal, file_out)
+      res_tab_legacy <- NULL 
     }
   } else {
     res_tab_legacy <- NULL 
@@ -361,15 +461,18 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
   }
   
   # add water amplitude and PVC info to the unscaled output
-  if (w_ref_available) {
+  if (w_ref_available & (fit_method != "LCMODEL")) {
     res_tab_unscaled <- cbind(res_tab_unscaled, w_amp = res_tab_molal$w_amp,
                               GM_vol = res_tab_molal$GM_vol,
                               WM_vol = res_tab_molal$WM_vol,
                               CSF_vol = res_tab_molal$CSF_vol,
                               GM_frac = res_tab_molal$GM_frac)
   }
-  utils::write.csv(res_tab_unscaled, file.path(output_dir,
-                                               "fit_res_unscaled.csv"))
+  
+  if (fit_method != "LCMODEL") {
+    utils::write.csv(res_tab_unscaled, file.path(output_dir,
+                                                 "fit_res_unscaled.csv"))
+  }
   
   # prepare dynamic data for plotting
   if (Ndyns(metab_pre_dfp_corr) > 1) {
@@ -414,13 +517,15 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
   results <- list(fit_res = fit_res, argg = argg,
                   w_ref_available = w_ref_available,
                   w_ref = w_ref,
+                  output_ratio = output_ratio,
                   res_tab_unscaled = res_tab_unscaled,
                   res_tab_ratio = res_tab_ratio,
                   res_tab_legacy = res_tab_legacy,
                   res_tab_molal = res_tab_molal,
                   dyn_data_uncorr = dyn_data_uncorr,
                   dyn_data_corr = dyn_data_corr,
-                  summary_tab = summary_tab) 
+                  summary_tab = summary_tab,
+                  plot_ppm_xlim = plot_ppm_xlim)
   
   if (Ndyns(metab) == 1) {
     rmd_file <- system.file("rmd", "svs_report.Rmd", package = "spant")
@@ -430,8 +535,11 @@ fit_svs <- function(metab, w_ref = NULL, output_dir = NULL,
   
   rmd_out_f <- file.path(tools::file_path_as_absolute(output_dir), "report")
   
+  if (verbose) cat("Generating html report.\n")
   rmarkdown::render(rmd_file, params = results, output_file = rmd_out_f,
                     quiet = !verbose)
+  
+  if (verbose) cat("fit_svs finished.\n")
   
   return(fit_res)
 }
@@ -552,7 +660,6 @@ parse_summary <- function(measures, fit_res, units) {
 
 #' GUI interface for the standard SVS 1H brain analysis pipeline, this is a 
 #' work in progress, and not ready for serious use.
-#' @export
 fit_svs_gui <-function() {
   
   run_fit <- function() {

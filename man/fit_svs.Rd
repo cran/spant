@@ -5,7 +5,7 @@
 \title{Standard SVS 1H brain analysis pipeline.}
 \usage{
 fit_svs(
-  metab,
+  input,
   w_ref = NULL,
   output_dir = NULL,
   external_basis = NULL,
@@ -22,9 +22,10 @@ fit_svs(
   remove_basis = NULL,
   pre_align = TRUE,
   dfp_corr = TRUE,
-  output_ratio = "tCr",
+  output_ratio = NULL,
   ecc = FALSE,
   hsvd_width = NULL,
+  fit_method = NULL,
   fit_opts = NULL,
   fit_subset = NULL,
   legacy_ws = FALSE,
@@ -34,11 +35,14 @@ fit_svs(
   summary_measures = NULL,
   dyn_av_block_size = NULL,
   dyn_av_scheme = NULL,
+  dyn_av_scheme_file = NULL,
+  lcm_bin_path = NULL,
+  plot_ppm_xlim = NULL,
   verbose = FALSE
 )
 }
 \arguments{
-\item{metab}{path or mrs_data object containing MRS metabolite data.}
+\item{input}{path or mrs_data object containing MRS data.}
 
 \item{w_ref}{path or mrs_data object containing MRS water reference data.}
 
@@ -88,8 +92,8 @@ precompiled basis sets.}
 method.}
 
 \item{output_ratio}{optional string to specify a metabolite ratio to output.
-Defaults to "tCr" and multiple metabolites may be specified for multiple
-outputs. Set as NULL to omit.}
+Defaults to "tCr". Multiple metabolites may be specified for multiple
+outputs. Set to NA to omit.}
 
 \item{ecc}{option to perform water reference based eddy current correction,
 defaults to FALSE.}
@@ -99,7 +103,9 @@ width is between -width and +width Hz, with 0 Hz being defined at the centre
 of the spectral width. Default is disabled (set to NULL), 30 Hz is a
 reasonable value.}
 
-\item{fit_opts}{options to pass to ABfit.}
+\item{fit_method}{can be "ABFIT-REG" or "LCMODEL. Defaults to "ABFIT-REG".}
+
+\item{fit_opts}{options to pass to the fitting method.}
 
 \item{fit_subset}{specify a subset of dynamics to analyse, for example
 1:16 would only fit the first 16 dynamic scans.}
@@ -126,9 +132,19 @@ metabolite levels, eg c("tNAA", "tNAA/tCr", "tNAA/tCho", "Lac/tNAA").}
 \item{dyn_av_block_size}{perform temporal averaging with the specified block
 size. Defaults to NULL, eg average across all dynamic scans.}
 
-\item{dyn_av_scheme}{a numerical vector of sequential integers starting at 1,
+\item{dyn_av_scheme}{a numeric vector of sequential integers (starting at 1),
 with the same length as the number of dynamic scans in the metabolite data.
 For example: c(1, 1, 2, 1, 1, 3, 1, 1).}
+
+\item{dyn_av_scheme_file}{a file path containing a single column of
+sequential integers (starting at 1) with the same length as the number of
+dynamic scans in the metabolite data. File may be formatted as .xlsx, .xls,
+text or csv format.}
+
+\item{lcm_bin_path}{set the path to LCModel binary.}
+
+\item{plot_ppm_xlim}{plotting ppm axis limits in the html results.
+results.}
 
 \item{verbose}{output potentially useful information.}
 }
@@ -140,7 +156,8 @@ metab <- system.file("extdata", "philips_spar_sdat_WS.SDAT",
                      package = "spant")
 w_ref <- system.file("extdata", "philips_spar_sdat_W.SDAT",
                      package = "spant")
+out_dir <- file.path("~", "fit_svs_result")
 \dontrun{
-fit_result <- svs_1h_brain_analysis(metab, w_ref, "fit_res_dir")
+fit_result <- fit_svs(metab, w_ref, out_dir)
 }
 }

@@ -6,6 +6,7 @@ params:
   argg: ""
   w_ref_available: ""
   w_ref: ""
+  output_ratio: ""
   res_tab_unscaled: ""
   res_tab_ratio: ""    
   res_tab_legacy: ""
@@ -13,6 +14,7 @@ params:
   dyn_data_uncorr: ""
   dyn_data_corr: ""
   summary_tab: ""
+  plot_ppm_xlim: ""
 ---
 
 ```{r setup, include=FALSE}
@@ -25,21 +27,26 @@ knitr::opts_chunk$set(echo = FALSE)
 ## Fit plots {.tabset}
 
 ### Standard
-```{r, fig.width=7, fig.height=6}
-plot(params$fit_res)
+```{r fitplot, fig.width=7, fig.height=6}
+plot(params$fit_res, xlim = plot_ppm_xlim)
 ```
 
 ### Stackplot
-```{r, fig.width=7, fig.height=8}
-stackplot(params$fit_res, y_offset = 3, combine_lipmm = TRUE, labels = TRUE)
+```{r stackplot, fig.width=7, fig.height=8}
+stackplot(params$fit_res, y_offset = 3, combine_lipmm = TRUE, labels = TRUE,
+          xlim = params$plot_ppm_xlim)
 ```
 
-```{r, results = 'asis', fig.width=7, fig.height=6}
-basis_names <- params$fit_res$basis$names
+```{r basisplot, results = 'asis', fig.width=7, fig.height=6}
+# basis_names <- params$fit_res$basis$names
+basis_names <- colnames(params$fit_res$fits[[1]][-1:-4])
 for (n in 1:length(basis_names)) {
+  #if (basis_names[n] %in% colnames(params$fit_res$fits[[1]])) {
   cat("\n### ", basis_names[n], "\n", sep = "")
-  plot(params$fit_res, plot_sigs = basis_names[n])
+  plot(params$fit_res, plot_sigs = basis_names[n], main = basis_names[n], 
+       xlim = params$plot_ppm_xlim)
   cat("\n")
+  #}
 }
 ```
 
@@ -53,13 +60,14 @@ if (!is.null(params$summary_tab)) {
   
   boot_opts <- c("striped", "hover", "condensed")
   kableExtra::kable_styling(kable_table, full_width = FALSE, position = "left",
-                          bootstrap_options = boot_opts)
+                            bootstrap_options = boot_opts)
 }
 ```
 
 ## Results table
 ```{r}
-ratio_str   <- params$argg$output_ratio
+# ratio_str   <- params$argg$output_ratio
+ratio_str   <- params$output_ratio[1]
 if (params$w_ref_available) {
   col_names <- c("amps", "CI95")
   res_tab   <- sv_res_table(params$res_tab_molal, format_out = TRUE)
@@ -124,10 +132,18 @@ if (!is.null(dyn_data_uncorr)) {
   cat("## Dynamic plots {.tabset}\n")
   if (!is.null(dyn_data_corr)) {
     cat("### Spectrogram with dynamic correction\n")
-    image(dyn_data_corr, xlim = c(4, 0.5))
+    if (is.null(params$plot_ppm_xlim)) {
+      image(dyn_data_corr, xlim = c(4, 0.5))
+    } else {
+      image(dyn_data_corr, xlim = params$plot_ppm_xlim)
+    }
   }
   cat("\n\n### Spectrogram without dynamic correction\n")
-  image(dyn_data_uncorr, xlim = c(4, 0.5))
+  if (is.null(params$plot_ppm_xlim)) {
+    image(dyn_data_uncorr, xlim = c(4, 0.5))
+  } else {
+    image(dyn_data_uncorr, xlim = params$plot_ppm_xlim)
+  }
 }
 ```
 
@@ -135,12 +151,34 @@ if (!is.null(dyn_data_uncorr)) {
 
 ### Processed cropped
 ```{r, fig.width=7, fig.height=6}
-phase_offset <- params$fit_res$res_tab$phase
-shift_offset <- params$fit_res$res_tab$shift
-proc_spec <- phase(params$fit_res$data, phase_offset)
+if (!is.null(params$fit_res$res_tab$phase)) {
+  phase_offset <- params$fit_res$res_tab$phase
+} else {
+  phase_offset <- 0
+}
+
+if (!is.null(params$fit_res$res_tab$phi1)) {
+  phi1_offset <- params$fit_res$res_tab$phi1
+} else {
+  phi1_offset <- 0
+}
+
+if (!is.null(params$fit_res$res_tab$shift)) {
+  shift_offset <- params$fit_res$res_tab$shift
+} else {
+  shift_offset <- 0
+}
+
+proc_spec <- params$fit_res$data
+proc_spec <- phase(proc_spec, phase_offset, phi1_offset)
 proc_spec <- shift(proc_spec, shift_offset, units = "ppm")
 proc_spec <- zf(proc_spec)
-plot(proc_spec, xlim = c(4, 0.5))
+
+if (is.null(params$plot_ppm_xlim)) {
+  plot(proc_spec, xlim = c(4, 0.2))
+} else {
+  plot(proc_spec, xlim = params$plot_ppm_xlim)
+}
 ```
 
 ### Processed full
@@ -160,8 +198,23 @@ if (params$w_ref_available) {
 
 ## Diagnostics table
 ```{r}
-name  <- c("Spectral SNR")
-value <- round_dp(params$fit_res$res_tab$SNR, 2)
+name  <- NULL
+value <- NULL
+
+if (!is.null(params$fit_res$res_tab$SNR)) {
+  name  <- c(name, "Spectral signal to noise ratio")
+  value <- c(value, round_dp(params$fit_res$res_tab$SNR, 2))
+}
+
+if (!is.null(params$fit_res$res_tab$SRR)) {
+  name  <- c(name, "Spectral signal to residual ratio")
+  value <- c(value, round_dp(params$fit_res$res_tab$SRR, 2))
+}
+
+if (!is.null(params$fit_res$res_tab$FWHM)) {
+  name  <- c(name, "Spectral linewidth (ppm)")
+  value <- c(value, round_dp(params$fit_res$res_tab$FWHM, 4))
+}
 
 if (!is.null(params$fit_res$res_tab$tNAA_lw)) {
   name  <- c(name, "tNAA linewidth (ppm)")
@@ -193,20 +246,35 @@ if (!is.null(params$fit_res$res_tab$Cr_lw)) {
   value <- c(value, round_dp(params$fit_res$res_tab$Cr_lw, 4))
 }
 
+if (!is.null(params$fit_res$res_tab$phase)) {
+  name  <- c(name, "Zero-order phase (degrees)")
+  value <- c(value, round_dp(params$fit_res$res_tab$phase, 1))
+}
+
+if (!is.null(params$fit_res$res_tab$phi1)) {
+  name  <- c(name, "First-order phase (ms)")
+  value <- c(value, round_dp(params$fit_res$res_tab$phi1, 3))
+}
+
+if (!is.null(params$fit_res$res_tab$shift)) {
+  name  <- c(name, "Frequency offset (ppm)")
+  value <- c(value, round_dp(params$fit_res$res_tab$shift, 4))
+}
+
 if (params$w_ref_available) {
   name  <- c(name,  "Water amplitude", "Water suppression efficiency (%)")
   value <- c(value, format(params$res_tab_molal$w_amp),
              round_dp(params$res_tab_molal$ws_eff, 3))
 }
 
-name  <- c(name, "Fit quality number (FQN)", "Baseline effective d.f. per ppm",
-           "Lineshape asymmetry", "Spectral signal to residual ratio")
-value <- c(value, round_dp(params$fit_res$res_tab$FQN, 2),
-           round_dp(params$fit_res$res_tab$bl_ed_pppm, 2),
-           round_dp(params$fit_res$res_tab$asym, 2),
-           round_dp(params$fit_res$res_tab$SRR, 2))
-
-# value <- format(value, digits = 2, nsmall = 0, scientific = FALSE)
+if (params$fit_res$method == "ABFIT") {
+  name  <- c(name, "Fit quality number (FQN)",
+             "Baseline effective d.f. per ppm",
+             "Lineshape asymmetry")
+  value <- c(value, round_dp(params$fit_res$res_tab$FQN, 2),
+             round_dp(params$fit_res$res_tab$bl_ed_pppm, 2),
+             round_dp(params$fit_res$res_tab$asym, 2))
+}
 
 diag_tab <- data.frame(name, value)
 kableExtra::kable_styling(kableExtra::kbl(diag_tab, align = c("l", "r"),
