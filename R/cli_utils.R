@@ -1,22 +1,28 @@
 #' Install the spant command-line interface scripts to a system path.
+#'
+#' This should be run following each new install of spant to ensure consistency.
+#' Typical command line usage : sudo Rscript -e "spant::install_cli()"
 #' 
 #' @param path optional path to install the scripts. Defaults to : 
-#' "/usr/local/bin".
-#' 
+#' "/usr/local/bin". 
 #' @export
 install_cli <- function(path = NULL) {
   
-  if (is.null(path)) {
-    path <- "/usr/local/bin"
-  }
+  if (is.null(path)) path <- "/usr/local/bin"
   
   fit_svs_path <- file.path(path, "spant_fit_svs")
     
   package_fit_svs_path <- system.file('cli_scripts', 'spant_fit_svs',
                                       package = 'spant')
   
-  # copy script from package directory
-  file.copy(package_fit_svs_path, fit_svs_path, overwrite = TRUE)
+  # embed the spant version number into the cli script
+  script_txt <- readLines(package_fit_svs_path)
+  ver_line <- paste0("ver <- \"", utils::packageVersion("spant"), "\"")
+  script_txt <- c("#!/usr/bin/env Rscript --vanilla", "", ver_line, "",
+                  script_txt)
+  
+  # write to filesystem
+  write(script_txt, file = fit_svs_path)
   
   # make executable
   Sys.chmod(fit_svs_path, mode = "755")

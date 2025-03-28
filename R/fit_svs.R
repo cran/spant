@@ -5,7 +5,13 @@
 #' @param input path or mrs_data object containing MRS data.
 #' @param w_ref path or mrs_data object containing MRS water reference data.
 #' @param output_dir directory path to output fitting results.
+#' @param mri filepath or nifti object containing anatomical MRI data.
+#' @param mri_seg filepath or nifti object containing segmented MRI data.
 #' @param external_basis precompiled basis set object to use for analysis.
+#' @param append_external_basis append the external basis with the internally
+#' generated one. Useful for adding experimentally acquired baseline signals to
+#' internally simulated basis sets. Defaults to FALSE - meaning only signals 
+#' from the external basis will be used in analysis.
 #' @param p_vols a numeric vector of partial volumes expressed as percentages.
 #' Defaults to 100% white matter. A voxel containing 100% gray matter tissue
 #' would use : p_vols = c(WM = 0, GM = 100, CSF = 0).
@@ -43,6 +49,12 @@
 #' width is between -width and +width Hz, with 0 Hz being defined at the centre
 #' of the spectral width. Default is disabled (set to NULL), 30 Hz is a
 #' reasonable value.
+#' @param decimate option on decimate the data by a factor of 2 before analysis.
+#' Defaults to FALSE.
+#' @param trunc_fid_pts number of points to truncate the input data by in the
+#' time-domain. E.g. setting to 1024 will ensure data with more time-domain
+#' points will be truncated to a length of 1024. Defaults to NULL, where
+#' truncation is not performed.
 #' @param fit_method can be "ABFIT-REG" or "LCMODEL. Defaults to "ABFIT-REG".
 #' @param fit_opts options to pass to the fitting method.
 #' @param fit_subset specify a subset of dynamics to analyse, for example
@@ -73,6 +85,8 @@
 #' @param lcm_bin_path set the path to LCModel binary.
 #' @param plot_ppm_xlim plotting ppm axis limits in the html results.
 #' results.
+#' @param extra_output write extra output files for generating custom plots.
+#' Defaults to FALSE.
 #' @param verbose output potentially useful information.
 #' @examples
 #' metab <- system.file("extdata", "philips_spar_sdat_WS.SDAT",
@@ -84,18 +98,21 @@
 #' fit_result <- fit_svs(metab, w_ref, out_dir)
 #' }
 #' @export
-fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
-                    external_basis = NULL, p_vols = NULL, format = NULL,
-                    pul_seq = NULL, TE = NULL, TR = NULL, TE1 = NULL,
-                    TE2 = NULL, TE3 = NULL, TM = NULL, append_basis = NULL,
-                    remove_basis = NULL, pre_align = TRUE, dfp_corr = TRUE,
-                    output_ratio = NULL, ecc = FALSE, hsvd_width = NULL,
+fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
+                    mri_seg = NULL, external_basis = NULL,
+                    append_external_basis = FALSE, p_vols = NULL,
+                    format = NULL, pul_seq = NULL, TE = NULL, TR = NULL,
+                    TE1 = NULL, TE2 = NULL, TE3 = NULL, TM = NULL,
+                    append_basis = NULL, remove_basis = NULL, pre_align = TRUE,
+                    dfp_corr = TRUE, output_ratio = NULL, ecc = FALSE,
+                    hsvd_width = NULL, decimate = FALSE, trunc_fid_pts = NULL,
                     fit_method = NULL, fit_opts = NULL, fit_subset = NULL,
                     legacy_ws = FALSE, w_att = 0.7, w_conc = 35880,
                     use_basis_cache = "auto", summary_measures = NULL,
                     dyn_av_block_size = NULL, dyn_av_scheme = NULL,
                     dyn_av_scheme_file = NULL, lcm_bin_path = NULL,
-                    plot_ppm_xlim = NULL, verbose = FALSE) {
+                    plot_ppm_xlim = NULL, extra_output = FALSE,
+                    verbose = FALSE) {
   
   argg  <- c(as.list(environment()))
   
@@ -107,11 +124,11 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
     stop("dyn_av_scheme and dyn_av_scheme_file options cannot both be set. Use one or the other.")
   }
   
-  if (!is.null(external_basis) & !is.null(append_basis)) {
+  if (!is.null(external_basis) & !is.null(append_basis) & !append_external_basis) {
     stop("external_basis and append_basis options cannot both be set. Use one or the other.")
   }
   
-  if (!is.null(external_basis) & !is.null(remove_basis)) {
+  if (!is.null(external_basis) & !is.null(remove_basis) & !append_external_basis) {
     stop("external_basis and remove_basis options cannot both be set. Use one or the other.")
   }
   
@@ -121,6 +138,10 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
   
   if (!is.null(dyn_av_block_size) & !is.null(dyn_av_scheme_file)) {
     stop("dyn_av_block_size and dyn_av_scheme_file options cannot both be set. Use one or the other.")
+  }
+  
+  if (!is.null(mri_seg) & !is.null(p_vols)) {
+    warning("mri_seg and pvols options have both been set. Only p_vols will be used for partial volume correction calculation.")
   }
   
   # read the data file if not already an mrs_data object
@@ -134,6 +155,7 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
     metab      <- read_mrs(metab, format = format)
     if (is.null(output_dir)) {
       output_dir <- gsub("\\.", "_", basename(metab_path))
+      output_dir <- gsub("#", "_", output_dir)
       output_dir <- paste0(output_dir, "_results")
     }
   }
@@ -169,10 +191,26 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
   
   # create the output dir if it doesn't exist
   if(!dir.exists(output_dir)) {
-    dir.create(output_dir)
+    dir.create(output_dir, recursive = TRUE)
   } else {
     warning(paste0("Output directory already exists : ", output_dir))
   }
+  
+  # check the mri data if specified 
+  if (is.def(mri) & (!("niftiImage" %in% class(mri)))) {
+    mri <- readNifti(mri)
+  }
+  
+  # reorientate mri
+  if (is.def(mri)) RNifti::orientation(mri) <- "RAS"
+
+  # check the mri_seg data if specified 
+  if (is.def(mri_seg) & (!("niftiImage" %in% class(mri_seg)))) {
+    mri_seg <- readNifti(mri_seg)
+  }
+  
+  # reorientate mri_seg
+  if (is.def(mri_seg)) RNifti::orientation(mri_seg) <- "RAS"
   
   # try to get TE and TR parameters from the data if not passed in
   if (is.null(TR)) TR <- tr(metab)
@@ -193,6 +231,13 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
       metab <- coil_comb_res$metab
       w_ref <- coil_comb_res$ref
     }
+  }
+  
+  # decimate if specified
+  if (decimate) {
+    if (verbose) cat("Decimating data.\n")
+    metab <- decimate_mrs_fd(metab)
+    if (w_ref_available) w_ref <- decimate_mrs_fd(w_ref)
   }
   
   # extract a subset of dynamic scans if specified
@@ -250,7 +295,12 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
   }
  
   # take the mean of the water reference data
-  if (w_ref_available) w_ref <- mean_dyns(w_ref)
+  # if (w_ref_available) w_ref <- mean_dyns(w_ref)
+  
+  # extract the first dynamic of the water reference data
+  # better for Dinesh sLASER where the water peak can shift before and after
+  # the metabolite data collection
+  if (w_ref_available) w_ref <- get_dyns(w_ref, 1)
   
   # calculate the water suppression efficiency
   # the ratio of the residual water peak height
@@ -269,7 +319,7 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
   if (ecc & w_ref_available) metab <- ecc(metab, w_ref)
   
   # simulate a basis if needed
-  if (is.null(external_basis)) {
+  if (is.null(external_basis) | append_external_basis) {
     
     if (is.null(TE)) stop("Could not determine the sequence echo time. Please provide the TE argument.")
     
@@ -327,6 +377,10 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
       if (verbose) cat("Simulating shaped PRESS sequence.\n")
       pulse_file <- system.file("extdata", "press_refocus.pta",
                                 package = "spant")
+      # round B0 to 5 s.f. for effective basis caching
+      metab$ft <- signif(metab$ft, 5)
+      # regen mol_list with updated B0
+      mol_list <- get_mol_paras(mol_list_chars, ft = metab$ft)
       basis <- sim_basis(mol_list, acq_paras = metab,
                          pul_seq = seq_press_2d_shaped, TE1 = sim_paras$TE1,
                          TE2 = sim_paras$TE2, use_basis_cache = use_basis_cache,
@@ -347,8 +401,27 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
                          use_basis_cache = use_basis_cache, verbose = verbose)
     }
     if (verbose) print(basis)
-  } else {
-    basis <- external_basis
+  }
+  
+  if (!is.null(external_basis)) {
+    
+    if (!inherits(external_basis, "basis_set")) {
+      if (inherits(external_basis, "character")) {
+        # TODO - could make this a bit more flexible, eg read a directory of
+        # NIfTI MRS files if a dir name is passed, assume an MRS data file if
+        # extension isn't .BASIS or .basis...
+        external_basis <- read_basis(external_basis)
+      } else {
+        stop("Unrecognised exernal_basis object.")
+      }
+    }
+    
+    if (append_external_basis) {
+      external_basis <- resample_basis(external_basis, metab)
+      basis <- append_basis(basis, external_basis)
+    } else {
+      basis <- resample_basis(external_basis, metab)
+    }
   }
   
   # check the fit_method is sane
@@ -391,6 +464,17 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
     metab <- hsvd_filt(metab, xlim = c(-hsvd_width, hsvd_width))
   }
   
+  # truncate the FID if option is set
+  if (!is.null(trunc_fid_pts)) {
+    if (verbose) cat("Truncating FID.\n")
+    metab <- crop_td_pts(metab, end = trunc_fid_pts)
+    
+    if (w_ref_available) w_ref <- crop_td_pts(w_ref, end = trunc_fid_pts)
+    
+    basis_mrs <- crop_td_pts(basis2mrs_data(basis), end = trunc_fid_pts)
+    basis <- mrs_data2basis(basis_mrs, names = basis$names)
+  }
+  
   # set path to the LCModel binary
   if (!is.null(lcm_bin_path)) set_lcm_cmd(lcm_bin_path)
   
@@ -414,6 +498,22 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
   
   # keep unscaled results
   res_tab_unscaled <- fit_res$res_tab
+  
+  # assume 100% white matter unless told otherwise
+  if (is.null(p_vols) & is.null(mri_seg)) {
+    p_vols <- c(WM = 100, GM = 0, CSF = 0)
+  }
+  
+  if (is.null(p_vols) & !is.null(mri_seg)) {
+    # generate the svs voi in the segmented image space
+    voi_seg <- get_svs_voi(metab, mri_seg)   
+    
+    # calculate partial volumes
+    p_vols <- get_voi_seg(voi_seg, mri_seg)
+  }
+  
+  # add an "Other" component to p_vols if missing (to keep things consistent)
+  if (!is.null(p_vols)) if (!("Other" %in% names(p_vols))) p_vols["Other"] <- 0
  
   # output ratio results if requested 
   if (!is.null(output_ratio)) {
@@ -421,30 +521,30 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
       fit_res_rat <- scale_amp_ratio(fit_res, output_ratio_element,
                                      use_mean_value = TRUE)
       
+      fit_res_rat$res_tab <- append_p_vols(fit_res_rat$res_tab, p_vols)
+      
       res_tab_ratio <- fit_res_rat$res_tab
       file_out <- file.path(output_dir, paste0("fit_res_", output_ratio_element,
                                                "_ratio.csv"))
       
-      utils::write.csv(res_tab_ratio, file_out)
+      utils::write.csv(res_tab_ratio, file_out, row.names = FALSE)
     }
   } else {
     res_tab_ratio <- NULL  
   }
   
+  # perform water reference amplitude scaling
   if (w_ref_available) {
-    # assume 100% white matter unless told otherwise
-    if (is.null(p_vols)) p_vols <- c(WM = 100, GM = 0, CSF = 0)
-    
     if (fit_method != "LCMODEL") {
       fit_res_molal <- scale_amp_molal_pvc(fit_res, w_ref, p_vols, TE, TR)
       res_tab_molal <- fit_res_molal$res_tab
       file_out <- file.path(output_dir, "fit_res_molal_conc.csv")
-      utils::write.csv(res_tab_molal, file_out)
+      utils::write.csv(res_tab_molal, file_out, row.names = FALSE)
       if (legacy_ws) {
         fit_res_legacy <- scale_amp_legacy(fit_res, w_ref, w_att, w_conc)
         res_tab_legacy <- fit_res_legacy$res_tab
         file_out <- file.path(output_dir, "fit_res_legacy_conc.csv")
-        utils::write.csv(res_tab_legacy, file_out)
+        utils::write.csv(res_tab_legacy, file_out, row.names = FALSE)
       } else {
         res_tab_legacy <- NULL
       }
@@ -452,7 +552,7 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
       fit_res_molal <- scale_amp_molar2molal_pvc(fit_res, p_vols, TE, TR)
       res_tab_molal <- fit_res_molal$res_tab
       file_out <- file.path(output_dir, "fit_res_molal_conc.csv")
-      utils::write.csv(res_tab_molal, file_out)
+      utils::write.csv(res_tab_molal, file_out, row.names = FALSE)
       res_tab_legacy <- NULL 
     }
   } else {
@@ -460,18 +560,13 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
     res_tab_molal  <- NULL 
   }
   
-  # add water amplitude and PVC info to the unscaled output
-  if (w_ref_available & (fit_method != "LCMODEL")) {
-    res_tab_unscaled <- cbind(res_tab_unscaled, w_amp = res_tab_molal$w_amp,
-                              GM_vol = res_tab_molal$GM_vol,
-                              WM_vol = res_tab_molal$WM_vol,
-                              CSF_vol = res_tab_molal$CSF_vol,
-                              GM_frac = res_tab_molal$GM_frac)
-  }
+  # add PVC info to the unscaled output
+  res_tab_unscaled <- append_p_vols(res_tab_unscaled, p_vols)
   
   if (fit_method != "LCMODEL") {
     utils::write.csv(res_tab_unscaled, file.path(output_dir,
-                                                 "fit_res_unscaled.csv"))
+                                                 "fit_res_unscaled.csv"),
+                     row.names = FALSE)
   }
   
   # prepare dynamic data for plotting
@@ -525,7 +620,10 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
                   dyn_data_uncorr = dyn_data_uncorr,
                   dyn_data_corr = dyn_data_corr,
                   summary_tab = summary_tab,
-                  plot_ppm_xlim = plot_ppm_xlim)
+                  plot_ppm_xlim = plot_ppm_xlim,
+                  mri = mri,
+                  mri_seg = mri_seg,
+                  p_vols = p_vols)
   
   if (Ndyns(metab) == 1) {
     rmd_file <- system.file("rmd", "svs_report.Rmd", package = "spant")
@@ -538,13 +636,107 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL,
   if (verbose) cat("Generating html report.\n")
   rmarkdown::render(rmd_file, params = results, output_file = rmd_out_f,
                     quiet = !verbose)
+    
+  saveRDS(results, file = file.path(output_dir, "spant_fit_svs_data.rds"))
+  
+  if (extra_output) {
+    if (verbose) cat("Writing extra output files.\n")
+    
+    warning("extra_output doesn't do anything at the moment...")
+    
+    # below doesn't really work for dynamic MRS, probably need to create a
+    # folder containing files : fit_plot_data/001.csv, fit_plot_data/002.csv...
+    # 
+    # utils::write.csv(results$fit_res$fits[[1]],
+    #                  file = file.path(output_dir, "fit_plot_data.csv"),
+    #                  row.names = FALSE)
+  }
   
   if (verbose) cat("fit_svs finished.\n")
   
   return(fit_res)
 }
 
-check_sim_paras <- function(pul_seq, metab, TE1, TE2, TE3, TE, TM) {
+#' Combine fitting results for group analysis.
+#' @param search_path path to start recursive search for fitting results.
+#' @param output_dir directory path to store group results.
+#' @export
+fit_svs_group_results <- function(search_path,
+                                  output_dir = "fit_svs_group_results") {
+  
+  paths <- list.files(path = search_path, pattern = "spant_fit_svs_data.rds",
+                      recursive = TRUE, full.names = TRUE)
+  
+  if (length(paths) == 0) stop("No result files found.")
+  
+  # create the output dir if it doesn't exist
+  if(!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  } else {
+    warning(paste0("Output directory already exists : ", output_dir))
+  }
+  
+  paths_dir    <- dirname(paths)
+  results_n    <- length(paths)
+  
+  res_tab_unscaled_list <- vector(mode = "list", length = results_n)
+  res_tab_molal_list    <- vector(mode = "list", length = results_n)
+  res_tab_ratio_list    <- vector(mode = "list", length = results_n)
+  res_tab_legacy_list   <- vector(mode = "list", length = results_n)
+  ratio_str_list        <- vector(mode = "list", length = results_n)
+  
+  for (n in 1:results_n) {
+    results <- readRDS(paths[n])
+    
+    if (n == 1) {
+      unscaled  <- ifelse(is.null(results$res_tab_unscaled), FALSE, TRUE)
+      molal     <- ifelse(is.null(results$res_tab_molal),    FALSE, TRUE)
+      ratio     <- ifelse(is.null(results$res_tab_ratio),    FALSE, TRUE)
+      legacy    <- ifelse(is.null(results$res_tab_legacy),   FALSE, TRUE)
+    }
+    
+    if (unscaled) res_tab_unscaled_list[[n]] <- results$res_tab_unscaled
+    if (molal)    res_tab_molal_list[[n]]    <- results$res_tab_molal
+    if (legacy)   res_tab_legacy_list[[n]]   <- results$res_tab_legacy
+    if (ratio) {
+      res_tab_ratio_list[[n]] <- results$res_tab_ratio
+      ratio_str_list[[n]]     <- results$output_ratio
+    }
+  }
+  
+  if (unscaled) {
+    res_tab_unscaled_df <- do.call("rbind", res_tab_unscaled_list)
+    res_tab_unscaled_df <- cbind(path = paths, res_tab_unscaled_df)
+    file_out <- file.path(output_dir, paste0("fit_res_group_unscaled_conc.csv"))
+    utils::write.csv(res_tab_unscaled_df, file_out, row.names = FALSE)
+  }
+  
+  if (molal) {
+    res_tab_molal_df <- do.call("rbind", res_tab_molal_list)
+    res_tab_molal_df <- cbind(path = paths, res_tab_molal_df)
+    file_out <- file.path(output_dir, paste0("fit_res_group_molal_conc.csv"))
+    utils::write.csv(res_tab_molal_df, file_out, row.names = FALSE)
+  }
+  
+  if (ratio) {
+    res_tab_ratio_df <- do.call("rbind", res_tab_ratio_list)
+    res_tab_ratio_df <- cbind(path = paths, ratio = unlist(ratio_str_list),
+                              res_tab_ratio_df)
+    file_out <- file.path(output_dir, paste0("fit_res_group_ratio_conc.csv"))
+    utils::write.csv(res_tab_ratio_df, file_out, row.names = FALSE)
+  }
+  
+  if (legacy) {
+    res_tab_legacy_df <- do.call("rbind", res_tab_legacy_list)
+    res_tab_legacy_df <- cbind(path = paths, res_tab_legacy_df)
+    file_out <- file.path(output_dir, paste0("fit_res_group_legacy_conc.csv"))
+    utils::write.csv(res_tab_legacy_df, file_out, row.names = FALSE)
+  }
+  
+}
+
+check_sim_paras <- function(pul_seq, metab, TE1, TE2, TE3, TE, TM,
+                            press_TE1_guess = 0.0126) {
   
   # try to guess the pulse sequence from the MRS data if not specified
   if (is.null(pul_seq)) {
@@ -572,7 +764,7 @@ check_sim_paras <- function(pul_seq, metab, TE1, TE2, TE3, TE, TM) {
   
   if (pul_seq == "press_ideal") {
     if (is.null(TE1)) {
-      TE1 <- 0.0126
+      TE1 <- press_TE1_guess
       # warning("TE1 assumed to be 0.0126s. Provide the TE1 argument to stop this warning.")
     }
     if (is.null(TE2)) TE2 <- TE - TE1
@@ -584,7 +776,7 @@ check_sim_paras <- function(pul_seq, metab, TE1, TE2, TE3, TE, TM) {
     return(list(pul_seq = pul_seq, TE1 = TE1, TE2 = TE2))
   } else if (pul_seq == "press_shaped") {
     if (is.null(TE1)) {
-      TE1 <- 0.0126
+      TE1 <- press_TE1_guess
       # warning("TE1 assumed to be 0.0126s.")
     }
     if (is.null(TE2)) TE2 <- TE - TE1

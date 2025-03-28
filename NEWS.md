@@ -1,3 +1,9 @@
+# spant 3.3.0
+* Added voxel render on MRI images to fit_svs.
+* Added voxel segmentation render and support to fit_svs.
+* Bug fix for TE parameter determination from Siemens TWIX files.
+* Added extra output data from fit_svs to aid group analyses.
+
 # spant 3.2.0
 * Individual metabolite plots in the html report are now labelled to workaround
 an R Markdown bug where identical plots (eg when signal is zero) are sometimes
