@@ -858,3 +858,47 @@ segment_t1_fsl <- function(mri_path, deface = TRUE, bet_fit = 0.5) {
   fslr::fslfast(brain_path, outfile = seg_prefix, retimg = FALSE,
                 verbose = FALSE)
 }
+
+#' Read the log from Dinesh's MoCo sLASER sequence.
+#' @param path path to the log file.
+#' @param date scan date, eg "01-01-2025".
+#' @param end_time scan time, eg "14:00".
+#' @return data.frame of moco parameters.
+#' @export 
+read_dkd_moco_log <- function(path, date, end_time) {
+  
+  lines <- readLines(path)
+  
+  for (n in 1:(length(lines) - 1)) {
+    date_found <- (lines[n] == paste0(" # Scan date: ", date))
+    time_found <- (lines[n + 1] == paste0(" # Scan end time: ", end_time))
+    if (date_found & time_found) break
+  }
+  
+  if (n == (length(lines) - 1)) stop("Date and time not found.")
+  
+  data_start <- n + 5
+  n <- 0
+  repeat {
+    line <- lines[data_start + n]
+    if (is.na(line)) break
+    if (line == "") break
+    n <- n + 1
+  }
+  
+  data_end <- data_start + n - 1
+  
+  cnames <- trimws(gsub("[]\\[#;]", "", lines[data_start-2]))
+  cnames <- gsub("Shim_DACunit:", "", cnames)
+  cnames <- strsplit(cnames, " ")[[1]]
+  
+  data <- utils::read.table(textConnection(lines[data_start:data_end]))
+  
+  # remove weird characters
+  rem_cols <- c(which(data[1,] == ";"), which(data[1,] == "["),
+                which(data[1,] == "]"))
+  
+  data <- data[, -rem_cols]
+  colnames(data) <- cnames
+  return(data)
+}

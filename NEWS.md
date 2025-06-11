@@ -1,3 +1,7 @@
+# spant 3.4.0
+* Added a function to read DKD's sLASER MoCo log file.
+* Bug fix for TE parameter determination from Siemens IMA files.
+
 # spant 3.3.0
 * Added voxel render on MRI images to fit_svs.
 * Added voxel segmentation render and support to fit_svs.

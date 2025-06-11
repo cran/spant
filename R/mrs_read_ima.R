@@ -31,6 +31,14 @@ read_ima <- function(fraw, verbose = FALSE, extra) {
   # get the resolution and geom info
   paras <- calc_siemens_paras(vars, TRUE)
   
+  if (startsWith(toupper(vars$seq_fname), "%CUSTOMERSEQ%\\SVS_SLASER")) {
+    vars$te <- vars$te1 + vars$te2 + vars$te3
+  }
+  
+  if (startsWith(toupper(vars$seq_fname), "%CUSTOMERSEQ%\\DKD_SVS_SLASER")) {
+    vars$te <- vars$te1 + vars$te2 + vars$te3
+  }
+  
   meta <- list(EchoTime = vars$te,
                FlipAngle = vars$flip_ang,
                SequenceName = vars$seq_fname,
@@ -123,8 +131,11 @@ read_ima_dyn_dir <- function(dir, extra = NULL, verbose = FALSE) {
   
   # deal with CMRR reference scans if needed
   seq_name_upper <- toupper(mrs_data$meta$SequenceName)
-  if (startsWith(seq_name_upper, "%CUSTOMERSEQ%\\SVS_SLASER")) {
+  if (startsWith(seq_name_upper, "%CUSTOMERSEQ%\\SVS_SLASER") |
+      startsWith(seq_name_upper, "%CUSTOMERSEQ%\\DKD_SVS_SLASER")) {
     if (mrs_data$meta$NumberOfTransients == Ndyns(mrs_data)) {
+      return(mrs_data)
+    } else if (mrs_data$meta$NumberOfTransients * 2 == Ndyns(mrs_data)) {
       return(mrs_data)
     } else {
       return(extract_dkd_wref_scans(mrs_data))
