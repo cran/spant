@@ -1851,7 +1851,11 @@ shift_hz <- function(fid_in, shifts, t) {
 #' @return MRS data containing the subset of requested dynamics.
 #' @export
 get_dyns <- function(mrs_data, subset) {
-  
+
+  if (inherits(mrs_data, "list")) {
+    return(lapply(mrs_data, get_dyns, subset = subset))
+  }
+    
   # check the input
   check_mrs_data(mrs_data) 
   
@@ -2355,6 +2359,23 @@ append_coils <- function(...) {
   first_dataset$data <- unname(new_data)
   first_dataset
 }
+
+#' Split MRS data containing multiple spectra into a list of single spectra
+#' datasets.
+#' @param mrs_data input MRS dataset
+#' @return list of MRS datasets
+#' @export
+mrs_data2list <- function(mrs_data) {
+  data_mat <- mrs_data2mat(mrs_data)
+  mrs_list <- vector(mode = "list", length = nrow(mrs_data))
+  temp_mrs <- get_subset(mrs_data, 1, 1, 1, 1, 1)
+  temp_mrs$data
+  for (n in 1:nrow(data_mat)) {
+    temp_mrs$data[1, 1, 1, 1, 1, 1,] <- data_mat[n, ]
+    mrs_list[[n]] <- temp_mrs
+  }
+  return(mrs_list)
+} 
 
 #' Append MRS data across the dynamic dimension, assumes they matched across the
 #' other dimensions.
@@ -3273,6 +3294,12 @@ hsvd_vec <- function(y, fs, comps = 40, irlba = TRUE, max_damp = 0) {
 #' @export
 auto_phase <- function(mrs_data, xlim = c(4, 1.8), smo_ppm_sd = 0.05,
                        ret_phase = FALSE) {
+  
+  if (inherits(mrs_data, "list")) {
+    res <- lapply(mrs_data, auto_phase, xlim = xlim, smo_ppm_sd = smo_ppm_sd,
+                  ret_phase = ret_phase)
+    return(res)
+  }
   
   if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
   
@@ -4602,6 +4629,7 @@ mean_mrs_list <- function(mrs_list) {
 #' @return sum \code{mrs_data} object.
 #' @export
 sum_mrs_list <- function(mrs_list) {
+  if (length(mrs_list) == 1) return(mrs_list[[1]])
   sum_mrs <- mrs_list[[1]]
   for (n in (2:length(mrs_list))) sum_mrs <- sum_mrs(sum_mrs, mrs_list[[n]])
   return(sum_mrs)
@@ -4967,3 +4995,106 @@ comb_coils_mrsi_gls <- function(metab, noise_pts = 30, noise_mrs = NULL) {
  return(comb_data)
 }
 
+#' Perform zeroth-order phase correction based on expected baseline regions.
+#'
+#' Default arguments are appropriate for water suppressed 1H MRS of the brain.
+#' The following options are suitable for a water signal at 4.65 ppm:
+#' ppm_start = c(5.2, 4.0), ppm_end = c(5.3, 4.1), xlim = c(5.2, 4.1)
+#'
+#' @param mrs_data an object of class \code{mrs_data}.
+#' @param ppm_start a vector of ppm values designating baseline regions.
+#' @param ppm_end a vectors of ppm values designating baseline regions.
+#' @param xlim region containing signal of interest, eg strong metabolite
+#' resonances.
+#' @param mean_dyns phase the mean spectrum and apply the same value to each
+#' dynamic.
+#' @param ret_phase return phase values (logical).
+#' @return MRS data object with corrected phase.
+#' @export
+auto_phase_bl <- function(mrs_data, ppm_start = c(0.5, 4.0),
+                          ppm_end = c(0.0, 4.2), xlim = c(1.8, 4),
+                          mean_dyns = FALSE, ret_phase = FALSE) {
+  
+  if (inherits(mrs_data, "list")) {
+    return(lapply(mrs_data, auto_phase_bl, ppm_start = ppm_start,
+                  ppm_end = ppm_end, xlim = xlim, mean_dyns = mean_dyns,
+                  ret_phase = ret_phase))
+  }
+  
+  # must be freq domain
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  # get the ppm scale
+  x_scale <- ppm(mrs_data)
+  
+  # number of regions
+  regions <- length(ppm_start)
+  
+  ind_list <- vector("list", regions)
+  
+  for (n in 1:regions) {
+    ind_list[[n]] <- get_seg_ind(x_scale, ppm_start[n], ppm_end[n])
+  }
+  
+  if (mean_dyns) {
+    mrs_data_orig <- mrs_data
+    mrs_data <- mean_dyns(mrs_data)
+  }
+  
+  phases <- apply_mrs(mrs_data, 7, auto_phase_bl_vec, data_only = TRUE,
+                      ind_list = ind_list)
+  
+  if (length(phases) == 1) phases <- as.numeric(phases)
+  
+  mrs_data <- phase(mrs_data, phases)
+  
+  # correct any phase flips
+  phase_corr <- corr_phase_inversion(mrs_data, xlim = xlim, ret_phase = TRUE)
+  
+  # apply same phase to individual dynamics
+  if (mean_dyns) {
+    phase_corr$mrs_data <- phase(mrs_data_orig, phases + phase_corr$phase)
+  }
+  
+  if (ret_phase) {
+    return(list(mrs_data = phase_corr$mrs_data,
+                phase = phases + phase_corr$phase))
+  } else {
+    return(phase_corr$mrs_data)
+  }
+}
+
+corr_phase_inversion <- function(mrs_data, xlim = c(1.8, 4),
+                                 ret_phase = FALSE) {
+  
+  max_val_orig <- spec_op(mrs_data, xlim = xlim, operator = "max", mode = "re")
+  mrs_data_inv <- mrs_data
+  mrs_data_inv$data <- -1 * mrs_data_inv$data
+  max_val_inv <- spec_op(mrs_data_inv, xlim = xlim, operator = "max",
+                         mode = "re")
+  inv_phases <- (max_val_inv > max_val_orig)
+  phase_vals <- ifelse(inv_phases, 180, 0)
+  if (length(phase_vals) == 1) phase_vals <- as.numeric(phase_vals)
+  mrs_data   <- phase(mrs_data, phase_vals)
+  
+  if (ret_phase) {
+    return(list(mrs_data = mrs_data, phase = phase_vals))
+  } else {
+    return(mrs_data)
+  }
+}
+
+auto_phase_bl_vec <- function(vec, ind_list) {
+  
+  res <- stats::optim(0, phase_bl_obj_fn, gr = NULL, vec, ind_list,
+                      method = "Brent", lower = -180, upper = 180)
+  
+  return(res$par)
+}
+
+phase_bl_obj_fn <- function(phi, vec, ind_list) {
+  vec <- Re(vec * exp(1i * phi / 180 * pi))
+  areas <- rep(NA, length(ind_list))
+  for (n in 1:length(ind_list)) areas[n] <- sum(vec[ind_list[[n]]])
+  return(sum((areas - mean(areas)) ^ 2))
+}

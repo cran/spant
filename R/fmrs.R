@@ -71,7 +71,7 @@ gen_trap_reg <- function(onset, duration, trial_type = NULL, mrs_data = NULL,
     
     # loop over stims of the same trial type
     for (n in 1:length(stim_frame_trial$onset)) {
-      stim_seg <- t_fine > stim_frame$onset[n] & t_fine <= stim_frame$end[n]
+      stim_seg <- t_fine > stim_frame_trial$onset[n] & t_fine <= stim_frame_trial$end[n]
       stim_bool[stim_seg] <- TRUE
     }
     
@@ -411,7 +411,33 @@ gen_baseline_reg <- function(mrs_data = NULL, tr = NULL, Ndyns = NULL,
                                Ntrans = NULL) {
     
   time   <- dyn_acq_times(mrs_data, tr, Ndyns, Ntrans)
-  reg_df <- data.frame(time = time, baseline = rep(1, length(t)))
+  reg_df <- data.frame(time = time, baseline = rep(1, length(time)))
+  return(reg_df)
+}
+
+#' Generate a regressor from a numeric vector.
+#' @param in_vec a numeric input vector the same length as the number of stored
+#' dynamic scans.
+#' @param name a character vector representing the regressor name.
+#' @param mrs_data mrs_data object for timing information.
+#' @param tr repetition time.
+#' @param Ndyns number of dynamic scans stored, potentially less than Ntrans
+#' if block averaging has been performed.
+#' @param Ntrans number of dynamic scans acquired.
+#' @return a single baseline regressor with value of 1.
+#' @export
+gen_numeric_reg <- function(in_vec, name, mrs_data = NULL, tr = NULL,
+                            Ndyns = NULL, Ntrans = NULL) {
+    
+  time <- dyn_acq_times(mrs_data, tr, Ndyns, Ntrans)
+  
+  if (length(in_vec) != length(time)) {
+    stop("input vector is an incorrect length")
+  }
+  
+  reg_df <- data.frame(time = time)
+  reg_df[name] <- in_vec
+  
   return(reg_df)
 }
 
@@ -622,6 +648,8 @@ mrs_data2bids <- function(mrs_data, output_dir, suffix = NULL, sub = NULL,
                           ses = NULL, task = NULL, acq = NULL, nuc = NULL,
                           voi = NULL, rec = NULL, run = NULL, echo = NULL,
                           inv = NULL, skip_existing = TRUE) {
+  
+  warning("mrs_data2bids is deprecated, use mr_data2bids instead")
   
   Nscans <- length(mrs_data)
   
@@ -871,6 +899,328 @@ mrs_data2bids <- function(mrs_data, output_dir, suffix = NULL, sub = NULL,
   }
 }
 
+#' Create a BIDS file structure from a vector of data paths or list of
+#' mri/mrs data objects.
+#' @param mr_data vector of data paths or list of mri/mrs objects.
+#' @param suffix vector of file suffixes, eg : c("svs", "mrsi", "T1w).
+#' @param output_dir the base directory to create the BIDS structure.
+#' @param sub optional vector of subject labels. If not specified, these will be
+#' automatically generated as a series of increasing zero-padded integer values
+#' corresponding to the mrs_data input indices.
+#' @param ses optional vector of session labels.
+#' @param task optional vector of task labels.
+#' @param acq optional vector of acquisition labels.
+#' @param nuc optional vector of nucleus labels.
+#' @param voi optional vector of volume of interest labels.
+#' @param rec optional vector of reconstruction labels.
+#' @param run optional vector of run indices.
+#' @param echo optional vector of echo time indices.
+#' @param inv optional vector of inversion indices.
+#' @param skip_existing skip any data files that have already been converted.
+#' Defaults to TRUE, set to FALSE to force an overwrite of any existing data
+#' files.
+#' @param mri_format defaults to "nifti", can also be "dicom" provided the 
+#' divest packages is installed.
+#' @param deface_mri option to apply fsl_deface to the mri as a preprocessing
+#' step. Defaults to FALSE, requires the fslr package to be installed when TRUE.
+#' @export
+mr_data2bids <- function(mr_data, suffix, output_dir, sub = NULL,
+                         ses = NULL, task = NULL, acq = NULL, nuc = NULL,
+                         voi = NULL, rec = NULL, run = NULL, echo = NULL,
+                         inv = NULL, skip_existing = TRUE, 
+                         mri_format = "nifti", deface_mri = FALSE) {
+  
+  if (!identical(class(mr_data), "list")) mr_data <- list(mr_data)
+  
+  Nscans <- length(mr_data)
+  
+  if (length(suffix) != Nscans) {
+    if (length(suffix) == 1) {
+      suffix <- rep(suffix, Nscans)
+    } else {
+      stop("suffix length does not match.")
+    }
+  } 
+  
+  mrs_suffix  <- c("svs", "mrsi", "unloc", "mrsref")
+  func_suffix <- c("bold", "cbv")
+  anat_suffix <- c("FLAIR", "PDT2", "PDw", "T1w", "T2starw", "T2w", "UNIT1",
+                   "angio", "inplaneT1", "inplaneT2")
+  
+  allowed <- c(mrs_suffix, func_suffix, anat_suffix)
+  
+  wrong <- !(suffix %in% allowed)
+  if (any(wrong)) stop(paste0("one or more suffix labels are invalid,",
+                              " must be one of : ", 
+                              paste(allowed, collapse = ", ")))
+  
+  if (is.null(sub)) sub <- auto_pad_seq(1:Nscans)
+  
+  if (length(sub) != Nscans) stop("sub length does not match.")
+  
+  if (!is.null(ses)) {
+    if (length(ses) == 1) ses <- rep(ses, Nscans)
+    if (length(ses) != Nscans) stop("ses length does not match.")
+  }
+  
+  if (!is.null(acq)) {
+    if (length(acq) == 1) acq <- rep(acq, Nscans)
+    if (length(acq) != Nscans) stop("acq length does not match.")
+  }
+  
+  if (!is.null(nuc)) {
+    if (length(nuc) == 1) nuc <- rep(nuc, Nscans)
+    if (length(nuc) != Nscans) stop("nuc length does not match.")
+  }
+  
+  if (!is.null(voi)) {
+    if (length(voi) == 1) voi <- rep(voi, Nscans)
+    if (length(voi) != Nscans) stop("voi length does not match.")
+  }
+  
+  if (!is.null(rec)) {
+    if (length(rec) == 1) rec <- rep(rec, Nscans)
+    if (length(rec) != Nscans) stop("rec length does not match.")
+  }
+  
+  if (!is.null(run)) {
+    if (length(run) == 1) run <- rep(run, Nscans)
+    if (length(run) != Nscans) stop("run length does not match.")
+    run <- as.integer(run)
+    if (any(is.na(run))) stop("non integer run")
+  }
+  
+  if (!is.null(echo)) {
+    if (length(echo) == 1) echo <- rep(echo, Nscans)
+    if (length(echo) != Nscans) stop("echo length does not match.")
+    echo <- as.integer(echo)
+    if (any(is.na(echo))) stop("non integer echo")
+  }
+  
+  if (!is.null(inv)) {
+    if (length(inv) == 1) inv <- rep(inv, Nscans)
+    if (length(inv) != Nscans) stop("inv length does not match.")
+    inv <- as.integer(inv)
+    if (any(is.na(inv))) stop("non integer inv")
+  }
+  
+  for (n in 1:Nscans) {
+    
+    sub_lab <- paste0("sub-", sub[n])
+    
+    if (!is.null(ses)) {
+      ses_lab <- paste0("ses-", ses[n])
+    } else {
+      ses_lab <- NULL
+    }
+    
+    # determine the image type
+    
+    if (suffix[n] %in% mrs_suffix) {
+      image_type <- "mrs"
+    } else if (suffix[n] %in% anat_suffix) {
+      image_type <- "anat"
+    } else if (suffix[n] %in% func_suffix) {
+      image_type <- "func"
+    } else {
+      stop("image type not found for given suffix")
+    }
+    
+    # generate the directory structure
+    if (is.null(ses)) {
+      dir <- file.path(output_dir, sub_lab, image_type)
+    } else {
+      dir <- file.path(output_dir, sub_lab, ses_lab, image_type)
+    }
+    
+    if (identical(class(mr_data[[n]]), "character")) {
+      
+      # skip if possible and we already know the suffix
+      if (skip_existing & !is.null(suffix)) {
+        
+        # construct the filename
+        fname <- paste0(sub_lab)
+        fname <- paste0(fname, build_bids_fname(ses_lab, task, acq, nuc, voi,
+                                                rec, run, echo, inv, n))
+        
+        # suffix 
+        fname_main <- paste0(fname, "_", suffix[n], ".nii.gz")
+        
+        # construct the full path
+        full_path_main <- file.path(dir, fname_main)
+        
+        if (file.exists(full_path_main)) {
+          cat("Skipping dataset ", n," of ", Nscans, " : ", full_path_main,
+              "\n", sep = "")
+          next
+        }
+      }
+      
+      if (image_type == "mrs") {
+        mr_n <- read_mrs(mr_data[[n]])
+      } else {
+        if (mri_format == "nifti") {
+          mr_n <- readNifti(mr_data[[n]], json = "read")  
+        } else if (mri_format == "dicom") {
+          mr_n <- divest::readDicom(mr_data[[n]], interactive = FALSE,
+                                    verbosity = -1)[[1]]
+        } else {
+          stop("Incorrect mri_format.")
+        }
+        
+        if (deface_mri) {
+          deface_fsl <- fslr::fsl_deface(mr_n, verbose = FALSE)
+          deface     <- RNifti::asNifti(deface_fsl$outfile)
+          # copy the image meta data from the original mri
+          RNifti::imageAttributes(deface) <- RNifti::imageAttributes(mr_n)
+          mr_n <- deface
+        }
+      }
+       
+    } else {
+      mr_n <- mr_data[[n]]
+    }
+    
+    if (identical(class(mr_n), c("list", "mrs_data"))) {
+      main    <- mr_n$metab
+      ref     <- mr_n$ref
+      ref_ecc <- mr_n$ref_ecc
+    } else if (identical(class(mr_n), c("mrs_data"))) {
+      main    <- mr_n
+      ref     <- NULL
+      ref_ecc <- NULL
+    } else {
+      main    <- mr_n
+      ref     <- NULL
+      ref_ecc <- NULL
+    }
+    
+    # create the directory
+    dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+    
+    # construct the filename
+    fname <- paste0(sub_lab)
+    fname <- paste0(fname, build_bids_fname(ses_lab, task, acq, nuc, voi, rec, 
+                                            run, echo, inv, n))
+    
+    # suffix 
+    fname_main <- paste0(fname, "_", suffix[n], ".nii.gz")
+    
+    # construct the full path
+    full_path_main <- file.path(dir, fname_main)
+    
+    if (skip_existing & file.exists(full_path_main)) {
+      cat("Skipping dataset ", n," of ", Nscans, " : ", full_path_main, "\n",
+          sep = "")
+    } else {
+      cat("Writing dataset ", n," of ", Nscans, " : ", full_path_main, "\n",
+          sep = "")
+      # write the data
+      if (image_type == "mrs") {
+        write_mrs(main, fname = full_path_main, format = "nifti", force = TRUE)
+      } else {
+        writeNifti(main, file = full_path_main, json = TRUE)
+      }
+    }
+    
+    # the following only applies to MRS data
+    
+    # just one ref file
+    if (!is.null(ref) & is.null(ref_ecc)) {
+      fname_ref <- paste0(fname, "_", "mrsref", ".nii.gz")
+      
+      # construct the full path
+      full_path_ref <- file.path(dir, fname_ref)
+      
+      if (skip_existing & file.exists(full_path_ref)) {
+        cat("Skipping dataset ", n," of ", Nscans, " : ", full_path_ref, "\n",
+            sep = "")
+      } else {
+        cat("Writing dataset ", n," of ", Nscans, " : ", full_path_ref, "\n",
+            sep = "")
+        write_mrs(ref, fname = full_path_ref, format = "nifti", force = TRUE)  
+      }
+    }
+        
+    # both conc and ecc ref files
+    if (!is.null(ref) & !is.null(ref_ecc)) {
+      
+      # conc filename
+      if (is.null(acq)) {
+        acq_lab <- paste0("conc")
+      } else {
+        acq_lab <- paste0(acq[n], "conc")
+      }
+      
+      fname <- paste0(sub_lab)
+      fname <- paste0(fname, build_bids_fname(ses_lab, task, acq_lab, nuc, voi,
+                                              rec, run, echo, inv, n))                    
+                          
+      fname_ref_conc <- paste0(fname, "_", "mrsref", ".nii.gz")
+      full_path_conc <- file.path(dir, fname_ref_conc)
+      
+      if (skip_existing & file.exists(full_path_conc)) {
+        cat("Skipping dataset ", n," of ", Nscans, " : ", full_path_conc, "\n",
+            sep = "")
+      } else {
+        cat("Writing dataset ", n," of ", Nscans, " : ", full_path_conc, "\n",
+            sep = "")
+        write_mrs(ref, fname = full_path_conc, format = "nifti", force = TRUE)
+      }
+      
+      # ecc filename
+      if (is.null(acq)) {
+        acq_lab <- paste0("ecc")
+      } else {
+        acq_lab <- paste0(acq[n], "ecc")
+      }
+      
+      fname <- paste0(sub_lab)
+      fname <- paste0(fname, build_bids_fname(ses_lab, task, acq_lab, nuc, voi,
+                                              rec, run, echo, inv, n))               
+                          
+      fname_ref_ecc <- paste0(fname, "_", "mrsref", ".nii.gz")
+      full_path_ecc <- file.path(dir, fname_ref_ecc)
+      
+      if (skip_existing & file.exists(full_path_ecc)) {
+        cat("Skipping dataset ", n," of ", Nscans, " : ", full_path_ecc, "\n",
+            sep = "")
+      } else {
+        cat("Writing dataset ", n," of ", Nscans, " : ", full_path_ecc, "\n",
+            sep = "")
+        write_mrs(ref_ecc, fname = full_path_ecc, format = "nifti",
+                  force = TRUE)
+      }
+    }
+  }
+}
+
+build_bids_fname <- function(ses, task, acq, nuc, voi, rec, run, echo, inv, n) {
+  
+  if (!is.null(ses))  ses  <- ifelse(length(ses)  == n, ses[n],  ses)
+  if (!is.null(task)) task <- ifelse(length(task) == n, task[n], task)
+  if (!is.null(acq))  acq  <- ifelse(length(acq)  == n, acq[n],  acq)
+  if (!is.null(nuc))  nuc  <- ifelse(length(nuc)  == n, nuc[n],  nuc)
+  if (!is.null(voi))  voi  <- ifelse(length(voi)  == n, voi[n],  voi)
+  if (!is.null(rec))  rec  <- ifelse(length(rec)  == n, rec[n],  rec)
+  if (!is.null(run))  run  <- ifelse(length(run)  == n, run[n],  run)
+  if (!is.null(echo)) echo <- ifelse(length(echo) == n, echo[n], echo)
+  if (!is.null(inv))  inv  <- ifelse(length(inv)  == n, inv[n],  inv)
+  
+  fname <- ""
+  if (!is.null(ses))  fname <- paste0(fname, "_",      ses)
+  if (!is.null(task)) fname <- paste0(fname, "_task-", task)
+  if (!is.null(acq))  fname <- paste0(fname, "_acq-",  acq)
+  if (!is.null(nuc))  fname <- paste0(fname, "_nuc-",  nuc)
+  if (!is.null(voi))  fname <- paste0(fname, "_voi-",  voi)
+  if (!is.null(rec))  fname <- paste0(fname, "_rec-",  rec)
+  if (!is.null(run))  fname <- paste0(fname, "_run-",  run)
+  if (!is.null(echo)) fname <- paste0(fname, "_echo-", echo)
+  if (!is.null(inv))  fname <- paste0(fname, "_inv-",  inv)
+  
+  return(fname)
+}
+
 auto_pad_seq <- function(x, min_pad = 2) {
   x_int <- sprintf("%d", x)
   pad_n <- max(nchar(x_int))
@@ -1012,18 +1362,21 @@ preproc_svs <- function(path, label = NULL, output_dir = NULL,
   # perform simple baseline offset corrected based on a noisy spectral region
   mrs_rats$corrected <- bc_constant(mrs_rats$corrected, xlim = c(-0.5, -2.5))
   
-  mean_mrs  <- mean_dyns(mrs_rats$corrected)
+  mean_mrs <- mean_dyns(mrs_rats$corrected)
     
-  # frequency and phase correct the mean spectrum
-  res <- phase_ref_1h_brain(mean_mrs, ret_corr_only = FALSE)
+  # frequency correct
+  mean_mrs_fc <- align(mean_mrs, c(2.01, 3.03, 3.22), ret_df = TRUE)
+ 
+  # auto phase 
+  res_ap_bl   <- auto_phase_bl(mean_mrs_fc$data, ret_phase = TRUE)
   
   # apply mean spectrum phase and shift to the single shots
-  mrs_proc <- phase(mrs_rats$corrected, -as.numeric(res$phases))
-  mrs_proc <- shift(mrs_proc, -as.numeric(res$shifts), units = "hz")
+  mrs_proc <- phase(mrs_rats$corrected, as.numeric(res_ap_bl$phase))
+  mrs_proc <- shift(mrs_proc, as.numeric(mean_mrs_fc$shifts), units = "hz")
   
-  mrs_uncorr <-  phase(mrs_data,   -as.numeric(res$phases))
+  mrs_uncorr <-  phase(mrs_data, as.numeric(res_ap_bl$phase))
   mrs_uncorr <-  shift(mrs_uncorr,
-                       -as.numeric(res$shifts) - mean(mrs_rats$shifts),
+                       as.numeric(mean_mrs_fc$shifts) - mean(mrs_rats$shifts),
                        units = "hz")
   
   mean_uncorr <- mean_dyns(mrs_uncorr)
@@ -1051,16 +1404,17 @@ preproc_svs <- function(path, label = NULL, output_dir = NULL,
                            lw_ppm_smo = lw_ppm_smo, tnaa_height = tnaa_height)
   
   # scale data to the tCr peak
-  amp <- spec_op(zf(res$corrected), xlim = c(2.9, 3.1), operator = "max-min")
+  amp <- spec_op(zf(res_ap_bl$mrs_data), xlim = c(2.9, 3.1),
+                 operator = "max-min")
   amp <- as.numeric(amp)
-  mrs_proc      <- scale_mrs_amp(mrs_proc, 1 / amp)
-  mrs_uncorr    <- scale_mrs_amp(mrs_uncorr, 1 / amp)
-  res$corrected <- scale_mrs_amp(res$corrected, 1 / amp)
-  mean_uncorr   <- scale_mrs_amp(mean_uncorr, 1 / amp)
+  mrs_proc           <- scale_mrs_amp(mrs_proc, 1 / amp)
+  mrs_uncorr         <- scale_mrs_amp(mrs_uncorr, 1 / amp)
+  res_ap_bl$mrs_data <- scale_mrs_amp(res_ap_bl$mrs_data, 1 / amp)
+  mean_uncorr        <- scale_mrs_amp(mean_uncorr, 1 / amp)
   
   # mean spec SNR and LW
-  mean_corr_spec_snr   <- calc_spec_snr(res$corrected)
-  corr_peak_info       <- peak_info(res$corrected, xlim = c(1.8, 2.2))
+  mean_corr_spec_snr   <- calc_spec_snr(res_ap_bl$mrs_data)
+  corr_peak_info       <- peak_info(res_ap_bl$mrs_data, xlim = c(1.8, 2.2))
   mean_corr_spec_lw    <- corr_peak_info$fwhm_ppm 
   mean_uncorr_spec_snr <- calc_spec_snr(mean_uncorr)
   uncorr_peak_info     <- peak_info(bc_constant(mean_uncorr,
@@ -1090,7 +1444,7 @@ preproc_svs <- function(path, label = NULL, output_dir = NULL,
                      dfr = dfr, dlfr = dlfr)
   
   res <- list(corrected = mrs_proc, uncorrected = mrs_uncorr,
-              mean_corr = res$corrected, mean_uncorr = mean_uncorr,
+              mean_corr = res_ap_bl$mrs_data, mean_uncorr = mean_uncorr,
               diag_table = diag_table, summary_diags = summary_diags,
               mrs_mean_sub = mrs_mean_sub, mrs_mean_sub_bc = mrs_mean_sub_bc)
   
@@ -1289,18 +1643,20 @@ preproc_svs_dataset <- function(paths, labels = NULL,
 #' to each spectral datapoint.
 #' @param analysis_dir directory containing preprocessed data generated by
 #' the preproc_svs_dataset function.
+#' @param output_dir directory to save glm results.
 #' @param exclude_labels vector of labels of scans to exclude, eg poor quality
 #' data.
 #' @param labels labels to describe each data set.
 #' @param xlim spectral range to include in the analysis.
 #' @param vline vertical lines to add to the plot.
+#' @param lb linebroading to add in Hz before GLM analysis.
 #' @param return_results function will return key outputs, defaults to FALSE.
 #' @export
 glm_spec_fmrs_fl <- function(regressor_df, analysis_dir = "spant_analysis",
-                             exclude_labels = NULL, labels = NULL,
-                             xlim = c(4, 0.2),
+                             output_dir = "spec_glm", exclude_labels = NULL,
+                             labels = NULL, xlim = c(4, 0.2),
                              vline = c(1.35, 1.28, 2.35, 2.29),
-                             return_results = FALSE) {
+                             lb = 4, return_results = FALSE) {
   
   # TODO add optional arguments for datasets to preserve original
   # ordering if needed
@@ -1335,11 +1691,11 @@ glm_spec_fmrs_fl <- function(regressor_df, analysis_dir = "spant_analysis",
   }
   
   # directory for spec glm html reports 
-  spec_glm_dir <- file.path(analysis_dir, "spec_glm", "first_level")
+  spec_glm_dir <- file.path(analysis_dir, output_dir, "first_level")
   if (!dir.exists(spec_glm_dir)) dir.create(spec_glm_dir, recursive = TRUE)
   
   # directory for processed spectra
-  spec_glm_mrs_dir <- file.path(analysis_dir, "spec_glm", "proc_fmrs")
+  spec_glm_mrs_dir <- file.path(analysis_dir, output_dir, "proc_fmrs")
   if (!dir.exists(spec_glm_mrs_dir)) dir.create(spec_glm_mrs_dir)
   
   # read preprocessed results
@@ -1361,8 +1717,9 @@ glm_spec_fmrs_fl <- function(regressor_df, analysis_dir = "spant_analysis",
   for (n in 1:Nscans) {
     mrs_data_glm <- preproc_res_list[[n]]$corrected
     glm_spec_res_list[[n]] <- gen_glm_spec_report(mrs_data_glm, regressor_df,
-                                                  labels[n], analysis_dir, xlim,
-                                                  vline)
+                                                  labels[n], analysis_dir, 
+                                                  output_dir, xlim,
+                                                  vline, lb = lb)
     
     # write processed data 
     preproc_metab <- file.path(spec_glm_mrs_dir, paste0(labels[n], ".nii.gz"))
@@ -1384,8 +1741,8 @@ glm_spec_fmrs_fl <- function(regressor_df, analysis_dir = "spant_analysis",
   
   # run glm spec on the mean dataset
   glm_spec_mean_res <- gen_glm_spec_report(mean_dataset, regressor_df,
-                          "dataset_mean", analysis_dir,
-                           xlim, vline, exclude_labels)
+                          "dataset_mean", analysis_dir, output_dir,
+                           xlim, vline, exclude_labels, lb = lb)
   
   if (return_results) {
     return(list(indiv_res = glm_spec_res_list, mean_res = glm_spec_mean_res))
@@ -1393,13 +1750,16 @@ glm_spec_fmrs_fl <- function(regressor_df, analysis_dir = "spant_analysis",
 }
 
 gen_glm_spec_report <- function(mrs_data, regressor_df, label, analysis_dir,
-                                xlim, vline, exclude_labels = NULL) {
+                                output_dir, xlim, vline, exclude_labels = NULL,
+                                lb) {
   
   # process the data
-  mrs_data_glm <- lb(mrs_data, 3)
+  mrs_data_glm <- lb(mrs_data, lb)
   mrs_data_glm <- zf(mrs_data_glm)
   mrs_data_glm <- crop_spec(mrs_data_glm, xlim = xlim)
-  # mrs_data_glm <- bc_poly(mrs_data_glm, 1)
+  
+  # mrs_data_glm <- bc_poly(mrs_data_glm, 0)
+  # mrs_data_glm <- bc_als(mrs_data_glm, lambda = 10)
   
   mrs_data_plot <- zf(mean_dyns(mrs_data))
   
@@ -1412,7 +1772,7 @@ gen_glm_spec_report <- function(mrs_data, regressor_df, label, analysis_dir,
   # write output
   rmd_file <- system.file("rmd", "spec_glm_results.Rmd", package = "spant")
   
-  rmd_out_f <- file.path(tools::file_path_as_absolute(analysis_dir), "spec_glm",
+  rmd_out_f <- file.path(tools::file_path_as_absolute(analysis_dir), output_dir,
                          "first_level", label)
   
   rmarkdown::render(rmd_file, params = list(data = glm_spec_res, 
