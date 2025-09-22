@@ -177,6 +177,142 @@ sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
   return(mrs_data)
 }
 
+#' Generate an asymmetric pseudo-Voigt resonance in the frequency domain.
+#' 
+#' Method is described in detail by Stancik AL and Brauns EB: "A simple
+#' asymmetric lineshape for fitting infrared absorption spectra." Vib Spectrosc. 
+#' 2008; 47: 66-69.
+#' 
+#' @param freq resonance frequency in ppm.
+#' @param fwhm resonance FWHM.
+#' @param lg Lorentz-Gauss lineshape parameter (between 0 and 1).
+#' @param asy asymmetry parameter.
+#' @param acq_paras list of acquisition parameters. See
+#' \code{\link{def_acq_paras}}
+#' @param gen_im_pts option to generate imaginary data points, defaults to
+#' FALSE.
+#' @export
+sim_asy_pvoigt <- function(freq = 0, fwhm = 0, lg = 0, asy = 0,
+                           acq_paras = def_acq_paras(), gen_im_pts = FALSE) {
+  
+  if (inherits(acq_paras, "mrs_data")) acq_paras <- get_acq_paras(acq_paras)
+  
+  # oversample to generate imaginary data points
+  if (gen_im_pts) acq_paras$N <- acq_paras$N * 2
+  
+  # convert ppm to Hz
+  freq       <- ppm2hz(freq, acq_paras$ft, acq_paras$ref)
+  freq_scale <- hz(fs  = acq_paras$fs, N = acq_paras$N)
+  asy_fwhm   <- asy_fwhm_fn(freq_scale, fwhm, asy, freq)
+  fd <- lg * G(freq_scale, asy_fwhm, freq) + (1 - lg) *
+             L(freq_scale, asy_fwhm, freq)
+  
+  if (gen_im_pts) {
+    td <- pracma::ifft(pracma::ifftshift(fd))[1:(acq_paras$N / 2)]
+    
+    # this scaling keeps consistency with the sum of the resonance in the
+    # frequency-domain being unity
+    td <- td * acq_paras$N
+    td[1] <- td[1] / 2
+    
+    # for small fwhm values the td curve can remain constant when using the ifft
+    # method above - this is a fix
+    if (identical(unique(Re(td)), 1) && (fwhm != 0)) {
+      t <- seq(from = 0, to = (acq_paras$N - 1) / acq_paras$fs,
+               by = 1 / acq_paras$fs)
+      beta <- lw2beta(fwhm)
+      td <- exp(-(t ^ 2) * beta) + 0i
+    }
+    
+    fd <- ft_shift(td) / acq_paras$N * 2
+  }
+  
+  mrs_data <- vec2mrs_data(fd, fs = acq_paras$fs, ft = acq_paras$ft,
+                           ref = acq_paras$ref, nuc = acq_paras$nuc, fd = TRUE)
+  
+  return(mrs_data)
+}
+
+fit_asy_pvoigt_obj_fn <- function(par, mrs_data) {
+  
+  model <- sim_asy_pvoigt(freq = par[1], fwhm = par[2], lg = par[3],
+                          asy = par[4], acq_paras = mrs_data,
+                          gen_im_pts = FALSE)
+  
+  mrs_data <- phase(mrs_data, par[5])
+  
+  model_pts <- as.numeric(Re(model$data))
+  bl_pts    <- rep(1, length(model_pts))
+  data_pts  <- as.numeric(Re(mrs_data$data))
+  lm_res    <- stats::.lm.fit(cbind(model_pts, bl_pts), data_pts)
+  res       <- sum(lm_res$residuals ^ 2)
+  
+  return(res)
+}
+
+#' Fit a single asymmetric pseudo-Voigt resonance in the frequency domain.
+#' @param mrs_data data containing the resonance to be fit.
+#' @param freq_ppm frequency estimate (in ppm) for the resonance to be fitted.
+#' @param xlim spectral range (in ppm) where the fit will be evaluated.
+#' @param lg_limits lg lineshape parameter limits.
+#' @return list of fitting results and parameters.
+#' @export
+fit_asy_pvoigt <- function(mrs_data, freq_ppm = 4.65, xlim = c(5.2, 4.1),
+                           lg_limits = c(0, 1)) {
+  
+  # needs to be a FD operation
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  # crop the spectrum
+  mrs_data_crop <- crop_spec(mrs_data, xlim = xlim)
+  
+  fwhm_start  <- 8
+  lg_start    <- mean(lg_limits)
+  asy_start   <- 0
+  phase_start <- 0
+  
+  # rough fit without asy freedom
+  par   <- c(freq_ppm, fwhm_start,     lg_start, asy_start, phase_start)
+  lower <- c(    -Inf,          0, lg_limits[1],     -0.01,        -180)
+  upper <- c(    +Inf,       +Inf, lg_limits[2],     +0.01,        +180)
+  
+  optim_res <- stats::optim(par = par, fn = fit_asy_pvoigt_obj_fn, gr = NULL,
+                            mrs_data = mrs_data_crop, method = "L-BFGS-B",
+                            lower = lower, upper = upper)
+  
+  # run again with better starting vals and more asy freedom
+  lower <- c(    -Inf,          0, lg_limits[1],      -Inf,        -180)
+  upper <- c(    +Inf,       +Inf, lg_limits[2],      +Inf,        +180)
+  optim_res <- stats::optim(par = optim_res$par, fn = fit_asy_pvoigt_obj_fn,
+                            gr = NULL, mrs_data = mrs_data_crop,
+                            method = "L-BFGS-B", lower = lower, upper = upper)
+  
+  model <- sim_asy_pvoigt(freq = optim_res$par[1], fwhm = optim_res$par[2],
+                          lg = optim_res$par[3], asy = optim_res$par[4],
+                          acq_paras = mrs_data_crop, gen_im_pts = FALSE)
+  
+  mrs_data_crop <- phase(mrs_data_crop, optim_res$par[5])
+  model_pts     <- as.numeric(Re(model$data))
+  bl_pts        <- rep(1, length(model_pts))
+  data_pts      <- as.numeric(Re(mrs_data_crop$data))
+  lm_res        <- stats::.lm.fit(cbind(model_pts, bl_pts), data_pts)
+  yhat          <- cbind(model_pts, bl_pts) %*% lm_res$coefficients
+  model         <- vec2mrs_data(yhat, model, fd = TRUE)
+  
+  if (lm_res$coefficients[1] < 0) {
+    model <- -model
+    mrs_data_crop <- phase(mrs_data_crop, 180)
+    lm_res$coefficients <- -lm_res$coefficients
+    optim_res$par[5] <- optim_res$par[5] - 180
+  }
+  
+  return(list(mrs_data_crop = mrs_data_crop, model = model,
+              optim_res = optim_res, peak_amp = lm_res$coefficients[1],
+              bl_amp = lm_res$coefficients[2], freq_ppm = optim_res$par[1],
+              fwhm_hz = optim_res$par[2], lg = optim_res$par[3],
+              asy = optim_res$par[4], phase = optim_res$par[5]))
+}
+
 #' Convert a vector into a mrs_data object.
 #' @param vec the data vector.
 #' @param mrs_data example data to copy acquisition parameters from.
@@ -730,6 +866,74 @@ lb.mrs_data <- function(x, lb, lg = 1) {
 #' @export
 lb.basis_set <- function(x, lb, lg = 1) {
   mrs_data2basis(lb(basis2mrs_data(x), lb, lg), x$names)
+}
+
+match_ls_optim_fn <- function(par, mrs_data, ref, xlim) {
+  resid_mrs <- ref - td2fd(lb(mrs_data, par[1], par[2]))
+  resid     <- spec_op(resid_mrs, xlim = xlim, mode = "mod", operator = "l2")
+  return(resid)
+}
+
+#' Apply Voigt line-broadening to match a reference spectrum.
+#' @param mrs_data data to be broadened, note the linewidth of this spectrum
+#' must be narrower than the ref spectrum.
+#' @param ref reference data to match.
+#' @param xlim spectral region to match, eg c(5.2, 4.1) could be used to match
+#' two water resonances.
+#' @param init_lb initial value for the amount of line-broadening to apply (Hz).
+#' @param init_lg initial value for the Lorentz-Gauss lineshape parameter.
+#' @param min_lb minimum value for the amount of line-broadening to apply (Hz).
+#' @param max_lb maximum value for the amount of line-broadening to apply (Hz).
+#' @param min_lg minimum value for the Lorentz-Gauss lineshape parameter.
+#' @param max_lg maximum value for the Lorentz-Gauss lineshape parameter.
+#' @return a list containing the matched mrs_data, difference spectra and
+#' optimisation results.
+#' @export
+match_lineshape <- function(mrs_data, ref, xlim, init_lb = 0.2, init_lg = 0.5,
+                            min_lb = 0, max_lb = Inf, min_lg = 0, max_lg = 1) {
+  
+  if (!is_fd(ref)) ref <- td2fd(ref)
+  
+  # init broadening in Hz, LG factor
+  start_vals <- c(init_lb, init_lg)
+  
+  res <- stats::optim(start_vals, match_ls_optim_fn, mrs_data = mrs_data,
+                      ref = ref, xlim = xlim, method = "L-BFGS-B",
+                      lower = c(min_lb, min_lg), upper = c(max_lb, max_lg))
+  
+  matched <- td2fd(lb(mrs_data, res$par[1], res$par[2]))
+  diff    <- matched - ref
+  
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  diff_no_match <- mrs_data - ref
+  
+  return(list(matched = matched, diff = diff, diff_no_match = diff_no_match,
+              lb = res$par[1], lg = res$par[2], optim_res = res))
+}
+
+#' Subtract mean rest spectrum from mean task spectrum after applying optimal
+#' linebroadening to the mean task spectrum. Usually used to correct for the
+#' BOLD lineshape narrowing effect in 1H fMRS data.
+#' @param mrs_data dynamic MRS data.
+#' @param task_vec a logical vector with the same length and dynamic scans.
+#' Elements set to TRUE and FALSE will be assigned to task and rest
+#' respectively.
+#' @param xlim spectral region to match, eg c(2.11, 1.91) for tNAA region.
+#' @return a list containing the matched mrs_data, difference spectra and
+#' optimisation results.
+#' @export
+subtract_rest_task <- function(mrs_data, task_vec, xlim = c(2.11, 1.91)) {
+  
+  if (length(task_vec) != Ndyns(mrs_data)) {
+    stop("task_vec length does not match mrs_data")
+  }
+  
+  task_data <- mean_dyns(get_dyns(mrs_data, task_vec))
+  rest_data <- mean_dyns(get_dyns(mrs_data, !task_vec))
+  
+  match_res <- match_lineshape(task_data, rest_data, xlim = xlim)
+  
+  return(match_res)
 }
 
 #' Apply a weighting to the FID to enhance spectral resolution.
@@ -1863,6 +2067,45 @@ get_dyns <- function(mrs_data, subset) {
   return(mrs_data)
 }
 
+#' Average sets of dynamics according to a scheme vector.
+#' @param mrs_data dynamic MRS data.
+#' @param av_scheme vector containing consecutive integer values (starting at 1)
+#' representing sets of dynamics to average. This vector must have the same
+#' length as the number of dynamic scans in mrs_data. Any elements set to NA
+#' will not contribute to averaging.
+#' @return Dynamic MRS data set containing the averaged dynamic sets.
+#' @export
+mean_dyns_scheme <- function(mrs_data, av_scheme) {
+  
+  if (length(av_scheme) != Ndyns(mrs_data)) {
+    stop(paste0("scheme is the wrong length. Currently : ",
+                length(av_scheme),", should be : ", Ndyns(mrs_data)))
+  }
+  
+  av_scheme <- as.integer(av_scheme)
+  
+  if (min(av_scheme, na.rm = TRUE) != 1L) {
+    stop("minimum av_scheme value is not 1")
+  }
+  
+  max_dyn <- max(av_scheme, na.rm = TRUE)
+  
+  av_scheme_unique <- as.vector(stats::na.omit(unique(av_scheme)))
+  
+  if (!identical(sort(av_scheme_unique), (1:max_dyn))) {
+    print(sort(av_scheme_unique))
+    stop("av_scheme values are not consecutive integers")
+  }
+  
+  metab_list <- vector("list", length = max_dyn)
+  for (n in 1:max_dyn) {
+    subset <- which(av_scheme == n) 
+    metab_list[[n]] <- mean_dyns(get_dyns(mrs_data, subset))
+  }
+  
+  return(append_dyns(metab_list))
+}
+
 #' Interleave the first and second half of a dynamic series.
 #' @param mrs_data dynamic MRS data.
 #' @return interleaved data.
@@ -2272,6 +2515,26 @@ inv_odd_dyns <- function(mrs_data) {
   subset <- seq(1, Ndyns(mrs_data), 2)
   mrs_data$data[,,,, subset,,] <- -1 * mrs_data$data[,,,, subset,,]
   return(mrs_data)
+}
+
+#' Subtract the odd dynamic scans from the even dynamic scans.
+#' @param mrs_data dynamic MRS data.
+#' @return subtracted result.
+#' @export
+sub_odd_from_even_dyns <- function(mrs_data) {
+  odd  <- get_odd_dyns(mrs_data) 
+  even <- get_even_dyns(mrs_data) 
+  return(even - odd)
+}
+
+#' Subtract the even dynamic scans from the odd dynamic scans.
+#' @param mrs_data dynamic MRS data.
+#' @return subtracted result.
+#' @export
+sub_even_from_odd_dyns <- function(mrs_data) {
+  odd  <- get_odd_dyns(mrs_data) 
+  even <- get_even_dyns(mrs_data) 
+  return(odd - even)
 }
 
 #' Invert even numbered dynamic scans starting from 1 (2,4,6...).

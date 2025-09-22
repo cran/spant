@@ -75,6 +75,20 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
     return(res)
   }
   
+  # check for a dynamic basis-set
+  if (identical(class(basis), "list")) {
+    if (identical(class(basis[[1]]), "basis_set")) {
+      if (length(basis) != Ndyns(metab)) {
+        stop("Dynamic basis does not match data.")
+      }
+      dyn_basis <- TRUE
+    } else {
+      dyn_basis <- FALSE
+    }
+  } else {
+    dyn_basis <- FALSE
+  }
+  
   if (is.null(extra)) extra <- metab$extra
   
   # start the clock
@@ -108,6 +122,8 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
     if (!file.exists(basis)) {
       stop("Error, basis file not found.")
     }
+  } else if (dyn_basis) {
+    # TODO check basis matches mrs_data 
   } else {
     stop("Error, specified basis is not the correct data type.")
   }
@@ -139,12 +155,34 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
     acq_paras <- get_acq_paras(metab)
     
     if (!parallel) {
-      result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), abfit,
-                                 acq_paras, basis, opts,
-                                 .parallel = parallel,
-                                 .paropts = list(.inorder = TRUE,
-                                                 .packages = "spant"),
-                                 .progress = progress, .inform = FALSE)
+      
+      if (dyn_basis) {
+        # convert data into a list of vectors for .mapply to work
+        data_mat      <- metab$data
+        data_N        <- Npts(metab)
+        dim(data_mat) <- c(length(data_mat) / data_N, data_N)
+        data_list     <- asplit(data_mat, 1)
+        dots_list     <- list(y = data_list, basis = basis)
+        MoreArgs_list <- list(acq_paras = acq_paras, opts = opts)
+        result_list   <- pbapply::pb.mapply(abfit, dots = dots_list,
+                                            MoreArgs = MoreArgs_list)
+        attr(result_list, "dim") <- NULL
+        names(result_list) <- seq_len(length(data_list))
+        attr(result_list, "split_type") <- "array"
+        labs <- which(array(TRUE, dim(metab$data)[2:6]), arr.ind = TRUE)
+        labs <- as.data.frame(labs)
+        labs[] <- lapply(labs, factor)
+        colnames(labs) <- paste0("X", 1:5)
+        rownames(labs) <- 1:nrow(labs)
+        attr(result_list, "split_labels") <- labs
+      } else {
+        result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), abfit,
+                                   acq_paras, basis, opts,
+                                   .parallel = parallel,
+                                   .paropts = list(.inorder = TRUE,
+                                                   .packages = "spant"),
+                                   .progress = progress, .inform = FALSE)
+      }
     } else {
       if (is.null(cl)) stop("pass cl argument to fit_mrs for parallel analyses")
       result_list <- parallel::parApply(cl, metab$data, c(2, 3, 4, 5, 6), abfit,
@@ -155,13 +193,41 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
       names(result_list) <- seq_len(nrow(labs))
     }
     
-    # method using base apply
-    # result_list <- apply(metab$data, c(2, 3, 4, 5, 6), abfit, acq_paras,
-    #                      basis, opts)
-    # labs <- which(array(TRUE, dim(result_list)), arr.ind = TRUE)
-    # result_list <- result_list[,,,,]
-    # attr(result_list, "split_labels") <- labs
-    # names(result_list) <- seq_len(nrow(labs))
+    # method using pbapply
+    #
+    # result_list_ap <- pbapply::pbapply(metab$data, c(2, 3, 4, 5, 6), abfit,
+    #                                    acq_paras, basis, opts)
+    # labs <- which(array(TRUE, dim(result_list_ap)), arr.ind = TRUE)
+    # labs <- as.data.frame(labs)
+    # labs[] <- lapply(labs, factor)
+    # colnames(labs) <- paste0("X", 1:5)
+    # rownames(labs) <- 1:nrow(labs)
+    # result_list_ap <- result_list_ap[,,,,]
+    # attr(result_list_ap, "split_type") <- "array"
+    # attr(result_list_ap, "split_labels") <- labs
+    # names(result_list_ap) <- seq_len(nrow(labs))
+    
+    # method using pb.mapply
+    #
+    # convert data into a list of vectors for .mapply to work
+    # data_mat       <- metab$data
+    # data_N         <- Npts(metab)
+    # dim(data_mat)  <- c(length(data_mat) / data_N, data_N)
+    # data_list      <- asplit(data_mat, 1)
+    # result_list_ap <- pbapply::pb.mapply(abfit, dots = list(data_list),
+    #                                      MoreArgs = list(acq_paras = acq_paras,
+    #                                      basis = basis, opts = opts))
+    # attr(result_list_ap, "dim") <- NULL
+    # names(result_list_ap) <- seq_len(length(data_list))
+    # attr(result_list_ap, "split_type") <- "array"
+    # labs <- which(array(TRUE, dim(metab$data)[2:6]), arr.ind = TRUE)
+    # labs <- as.data.frame(labs)
+    # labs[] <- lapply(labs, factor)
+    # colnames(labs) <- paste0("X", 1:5)
+    # rownames(labs) <- 1:nrow(labs)
+    # attr(result_list_ap, "split_labels") <- labs
+    # 
+    # identical(result_list_ap, result_list)
     
   } else if (METHOD == "VARPRO") {
     # read basis into memory if a file
@@ -266,9 +332,16 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
     if (is.character(basis)) {
       basis_file <- basis  
     } else {
-      # write basis object (if specified) to file
-      basis_file <- tempfile(fileext = ".basis")
-      write_basis(basis, basis_file)
+      if (dyn_basis) {
+        basis_file <- vector("list", length(basis))
+        for (n in 1:length(basis)) {
+          basis_file[[n]] <- tempfile(fileext = ".basis")
+          write_basis(basis[[n]], basis_file[[n]])
+        }
+      } else {
+        basis_file <- tempfile(fileext = ".basis")
+        write_basis(basis, basis_file)
+      }
     }
     
     temp_mrs <- metab
@@ -276,12 +349,34 @@ fit_mrs <- function(metab, basis = NULL, method = 'ABFIT', w_ref = NULL,
     dim(temp_mrs$data) <- c(1, 1, 1, 1, 1, 1, length(temp_mrs$data))
     
     if (!parallel) {
-      result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), lcmodel_fit,
-                                 temp_mrs, basis_file, opts,
-                                 .parallel = parallel,
-                                 .paropts = list(.inorder = TRUE,
-                                                 .packages = "spant"),
-                                 .progress = progress, .inform = FALSE)
+      if (dyn_basis) {
+        # convert data into a list of vectors for .mapply to work
+        data_mat      <- metab$data
+        data_N        <- Npts(metab)
+        dim(data_mat) <- c(length(data_mat) / data_N, data_N)
+        data_list     <- asplit(data_mat, 1)
+        data_list     <- lapply(data_list, as.complex)
+        dots_list     <- list(element = data_list, basis_file = basis_file)
+        MoreArgs_list <- list(temp_mrs = temp_mrs, opts = opts)
+        result_list   <- pbapply::pb.mapply(lcmodel_fit, dots = dots_list,
+                                            MoreArgs = MoreArgs_list)
+        attr(result_list, "dim") <- NULL
+        names(result_list) <- seq_len(length(data_list))
+        attr(result_list, "split_type") <- "array"
+        labs <- which(array(TRUE, dim(metab$data)[2:6]), arr.ind = TRUE)
+        labs <- as.data.frame(labs)
+        labs[] <- lapply(labs, factor)
+        colnames(labs) <- paste0("X", 1:5)
+        rownames(labs) <- 1:nrow(labs)
+        attr(result_list, "split_labels") <- labs
+      } else {
+        result_list <- plyr::alply(metab$data, c(2, 3, 4, 5, 6), lcmodel_fit,
+                                   temp_mrs, basis_file, opts,
+                                   .parallel = parallel,
+                                   .paropts = list(.inorder = TRUE,
+                                                   .packages = "spant"),
+                                   .progress = progress, .inform = FALSE)
+      }
     } else {
       if (is.null(cl)) stop("pass cl argument to fit_mrs for parallel analyses")
       result_list <- parallel::parApply(cl, metab$data, c(2, 3, 4, 5, 6),

@@ -39,20 +39,33 @@ for (n in 1:Ndyns(params$fit_res$data)) {
 
 ```{r, results = 'asis', fig.width=7, fig.height=7}
 if (!is.null(dyn_data_uncorr)) {
+  vline <- 2.01
   cat("## Dynamic plots {.tabset}\n")
   if (!is.null(dyn_data_corr)) {
-    cat("### Spectrogram with dynamic correction\n")
+    cat("### Spectrogram with correction\n")
     if (is.null(params$plot_ppm_xlim)) {
-      image(dyn_data_corr, xlim = c(4, 0.5))
+      image(dyn_data_corr, xlim = c(4, 0.5), vline = vline,
+            vline_col = "black")
     } else {
-      image(dyn_data_corr, xlim = params$plot_ppm_xlim)
+      image(dyn_data_corr, xlim = params$plot_ppm_xlim, vline = vline,
+            vline_col = "black")
     }
   }
-  cat("\n\n### Spectrogram without dynamic correction\n")
+  cat("\n\n### Spectrogram without correction\n")
   if (is.null(params$plot_ppm_xlim)) {
-    image(dyn_data_uncorr, xlim = c(4, 0.5))
+    image(dyn_data_uncorr, xlim = c(4, 0.5), vline = vline,
+          vline_col = "black")
   } else {
-    image(dyn_data_uncorr, xlim = params$plot_ppm_xlim)
+    image(dyn_data_uncorr, xlim = params$plot_ppm_xlim, vline = vline,
+          vline_col = "black")
+  }
+  if (!is.null(dyn_data_corr)) {
+    cat("\n\n### Mean subtracted spectrogram\n")
+    if (is.null(params$plot_ppm_xlim)) {
+      image(sub_mean_dyns(dyn_data_corr), xlim = c(4, 0.5))
+    } else {
+      image(sub_mean_dyns(dyn_data_corr), xlim = params$plot_ppm_xlim)
+    }
   }
 }
 ```
@@ -228,6 +241,10 @@ print(argg)
 
 Wilson M. Adaptive baseline fitting for 1H MR spectroscopy analysis. Magn Reson 
 Med. 2021 Jan;85(1):13-29. https://doi.org/10.1002/mrm.28385
+
+Wilson, M. Chemical shift and relaxation regularization improve the accuracy of
+1H MR spectroscopy analysis. Magn Reson Med. 2025 Jun;93(6):2287-2296.
+https://doi.org/10.1002/mrm.30462
 
 Wilson, M. spant: An R package for magnetic resonance spectroscopy 
 analysis. Journal of Open Source Software. 2021 6(67), 3646. 

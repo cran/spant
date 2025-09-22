@@ -38,19 +38,57 @@ Frequency shift range : `r round(params$data$summary_diags['shift_hz_range'], 1)
 
 Dynamic lipid fluctuation range : `r round(100 * params$data$summary_diags['dlfr'], 1)`% tCr intensity
 
-### Dynamic frequency shifts
+```{r, results = 'asis', fig.width=10}
+if (!is.null(params$data$dyn_wref_table)) {
+  cat("### Dynamic water linewidths\n")
+  diag_table <- params$data$dyn_wref_table
+  p <- ggplot(diag_table, aes(x = time_sec, y = water_fwhm)) + geom_line() +
+    xlab("Time (s)") + theme(legend.position = "none") + 
+    scale_y_continuous("Water linewidth (ppm)",
+                       sec.axis = sec_axis(~ . * params$data$mean_corr$ft / 1e6,
+                                           name = "Water linewidth (Hz)")
+  )
+  print(p)
+}
+```
+
+```{r, results = 'asis', fig.width=10}
+if (!is.null(params$data$dyn_wref_table)) {
+  cat("### Dynamic water areas\n")
+  diag_table <- params$data$dyn_wref_table
+  p <- ggplot(diag_table, aes(x = time_sec, y = water_area)) + geom_line() +
+    xlab("Time (s)") + ylab("Water area (a.u.)") +
+    theme(legend.position = "none")
+  print(p)
+}
+```
+
+```{r, results = 'asis', fig.width=10}
+if (!is.null(params$data$dyn_wref_table)) {
+  cat("### Dynamic water peak height\n")
+  diag_table <- params$data$dyn_wref_table
+  p <- ggplot(diag_table, aes(x = time_sec, y = water_height)) + geom_line() +
+    xlab("Time (s)") + ylab("Water peak height (a.u.)") +
+    theme(legend.position = "none")
+  print(p)
+}
+```
+
+### Dynamic frequency shifts (metabolite)
 ```{r, fig.width=10}
 diag_table <- params$data$diag_table
     ggplot(diag_table, aes(x = time_sec, y = shifts_hz)) + geom_line() + 
       xlab("Time (s)") + ylab("Shift (Hz)")
 ```
 
-### Dynamic linewidths
+### Dynamic linewidths (tNAA)
 ```{r, fig.width=10}
 diag_table <- params$data$diag_table
 p <- ggplot(diag_table, aes(x = time_sec, y = lw_ppm)) + geom_line() +
-  xlab("Time (s)") + ylab("tNAA linewidth (ppm)") +
-  theme(legend.position = "none")
+  xlab("Time (s)") +
+  theme(legend.position = "none") + scale_y_continuous("tNAA linewidth (ppm)",
+                       sec.axis = sec_axis(~ . * params$data$mean_corr$ft / 1e6,
+                                           name = "tNAA linewidth (Hz)"))
 if (!anyNA(diag_table$lw_ppm)) {
   p <- p + geom_line(aes(x = time_sec, y = lw_ppm_smo), linewidth = 1.5,
                      colour = "red")

@@ -1,7 +1,13 @@
+# spant 3.6.0
+* Added mean_dyns_scheme function.
+* Millisecond option added to plot x scale.
+* Added read_basis_niidir and write_basis_niidir functions for import/export
+of basis sets stored as a group of NIfTI MRS files.
+
 # spant 3.5.0
 * Added a function to help bids sorting of MRS and MRI data : mr_data2bids.
 * Extra options to fit_svs : dfp_corr_ref_subset and w_ref_subset.
-* fit_svs default now uses the mean of all availalbe water reference scans,
+* fit_svs default now uses the mean of all available water reference scans,
 rather than just the first dynamic. Set w_ref_subset = 1 to reproduce previous
 results.
 
