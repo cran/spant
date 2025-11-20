@@ -10,9 +10,11 @@ fit_svs_edited(
   output_dir = NULL,
   mri = NULL,
   mri_seg = NULL,
+  segment_t1 = FALSE,
   external_basis = NULL,
   p_vols = NULL,
   format = NULL,
+  editing_type = "gaba_1.9",
   editing_scheme = NULL,
   invert_edit_on = NULL,
   invert_edit_off = NULL,
@@ -45,7 +47,8 @@ fit_svs_edited(
   dyn_av_scheme_file = NULL,
   plot_ppm_xlim = NULL,
   extra_output = FALSE,
-  verbose = FALSE
+  verbose = FALSE,
+  return_fit = FALSE
 )
 }
 \arguments{
@@ -59,6 +62,9 @@ fit_svs_edited(
 
 \item{mri_seg}{filepath or nifti object containing segmented MRI data.}
 
+\item{segment_t1}{segment the t1 weighted mri file with FSL FAST and use the
+results to perform partial volume correction. Defaults to FALSE.}
+
 \item{external_basis}{precompiled basis set object to use for analysis.}
 
 \item{p_vols}{a numeric vector of partial volumes expressed as percentages.
@@ -67,6 +73,9 @@ would use : p_vols = c(WM = 0, GM = 100, CSF = 0).}
 
 \item{format}{Override automatic data format detection. See format argument
 in \code{\link[=read_mrs]{read_mrs()}} for permitted values.}
+
+\item{editing_type}{can be one of : "gaba_1.9" or "gsh_4.54". Defaults to
+"gaba_1.9".}
 
 \item{editing_scheme}{describes the dynamic data ordering. Can be one of:
 'on-off-blocks', 'on-off-interleaved', 'off-on-blocks' or
@@ -178,6 +187,8 @@ results.}
 Defaults to FALSE.}
 
 \item{verbose}{output potentially useful information.}
+
+\item{return_fit}{return a fit object, defaults to FALSE.}
 }
 \description{
 Note this function is still under development and liable to changes.

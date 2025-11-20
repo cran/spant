@@ -793,7 +793,7 @@ mean_vec_blocks <- function(x, block_size) {
 #' @param fit_res input vector.
 #' @param format_out reduce the accuracy of values to aid table formatting.
 #' @return data.frame of values.
-#' @export 
+#' @export
 sv_res_table <- function(fit_res, format_out = FALSE) {
   
   # pretend it's a full fit result if only a table is passed in
@@ -806,7 +806,7 @@ sv_res_table <- function(fit_res, format_out = FALSE) {
   amps     <- as.numeric(fit_res$res_tab[1, amp_indx])
   names    <- colnames(fit_res$res_tab[1, amp_indx])
   sds      <- as.numeric(fit_res$res_tab[1, amp_indx + 
-                                           amp_indx[length(amp_indx)] - 5])
+                                            amp_indx[length(amp_indx)] - 5])
   sds_perc <- sds / amps * 100
   CI95_UB <- amps + sds * 1.96
   CI95_LB <- amps - sds * 1.96
@@ -829,6 +829,29 @@ sv_res_table <- function(fit_res, format_out = FALSE) {
   return(df_out)
 }
 
+add_fit_res_tab_amp_sd <- function(res_tab, name, amp_col, sd_col) {
+  first_sig_idx    <- 6
+  first_sig        <- names(res_tab[first_sig_idx])
+  first_sig_sd     <- paste0(first_sig, ".sd")
+  first_sig_sd_idx <- which(names(res_tab) == first_sig_sd)
+  last_sig_idx     <- first_sig_sd_idx - 1
+  sig_idxs         <- first_sig_idx:last_sig_idx
+  last_sig_sd_idx  <- first_sig_sd_idx + length(sig_idxs) - 1
+  sig_sd_idxs      <- first_sig_sd_idx:last_sig_sd_idx
+  
+  new_amp_col <- data.frame(amp_col)
+  colnames(new_amp_col) <- name
+  sd_name <- paste0(name, ".sd")
+  new_sd_col <- data.frame(sd_col)
+  colnames(new_sd_col) <- sd_name
+  
+  res_tab_out <- cbind(res_tab[1:last_sig_idx], new_amp_col,
+                       res_tab[first_sig_sd_idx:last_sig_sd_idx], new_sd_col,
+                       res_tab[(last_sig_sd_idx + 1):ncol(res_tab)])
+  
+  return(res_tab_out)
+}
+
 #' Segment T1 weighted MRI data using FSL FAST and write to file. Runs deface
 #' and bet as preprocessing steps by default.
 #' 
@@ -837,13 +860,23 @@ sv_res_table <- function(fit_res, format_out = FALSE) {
 #' 'options(fsl.path = "/path/to/fsl")'
 #' 
 #' @param mri_path path to the volumetric T1 data.
+#' @param out_dir optional output directory. Defaults to the same directory
+#' as mri_path if not specified.
 #' @param deface deface the input T1 data before analysis. Defaults to FALSE.
 #' @param bet_fit fractional intensity threshold for bet brain extraction.
 #' Values should be between 0 and 1. Defaults to 0.5 with smaller values giving
 #' larger brain estimates.
-#' @export 
-segment_t1_fsl <- function(mri_path, deface = FALSE, bet_fit = 0.5) {
-  dir_path <- dirname(mri_path)
+#' @export
+segment_t1_fsl <- function(mri_path, out_dir = NULL, deface = FALSE,
+                           bet_fit = 0.5) {
+  
+  if (is.null(out_dir)) {
+    dir_path <- dirname(mri_path)
+  } else {
+    dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+    dir_path <- out_dir
+  }
+  
   if (deface) {
     deface_path <- file.path(dir_path, "t1_deface")
     fslr::fsl_deface(mri_path, outfile = deface_path, retimg = FALSE,
@@ -864,7 +897,7 @@ segment_t1_fsl <- function(mri_path, deface = FALSE, bet_fit = 0.5) {
 #' @param date scan date, eg "01-01-2025".
 #' @param end_time scan time, eg "14:00".
 #' @return data.frame of moco parameters.
-#' @export 
+#' @export
 read_dkd_moco_log <- function(path, date, end_time) {
   
   lines <- readLines(path)
@@ -901,4 +934,72 @@ read_dkd_moco_log <- function(path, date, end_time) {
   data <- data[, -rem_cols]
   colnames(data) <- cnames
   return(data)
+}
+
+#' Split paths into parts based on backslash, forwardslash and dot characters
+#' and return a data frame of these parts.
+#' @param paths a vector of paths.
+#' @param col_num when set, only the specified column number of the data frame
+#' will be returned.
+#' @param extra_regex extra regular expression for splitting the paths. Example,
+#' "_|-" could be used to additionally split on underscores and hyphen
+#' characters.
+#' @return data.frame of separated path elements.
+#' @export 
+paths2df <- function(paths, col_num = NULL, extra_regex = NULL) {
+  
+  regex_str <- "/|\\\\|\\."
+  
+  if (!is.null(extra_regex)) regex_str <- paste0(regex_str, "|", extra_regex)
+    
+  str_list <- strsplit(paths, regex_str)
+  str_list <- lapply(str_list, \(x) x[x!=""])
+  out_df <- as.data.frame(do.call("rbind", str_list))
+  # out_df <- cbind(paths = paths, out_df)
+  if (is.null(col_num)) {
+    return(out_df)
+  } else {
+    return(out_df[,col_num])
+  }
+}
+
+#' Trim a vector of filesystem paths.
+#' @param paths vectors of filesystem paths.
+#' @param dir number of times to apply the base dirname function.
+#' @param char number of characters to trim from the end of each path. Note this
+#' is performed after the dir based trimming.
+#' @return a vector of trimmed paths.
+#' @export 
+trim_paths <- function(paths, dir = 0, char = 0) {
+  
+  for (n in 1:length(paths)) {
+    if (dir > 0) for (m in 1:dir) paths[n] <- dirname(paths[n])
+    if (char > 0) paths[n] <- substr(paths[n], 1, nchar(paths[n]) - char)
+  }
+    
+  return(paths)
+}
+
+#' Match files based on a vector of input paths and a glob pattern. The glob
+#' pattern is appended to each path and should match one file only.
+#' @param paths vectors of filesystem paths.
+#' @param glob pattern to append to each path before passing to Sys.glob.
+#' @return matched files. NA values correspond to either no match or multiple
+#' matches.
+#' @export 
+match_files <- function(paths, glob) {
+  paths_out <- rep(NA, length(paths))
+  for (n in 1:length(paths)) {
+    match <- Sys.glob(paste0(paths[n], glob))
+    if (length(match) == 0) {
+      warning(paste0("no match for : ", paste0(paths[n], glob)))
+    } else if (length(match) > 1) {
+      warning(paste0("multiple matches for : ", paste0(paths[n], glob)))
+    } else if (length(match) == 1) {
+      paths_out[n] <- match
+    } else {
+      stop("I don't belong here")
+    }
+  }
+  return(paths_out)
 }

@@ -9,7 +9,9 @@ preproc_svs(
   label = NULL,
   output_dir = NULL,
   ref_inds = NULL,
-  dyn_water_ref_path = NULL
+  dyn_water_ref_path = NULL,
+  Ntrans = NULL,
+  TR = NULL
 )
 }
 \arguments{
@@ -24,6 +26,10 @@ scans.}
 
 \item{dyn_water_ref_path}{path to interleaved water reference data file or
 IMA directory.}
+
+\item{Ntrans}{override the number of transients set in the mrs_data file.}
+
+\item{TR}{override the TR (in seconds) set in the mrs_data file.}
 }
 \description{
 Preprocess and perform quality assessment of a single SVS data set.

@@ -184,7 +184,7 @@ sim_resonances_fast2 <- function(freq = 0, amp = 1, freq_ppm = TRUE,
 #' 2008; 47: 66-69.
 #' 
 #' @param freq resonance frequency in ppm.
-#' @param fwhm resonance FWHM.
+#' @param fwhm resonance FWHM in Hz.
 #' @param lg Lorentz-Gauss lineshape parameter (between 0 and 1).
 #' @param asy asymmetry parameter.
 #' @param acq_paras list of acquisition parameters. See
@@ -202,7 +202,7 @@ sim_asy_pvoigt <- function(freq = 0, fwhm = 0, lg = 0, asy = 0,
   
   # convert ppm to Hz
   freq       <- ppm2hz(freq, acq_paras$ft, acq_paras$ref)
-  freq_scale <- hz(fs  = acq_paras$fs, N = acq_paras$N)
+  freq_scale <- hz(fs = acq_paras$fs, N = acq_paras$N)
   asy_fwhm   <- asy_fwhm_fn(freq_scale, fwhm, asy, freq)
   fd <- lg * G(freq_scale, asy_fwhm, freq) + (1 - lg) *
              L(freq_scale, asy_fwhm, freq)
@@ -226,6 +226,10 @@ sim_asy_pvoigt <- function(freq = 0, fwhm = 0, lg = 0, asy = 0,
     
     fd <- ft_shift(td) / acq_paras$N * 2
   }
+  
+  # scale so that intensity=1 (or 0.5) when t=0 for amplitude of 1
+  # to be consistent with sim_resonances
+  fd <- fd * acq_paras$fs / 2
   
   mrs_data <- vec2mrs_data(fd, fs = acq_paras$fs, ft = acq_paras$ft,
                            ref = acq_paras$ref, nuc = acq_paras$nuc, fd = TRUE)
@@ -529,20 +533,24 @@ add_noise <- function(mrs_data, sd = 0.1, fd = TRUE) {
 #' Add noise to an mrs_data object to match a given SNR.
 #' @param mrs_data data to add noise to.
 #' @param target_snr desired spectral SNR, note this assumes the input data is
-#' noise-free, eg simulated data. Note the SNR is estimated from the first 
-#' scan in the dataset and the same noise level is added to all spectra.
+#' noise-free, eg simulated data (unless noise_free_input is set to FALSE). Note 
+#' the SNR is estimated from the first scan in the dataset and the same noise
+#' level is added to all spectra.
 #' @param sig_region spectral limits to search for the strongest spectral data
 #' point.
 #' @param ref_data measure the signal from the first scan in this reference data
 #' and apply the same target noise level to mrs_data.
+#' @param noise_free_input accounts for the reference data already containing
+#' noise when set to FALSE. Defaults to TRUE.
 #' @return mrs_data object with additive normally distributed noise.
 #' @export
 add_noise_spec_snr <- function(mrs_data, target_snr, sig_region = c(4, 0.5),
-                               ref_data = NULL) {
+                               ref_data = NULL, noise_free_input = TRUE) {
   
   if (inherits(mrs_data, "list")) {
     res <- lapply(mrs_data, add_noise_spec_snr, target_snr = target_snr,
-                  sig_region = sig_region, ref_data = ref_data)
+                  sig_region = sig_region, ref_data = ref_data,
+                  noise_free_input = noise_free_input)
     return(res)
   }
   
@@ -553,10 +561,19 @@ add_noise_spec_snr <- function(mrs_data, target_snr, sig_region = c(4, 0.5),
   }
   
   # measure max signal from the first scan and add noise
-  peak_height <- calc_spec_snr(ref_data, sig_region = sig_region,
-                               full_output = TRUE)$max_sig
-  noise_sd    <- peak_height / target_snr
-  mrs_data    <- add_noise(mrs_data, noise_sd)
+  ref_spec_snr <- calc_spec_snr(ref_data, sig_region = sig_region,
+                                full_output = TRUE)
+  
+  peak_height  <- ref_spec_snr$max_sig
+  if (noise_free_input) {
+    noise_sd   <- peak_height / target_snr
+    mrs_data   <- add_noise(mrs_data, noise_sd)
+  } else {
+    target_sd  <- peak_height / target_snr
+    current_sd <- ref_spec_snr$noise_sd
+    noise_sd   <- (target_sd ^ 2 - current_sd ^ 2) ^ 0.5
+    mrs_data   <- add_noise(mrs_data, noise_sd)
+  }
   return(mrs_data)
 }
 
@@ -869,7 +886,11 @@ lb.basis_set <- function(x, lb, lg = 1) {
 }
 
 match_ls_optim_fn <- function(par, mrs_data, ref, xlim) {
-  resid_mrs <- ref - td2fd(lb(mrs_data, par[1], par[2]))
+  if (length(par) == 2) {
+    resid_mrs <- ref - td2fd(lb(mrs_data, par[1], par[2]))
+  } else {
+    resid_mrs <- ref - td2fd(lb(mrs_data, par[1], par[2])) * par[3]
+  }
   resid     <- spec_op(resid_mrs, xlim = xlim, mode = "mod", operator = "l2")
   return(resid)
 }
@@ -882,33 +903,60 @@ match_ls_optim_fn <- function(par, mrs_data, ref, xlim) {
 #' two water resonances.
 #' @param init_lb initial value for the amount of line-broadening to apply (Hz).
 #' @param init_lg initial value for the Lorentz-Gauss lineshape parameter.
+#' @param init_amp initial value for the amplitude parameter.
 #' @param min_lb minimum value for the amount of line-broadening to apply (Hz).
 #' @param max_lb maximum value for the amount of line-broadening to apply (Hz).
 #' @param min_lg minimum value for the Lorentz-Gauss lineshape parameter.
 #' @param max_lg maximum value for the Lorentz-Gauss lineshape parameter.
+#' @param min_amp minimum value for the amplitude parameter.
+#' @param max_amp maximum value for the amplitude parameter.
+#' @param amp_optim flag to include amplitude adjustment in the optimisation
+#' procedure. Defaults to TRUE.
 #' @return a list containing the matched mrs_data, difference spectra and
 #' optimisation results.
 #' @export
 match_lineshape <- function(mrs_data, ref, xlim, init_lb = 0.2, init_lg = 0.5,
-                            min_lb = 0, max_lb = Inf, min_lg = 0, max_lg = 1) {
+                            init_amp = 1, min_lb = 0, max_lb = Inf, min_lg = 0, 
+                            max_lg = 1, min_amp = 0.1, max_amp = 2.0, 
+                            amp_optim = TRUE) {
   
   if (!is_fd(ref)) ref <- td2fd(ref)
   
-  # init broadening in Hz, LG factor
-  start_vals <- c(init_lb, init_lg)
-  
-  res <- stats::optim(start_vals, match_ls_optim_fn, mrs_data = mrs_data,
-                      ref = ref, xlim = xlim, method = "L-BFGS-B",
-                      lower = c(min_lb, min_lg), upper = c(max_lb, max_lg))
-  
-  matched <- td2fd(lb(mrs_data, res$par[1], res$par[2]))
-  diff    <- matched - ref
-  
-  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
-  diff_no_match <- mrs_data - ref
-  
-  return(list(matched = matched, diff = diff, diff_no_match = diff_no_match,
-              lb = res$par[1], lg = res$par[2], optim_res = res))
+  if (amp_optim) {
+    # init broadening in Hz, LG factor
+    start_vals <- c(init_lb, init_lg, init_amp)
+    
+    res <- stats::optim(start_vals, match_ls_optim_fn, mrs_data = mrs_data,
+                        ref = ref, xlim = xlim, method = "L-BFGS-B",
+                        lower = c(min_lb, min_lg, min_amp),
+                        upper = c(max_lb, max_lg, max_amp))
+    
+    matched <- td2fd(lb(mrs_data, res$par[1], res$par[2]))
+    diff    <- scale_mrs_amp(matched, res$par[3]) - ref
+    
+    if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+    diff_no_match <- mrs_data - ref
+    
+    return(list(matched = matched, diff = diff, diff_no_match = diff_no_match,
+                lb = res$par[1], lg = res$par[2], amp = res$par[3],
+                optim_res = res))
+  } else {
+    # init broadening in Hz, LG factor
+    start_vals <- c(init_lb, init_lg)
+    
+    res <- stats::optim(start_vals, match_ls_optim_fn, mrs_data = mrs_data,
+                        ref = ref, xlim = xlim, method = "L-BFGS-B",
+                        lower = c(min_lb, min_lg), upper = c(max_lb, max_lg))
+    
+    matched <- td2fd(lb(mrs_data, res$par[1], res$par[2]))
+    diff    <- matched - ref
+    
+    if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+    diff_no_match <- mrs_data - ref
+    
+    return(list(matched = matched, diff = diff, diff_no_match = diff_no_match,
+                lb = res$par[1], lg = res$par[2], optim_res = res))
+  }
 }
 
 #' Subtract mean rest spectrum from mean task spectrum after applying optimal
@@ -2120,6 +2168,18 @@ interleave_dyns <- function(mrs_data) {
 
 set_dyns <- function(mrs_data, subset, mrs_data_in) {
   mrs_data$data[,,,, subset,,] = mrs_data_in$data[,,,, 1,,]
+  return(mrs_data)
+}
+
+#' Overwrite a subset of dynamic scans.
+#' @param mrs_data dynamic MRS data to be updated.
+#' @param subset vector containing indices to the dynamic scans to be 
+#' assigned.
+#' @param mrs_data_new dynamic MRS data with new values.
+#' @return MRS data with updated dynamics.
+#' @export
+assign_dyns <- function(mrs_data, subset, mrs_data_new) {
+  mrs_data$data[,,,, subset,,] = mrs_data_new$data[,,,,,,]
   return(mrs_data)
 }
 
@@ -5360,4 +5420,86 @@ phase_bl_obj_fn <- function(phi, vec, ind_list) {
   areas <- rep(NA, length(ind_list))
   for (n in 1:length(ind_list)) areas[n] <- sum(vec[ind_list[[n]]])
   return(sum((areas - mean(areas)) ^ 2))
+}
+
+#' Apply line-broadening to dynamic MRS data and add normally distributed noise
+#' (renoise) to reverse any associated improvement in SNR.
+#'
+#' This function mimics a strategy used by : "Bednařík P, Tkáč I, Giove F,
+#' DiNuzzo M, Deelchand DK, Emir UE, Eberly LE, Mangia S. Neurochemical and BOLD
+#' responses during neuronal activation measured in the human visual cortex at
+#' 7 Tesla. J Cereb Blood Flow Metab. 2015 Mar 31;35(4):601-10. 
+#' doi: 10.1038/jcbfm.2014.233. PMID: 25564236; PMCID: PMC4420878."
+#' Note that set.seed(XX) should be used for reproducible analyses.
+#'
+#' @param mrs_data data to be broadened.
+#' @param lb amount of line-broadening in Hz, length should be equal to the
+#' number of dynamics in mrs_data.
+#' @param lg Lorentz-Gauss lineshape parameter (between 0 and 1). Defaults to a
+#' fully Lorentzian value of 0. If one value is given, will be recycled to match
+#' the number of dynamics in mrs_data.
+#' @param sig_region a ppm region to define where the maximum signal value
+#' should be estimated.
+#' @param noise_region a ppm region to defined where the noise level should be 
+#' estimated.
+#' @param p_order polynomial order to fit to the noise region before estimating 
+#' the standard deviation.
+#' @return line-broadened and renoised data.
+#' @export
+lb_renoise <- function(mrs_data, lb, lg = NULL, sig_region = c(4, 0.5),
+                       noise_region = c(-0.5, -2.5), p_order = 2) {
+  
+  # do checks on lb
+  if (length(lb) != Ndyns(mrs_data)) {
+    stop("lb and Ndyns do not match")
+  }
+  
+  # do checks on lg
+  if (is.null(lg)) {
+    lg <- rep(0, length(lb))
+  } else {
+    if (length(lg) != length(lb)) stop("lb and lg lengths do not match")
+  }
+  
+  # must be freq domain
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  for (n in 1:Ndyns(mrs_data)) {
+    
+    # skip to the next spectrum if lb == 0
+    if (lb[n] == 0) next
+    
+    mrs_data_n <- get_dyns(mrs_data, n)
+    
+    # get original SNR
+    orig_spec_snr <- calc_spec_snr(mrs_data_n, full_output = TRUE,
+                                   sig_region = sig_region,
+                                   noise_region = noise_region,
+                                   p_order = p_order)
+    
+    # apply linebroadening
+    mrs_data_n <- lb(mrs_data_n, lb[n], lg[n]) 
+    
+    # get new SNR post linebroadening
+    new_spec_snr <- calc_spec_snr(mrs_data_n, full_output = TRUE,
+                                  sig_region = sig_region,
+                                  noise_region = noise_region,
+                                  p_order = p_order)
+    
+    # estimate target snr
+    snr_target <- orig_spec_snr$snr * new_spec_snr$max_sig / 
+                  orig_spec_snr$max_sig
+    
+    # add noise
+    target_sd  <- new_spec_snr$max_sig / snr_target
+    current_sd <- new_spec_snr$noise_sd
+    noise_sd   <- (target_sd ^ 2 - current_sd ^ 2) ^ 0.5
+    
+    if (!is.na(noise_sd)) mrs_data_n <- add_noise(mrs_data_n, noise_sd)
+    
+    # overwrite original
+    mrs_data <- assign_dyns(mrs_data, n, mrs_data_n)
+  }
+  
+  return(mrs_data)
 }

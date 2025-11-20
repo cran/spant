@@ -7,6 +7,7 @@ params:
   argg: ""
   w_ref_available: ""
   w_ref: ""
+  ed_on: ""
   output_ratio: ""
   res_tab_unscaled: ""
   res_tab_ratio: ""    
@@ -25,6 +26,7 @@ params:
   mri: ""
   mri_seg: ""
   p_vols: ""
+  editing_type: ""
 ---
 
 ```{r setup, include=FALSE}
@@ -241,11 +243,18 @@ if (!is.null(dyn_data_uncorr_ed_off)) {
   }
   if (!is.null(dyn_data_corr_ed_on)) {
     cat("\n\n### Edit-on with dyn. correction\n")
+    
+    if (params$editing_type %in% c("gaba_1.9", "gaba_1.9_gannet")) {
+      vline_f <- 3.03
+    } else {
+      vline_f <- 2.01
+    }
+      
     if (is.null(params$plot_ppm_xlim)) {
-      image(dyn_data_corr_ed_on, xlim = c(4, 0.5), vline = 3.03,
+      image(dyn_data_corr_ed_on, xlim = c(4, 0.5), vline = vline_f,
             vline_col = "black")
     } else {
-      image(dyn_data_corr_ed_on, xlim = params$plot_ppm_xlim, vline = 3.03,
+      image(dyn_data_corr_ed_on, xlim = params$plot_ppm_xlim, vline = vline_f,
             vline_col = "black")
     }
   }
@@ -259,10 +268,10 @@ if (!is.null(dyn_data_uncorr_ed_off)) {
   }
   cat("\n\n### Edit-on without dyn. correction\n")
   if (is.null(params$plot_ppm_xlim)) {
-    image(dyn_data_uncorr_ed_on, xlim = c(4, 0.5), vline = 3.03,
+    image(dyn_data_uncorr_ed_on, xlim = c(4, 0.5), vline = vline_f,
           vline_col = "black")
   } else {
-    image(dyn_data_uncorr_ed_on, xlim = params$plot_ppm_xlim, vline = 3.03,
+    image(dyn_data_uncorr_ed_on, xlim = params$plot_ppm_xlim, vline = vline_f,
           vline_col = "black")
   }
 }
@@ -344,15 +353,47 @@ if (!is.null(params$fit_res$res_tab$shift)) {
   shift_offset <- 0
 }
 
-proc_spec <- params$fit_res$data
-proc_spec <- phase(proc_spec, phase_offset, phi1_offset)
-proc_spec <- shift(proc_spec, shift_offset, units = "ppm")
-proc_spec <- zf(proc_spec)
+proc_spec_off <- params$fit_res$data
+proc_spec_off <- phase(proc_spec_off, phase_offset, phi1_offset)
+proc_spec_off <- shift(proc_spec_off, shift_offset, units = "ppm")
+proc_spec_off <- zf(proc_spec_off)
 
 if (is.null(params$plot_ppm_xlim)) {
-  plot(proc_spec, xlim = c(4, 0.2))
+  plot(proc_spec_off, xlim = c(4, 0.2))
 } else {
-  plot(proc_spec, xlim = params$plot_ppm_xlim)
+  plot(proc_spec_off, xlim = params$plot_ppm_xlim)
+}
+```
+
+### Edit-on cropped
+```{r, fig.width=7, fig.height=6}
+if (!is.null(params$fit_res$res_tab$phase)) {
+  phase_offset <- params$fit_res$res_tab$phase
+} else {
+  phase_offset <- 0
+}
+
+if (!is.null(params$fit_res$res_tab$phi1)) {
+  phi1_offset <- params$fit_res$res_tab$phi1
+} else {
+  phi1_offset <- 0
+}
+
+if (!is.null(params$fit_res$res_tab$shift)) {
+  shift_offset <- params$fit_res$res_tab$shift
+} else {
+  shift_offset <- 0
+}
+
+proc_spec_on <- params$ed_on
+proc_spec_on <- phase(proc_spec_on, phase_offset, phi1_offset)
+proc_spec_on <- shift(proc_spec_on, shift_offset, units = "ppm")
+proc_spec_on <- zf(proc_spec_on)
+
+if (is.null(params$plot_ppm_xlim)) {
+  plot(proc_spec_on, xlim = c(4, 0.2))
+} else {
+  plot(proc_spec_on, xlim = params$plot_ppm_xlim)
 }
 ```
 
@@ -363,17 +404,124 @@ plot(proc_spec_ed)
 
 ### Edit-off full
 ```{r, fig.width=7, fig.height=6}
-plot(proc_spec)
+plot(proc_spec_off)
+```
+
+### Edit-on full
+```{r, fig.width=7, fig.height=6}
+plot(proc_spec_on)
 ```
 
 ```{r, results = 'asis', fig.width=7, fig.height=6}
 if (params$w_ref_available) {
   cat("### Water reference resonance\n")
   # w_ref_proc <- shift(w_ref, shift_offset, units = "ppm")
-  w_ref_proc <- auto_phase(w_ref, xlim = c(5.3, 4))
+  # w_ref_proc <- auto_phase(w_ref, xlim = c(5.3, 4))
+  w_ref_proc <- auto_phase_bl(w_ref, ppm_start = c(5.2, 4.0),
+                              ppm_end = c(5.3, 4.1), xlim = c(5.2, 4.1))
   w_ref_proc <- zf(w_ref_proc)
   plot(w_ref_proc, xlim = c(5.3, 4))
 }
+```
+
+## Edited diagnostics
+```{r, results = 'asis'}
+name  <- NULL
+value <- NULL
+
+if (!is.null(params$fit_res_ed$res_tab$SNR)) {
+  name  <- c(name, "Spectral signal to noise ratio")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$SNR, 2))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$SRR)) {
+  name  <- c(name, "Spectral signal to residual ratio")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$SRR, 2))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$FWHM)) {
+  name  <- c(name, "Spectral linewidth (ppm)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$FWHM, 4))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$tNAA_lw)) {
+  name  <- c(name, "tNAA linewidth (ppm)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$tNAA_lw, 4))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$NAA_lw)) {
+  name  <- c(name, "NAA linewidth (ppm)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$NAA_lw, 4))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$tCho_lw)) {
+  name  <- c(name, "tCho linewidth (ppm)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$tCho_lw, 4))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$Cho_lw)) {
+  name  <- c(name, "Cho linewidth (ppm)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$Cho_lw, 4))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$tCr_lw)) {
+  name  <- c(name, "tCr linewidth (ppm)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$tCr_lw, 4))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$Cr_lw)) {
+  name  <- c(name, "Cr linewidth (ppm)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$Cr_lw, 4))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$phase)) {
+  name  <- c(name, "Zero-order phase (degrees)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$phase, 1))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$phi1)) {
+  name  <- c(name, "First-order phase (ms)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$phi1, 3))
+}
+
+if (!is.null(params$fit_res_ed$res_tab$shift)) {
+  name  <- c(name, "Frequency offset (ppm)")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$shift, 4))
+}
+
+if (params$w_ref_available) {
+  name  <- c(name,  "Water amplitude", "Water suppression efficiency (%)")
+  value <- c(value, format(params$res_tab_molal$w_amp),
+             round_dp(params$res_tab_molal$ws_eff, 3))
+}
+
+if (params$fit_res_ed$method == "ABFIT") {
+  name  <- c(name, "Fit quality number (FQN)",
+                   "Baseline effective d.f. per ppm",
+                   "Lineshape asymmetry")
+  value <- c(value, round_dp(params$fit_res_ed$res_tab$FQN, 2),
+             round_dp(params$fit_res_ed$res_tab$bl_ed_pppm, 2),
+             round_dp(params$fit_res_ed$res_tab$asym, 2))
+}
+
+diag_tab <- data.frame(name, value)
+kableExtra::kable_styling(kableExtra::kbl(diag_tab, align = c("l", "r"),
+                                          col.names = c("Name", "Value")),
+                          full_width = FALSE, position = "left",
+                          bootstrap_options = boot_opts)
+
+if (!is.null(params$p_vols)) {
+  cat("### Partial volume measures\n")
+  perc_vols  <- c(params$p_vols[["WM"]], params$p_vols[["GM"]],
+                  params$p_vols[["CSF"]], params$p_vols[["Other"]])
+  p_vols_tab <- data.frame(type = c("WM", "GM", "CSF", "Other"),
+                           perc = perc_vols)
+  kableExtra::kable_styling(kableExtra::kbl(p_vols_tab, align = c("l", "r"),
+                                            col.names = c("Type", "% volume")),
+                            full_width = FALSE, position = "left",
+                            bootstrap_options = boot_opts)
+}
+
 ```
 
 ## Edit-off diagnostics

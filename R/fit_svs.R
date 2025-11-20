@@ -7,6 +7,8 @@
 #' @param output_dir directory path to output fitting results.
 #' @param mri filepath or nifti object containing anatomical MRI data.
 #' @param mri_seg filepath or nifti object containing segmented MRI data.
+#' @param segment_t1 segment the t1 weighted mri file with FSL FAST and use the
+#' results to perform partial volume correction. Defaults to FALSE.
 #' @param external_basis precompiled basis set object to use for analysis.
 #' @param append_external_basis append the external basis with the internally
 #' generated one. Useful for adding experimentally acquired baseline signals to
@@ -91,13 +93,16 @@
 #' text or csv format.
 #' @param dyn_basis_lb dynamic basis line-broadening to apply in Hz.
 #' @param dyn_basis_lg dynamic basis Lorentz-Gauss lineshape factor between 0
-#' and 1.
+#' and 1. Defaults to 0, pure Lorentzian.
 #' @param lcm_bin_path set the path to LCModel binary.
 #' @param plot_ppm_xlim plotting ppm axis limits in the html results.
 #' results.
 #' @param extra_output write extra output files for generating custom plots.
 #' Defaults to FALSE.
 #' @param verbose output potentially useful information.
+#' @param return_fit return a fit object, defaults to FALSE.
+#' @param write_preproc_metab_path path to write the preprocessed metabolite
+#' data in NIfTI format.
 #' @examples
 #' metab <- system.file("extdata", "philips_spar_sdat_WS.SDAT",
 #'                      package = "spant")
@@ -109,7 +114,7 @@
 #' }
 #' @export
 fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
-                    mri_seg = NULL, external_basis = NULL,
+                    mri_seg = NULL, segment_t1 = FALSE, external_basis = NULL,
                     append_external_basis = FALSE, p_vols = NULL,
                     format = NULL, pul_seq = NULL, TE = NULL, TR = NULL,
                     TE1 = NULL, TE2 = NULL, TE3 = NULL, TM = NULL,
@@ -124,7 +129,8 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
                     dyn_av_scheme = NULL, dyn_av_scheme_file = NULL,
                     dyn_basis_lb = NULL, dyn_basis_lg = NULL,
                     lcm_bin_path = NULL, plot_ppm_xlim = NULL,
-                    extra_output = FALSE, verbose = FALSE) {
+                    extra_output = FALSE, verbose = FALSE, return_fit = FALSE,
+                    write_preproc_metab_path = NULL) {
   
   argg  <- c(as.list(environment()))
   
@@ -223,6 +229,20 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   
   # reorientate mri_seg
   if (is.def(mri_seg)) RNifti::orientation(mri_seg) <- "RAS"
+  
+  # segment the mri data assuming it is t1 weighted
+  if (segment_t1) {
+    if (is.def(mri_seg)) {
+      warning("mri_seg argemnt will be ignored as segment_t1 has been set")
+    }
+    dir.create(file.path(output_dir, "t1_segmentation"), showWarnings = FALSE)
+    t1_path <- file.path(output_dir, "t1_segmentation", "t1.nii.gz")
+    writeNifti(mri, t1_path)
+    segment_t1_fsl(t1_path, out_dir = file.path(output_dir, "t1_segmentation"))
+    mri_seg <- readNifti(file.path(output_dir, "t1_segmentation",
+                                   "t1_seg.nii.gz"))
+    RNifti::orientation(mri_seg) <- "RAS"
+  }
   
   # try to get TE and TR parameters from the data if not passed in
   if (is.null(TR)) TR <- tr(metab)
@@ -425,7 +445,12 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
                          TM = sim_paras$TM, use_basis_cache = use_basis_cache,
                          verbose = verbose)
     } else if (sim_paras$pul_seq == "slaser") {
-      if (verbose) cat("Simulating sLASER sequence.\n")
+      if (verbose) {
+        cat("Simulating sLASER sequence.\n")
+        cat("TE1=", sim_paras$TE1, "\n")
+        cat("TE2=", sim_paras$TE2, "\n")
+        cat("TE3=", sim_paras$TE3, "\n")
+      }
       basis <- sim_basis(mol_list, acq_paras = metab,
                          pul_seq = seq_slaser_ideal, TE1 = sim_paras$TE1,
                          TE2 = sim_paras$TE2, TE3 = sim_paras$TE3,
@@ -533,6 +558,13 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     basis <- rep(list(basis), Ndyns(metab))
     basis <- .mapply(lb, dots = list(x = basis, lb = dyn_basis_lb,
                                      lg = dyn_basis_lg), MoreArgs = NULL)
+  }
+  
+  # write metab data
+  if (!is.null(write_preproc_metab_path)) {
+    dir.create(dirname(write_preproc_metab_path), recursive = TRUE,
+               showWarnings = FALSE)
+    write_mrs_nifti(metab, write_preproc_metab_path) 
   }
   
   # fitting
@@ -683,9 +715,11 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   
   rmd_out_f <- file.path(tools::file_path_as_absolute(output_dir), "report")
   
+  # nb intermediates_dir is needed to avoid collisions when parallel
   if (verbose) cat("Generating html report.\n")
   rmarkdown::render(rmd_file, params = results, output_file = rmd_out_f,
-                    quiet = !verbose)
+                  quiet = !verbose,
+                  intermediates_dir = tools::file_path_as_absolute(output_dir))
     
   saveRDS(results, file = file.path(output_dir, "spant_fit_svs_data.rds"))
   
@@ -704,18 +738,31 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   
   if (verbose) cat("fit_svs finished.\n")
   
-  return(fit_res)
+  if (return_fit) return(fit_res)
 }
 
 #' Combine fitting results for group analysis.
 #' @param search_path path to start recursive search for fitting results.
+#' Cannot be used together with the paths argument.
+#' @param paths a set of paths to spant output files, usually named : 
+#' "spant_fit_svs_data.rds". Cannot be used together with the search_path
+#' argument.
 #' @param output_dir directory path to store group results.
+#' @param verbose verbose, defaults to TRUE.
 #' @export
-fit_svs_group_results <- function(search_path,
-                                  output_dir = "fit_svs_group_results") {
+fit_svs_group_results <- function(search_path = NULL, paths = NULL,
+                                  output_dir = "fit_svs_group_results",
+                                  verbose = TRUE) {
   
-  paths <- list.files(path = search_path, pattern = "spant_fit_svs_data.rds",
-                      recursive = TRUE, full.names = TRUE)
+  # check inputs
+  e_message <- "Need to specify search_path or paths argument."
+  if (!xor(is.null(search_path), is.null(paths))) stop(e_message)
+  
+  if (!is.null(search_path)) {
+    paths <- list.files(path = search_path, pattern = "spant_fit_svs_data.rds",
+                        recursive = TRUE, full.names = TRUE)
+    paths <- sort(paths)
+  }
   
   if (length(paths) == 0) stop("No result files found.")
   
@@ -736,6 +783,9 @@ fit_svs_group_results <- function(search_path,
   ratio_str_list        <- vector(mode = "list", length = results_n)
   
   for (n in 1:results_n) {
+    
+    if (verbose) cat(paste0(n, " of ", results_n, ", reading : ", paths[n], "\n"))
+    
     results <- readRDS(paths[n])
     
     if (n == 1) {
@@ -745,10 +795,24 @@ fit_svs_group_results <- function(search_path,
       legacy    <- ifelse(is.null(results$res_tab_legacy),   FALSE, TRUE)
     }
     
-    if (unscaled) res_tab_unscaled_list[[n]] <- results$res_tab_unscaled
-    if (molal)    res_tab_molal_list[[n]]    <- results$res_tab_molal
-    if (legacy)   res_tab_legacy_list[[n]]   <- results$res_tab_legacy
+    if (unscaled) {
+      results$res_tab_unscaled <- cbind(path = paths[n],
+                                        results$res_tab_unscaled)
+      res_tab_unscaled_list[[n]] <- results$res_tab_unscaled
+    }
+    
+    if (molal) {
+      results$res_tab_molal   <- cbind(path = paths[n], results$res_tab_molal)
+      res_tab_molal_list[[n]] <- results$res_tab_molal
+    }
+    
+    if (legacy) {
+      results$res_tab_legacy   <- cbind(path = paths[n], results$res_tab_legacy)
+      res_tab_legacy_list[[n]] <- results$res_tab_legacy
+    }
+    
     if (ratio) {
+      results$res_tab_ratio   <- cbind(path = paths[n], results$res_tab_ratio)
       res_tab_ratio_list[[n]] <- results$res_tab_ratio
       ratio_str_list[[n]]     <- results$output_ratio
     }
@@ -756,29 +820,30 @@ fit_svs_group_results <- function(search_path,
   
   if (unscaled) {
     res_tab_unscaled_df <- do.call("rbind", res_tab_unscaled_list)
-    res_tab_unscaled_df <- cbind(path = paths, res_tab_unscaled_df)
+    # res_tab_unscaled_df <- cbind(path = paths, res_tab_unscaled_df)
     file_out <- file.path(output_dir, paste0("fit_res_group_unscaled_conc.csv"))
     utils::write.csv(res_tab_unscaled_df, file_out, row.names = FALSE)
   }
   
   if (molal) {
     res_tab_molal_df <- do.call("rbind", res_tab_molal_list)
-    res_tab_molal_df <- cbind(path = paths, res_tab_molal_df)
+    # res_tab_molal_df <- cbind(path = paths, res_tab_molal_df)
     file_out <- file.path(output_dir, paste0("fit_res_group_molal_conc.csv"))
     utils::write.csv(res_tab_molal_df, file_out, row.names = FALSE)
   }
   
   if (ratio) {
     res_tab_ratio_df <- do.call("rbind", res_tab_ratio_list)
-    res_tab_ratio_df <- cbind(path = paths, ratio = unlist(ratio_str_list),
-                              res_tab_ratio_df)
+    # res_tab_ratio_df <- cbind(path = paths, ratio = unlist(ratio_str_list),
+    #                           res_tab_ratio_df)
+    res_tab_ratio_df <- cbind(ratio = unlist(ratio_str_list), res_tab_ratio_df)
     file_out <- file.path(output_dir, paste0("fit_res_group_ratio_conc.csv"))
     utils::write.csv(res_tab_ratio_df, file_out, row.names = FALSE)
   }
   
   if (legacy) {
     res_tab_legacy_df <- do.call("rbind", res_tab_legacy_list)
-    res_tab_legacy_df <- cbind(path = paths, res_tab_legacy_df)
+    # res_tab_legacy_df <- cbind(path = paths, res_tab_legacy_df)
     file_out <- file.path(output_dir, paste0("fit_res_group_legacy_conc.csv"))
     utils::write.csv(res_tab_legacy_df, file_out, row.names = FALSE)
   }

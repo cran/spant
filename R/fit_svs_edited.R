@@ -7,12 +7,16 @@
 #' @param output_dir directory path to output fitting results.
 #' @param mri filepath or nifti object containing anatomical MRI data.
 #' @param mri_seg filepath or nifti object containing segmented MRI data.
+#' @param segment_t1 segment the t1 weighted mri file with FSL FAST and use the
+#' results to perform partial volume correction. Defaults to FALSE.
 #' @param external_basis precompiled basis set object to use for analysis.
 #' @param p_vols a numeric vector of partial volumes expressed as percentages.
 #' Defaults to 100% white matter. A voxel containing 100% gray matter tissue
 #' would use : p_vols = c(WM = 0, GM = 100, CSF = 0).
 #' @param format Override automatic data format detection. See format argument
 #' in [read_mrs()] for permitted values.
+#' @param editing_type can be one of : "gaba_1.9" or "gsh_4.54". Defaults to 
+#' "gaba_1.9".
 #' @param editing_scheme describes the dynamic data ordering. Can be one of:
 #' 'on-off-blocks', 'on-off-interleaved', 'off-on-blocks' or
 #' 'off-on-interleaved'.
@@ -91,6 +95,7 @@
 #' @param extra_output write extra output files for generating custom plots.
 #' Defaults to FALSE.
 #' @param verbose output potentially useful information.
+#' @param return_fit return a fit object, defaults to FALSE.
 #' @examples
 #' metab <- system.file("extdata", "philips_spar_sdat_WS.SDAT",
 #'                      package = "spant")
@@ -102,8 +107,10 @@
 #' }
 #' @export
 fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
-                           mri_seg = NULL, external_basis = NULL, p_vols = NULL,
-                           format = NULL, editing_scheme = NULL,
+                           mri_seg = NULL, segment_t1 = FALSE,
+                           external_basis = NULL, p_vols = NULL,
+                           format = NULL, editing_type = "gaba_1.9",
+                           editing_scheme = NULL,
                            invert_edit_on = NULL, invert_edit_off = NULL,
                            pul_seq = NULL, TE = NULL, TR = NULL,
                            TE1 = NULL, TE2 = NULL, TE3 = NULL, TM = NULL,
@@ -119,9 +126,7 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
                            summary_measures = NULL, dyn_av_block_size = NULL,
                            dyn_av_scheme = NULL, dyn_av_scheme_file = NULL,
                            plot_ppm_xlim = NULL, extra_output = FALSE,
-                           verbose = FALSE) {
-  
-  warning("fit_svs_exited is under active development and liable to significant changes.")
+                           verbose = FALSE, return_fit = FALSE) {
   
   argg  <- c(as.list(environment()))
   
@@ -221,6 +226,20 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   # reorientate mri_seg
   if (is.def(mri_seg)) RNifti::orientation(mri_seg) <- "RAS"
   
+  # segment the mri data assuming it is t1 weighted
+  if (segment_t1) {
+    if (is.def(mri_seg)) {
+      warning("mri_seg argemnt will be ignored as segment_t1 has been set")
+    }
+    dir.create(file.path(output_dir, "t1_segmentation"), showWarnings = FALSE)
+    t1_path <- file.path(output_dir, "t1_segmentation", "t1.nii.gz")
+    writeNifti(mri, t1_path)
+    segment_t1_fsl(t1_path, out_dir = file.path(output_dir, "t1_segmentation"))
+    mri_seg <- readNifti(file.path(output_dir, "t1_segmentation",
+                                   "t1_seg.nii.gz"))
+    RNifti::orientation(mri_seg) <- "RAS"
+  }
+  
   # try to get TE and TR parameters from the data if not passed in
   if (is.null(TR)) TR <- tr(metab)
   if (is.null(TE)) TE <- te(metab)
@@ -252,6 +271,12 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   } else {
     print(editing_scheme)
     stop("Incorrect editing_scheme string.")
+  }
+  
+  editing_types <- c("gaba_1.9", "gaba_1.9_gannet", "gsh_4.54")
+  if (!(editing_type %in% editing_types)) {
+    print(editing_types)
+    stop("editing_type not recognised, should be one of the above.")
   }
   
   if (invert_edit_off) ed_off <- phase(ed_off, 180)
@@ -292,8 +317,13 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   if (pre_align) {
     ed_off <- align(ed_off, c(2.01, 3.03, 3.22), max_shift = 40)
     if (Ndyns(ed_off) > 1) ed_off_post_dfp_corr <- ed_off
-    # TODO this is GABA editing specific
-    ed_on <- align(ed_on, c(3.03, 3.22), max_shift = 40)
+    
+    if (editing_type %in% c("gaba_1.9", "gaba_1.9_gannet")) {
+      ed_on <- align(ed_on, c(3.03, 3.22), max_shift = 40)
+    } else {
+      ed_on <- align(ed_on, c(2.01, 3.03, 3.22), max_shift = 40)
+    }
+    
     if (Ndyns(ed_on) > 1) ed_on_post_dfp_corr <- ed_on
   }
   
@@ -349,10 +379,20 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   # take the mean of the water reference data
   # if (w_ref_available) w_ref <- mean_dyns(w_ref)
   
+  # align dynamic water reference scans to the first dynamic using rats and take
+  # the mean
+  if (w_ref_available) {
+    if (Ndyns(w_ref) > 1) {
+      w_ref_ref <- get_dyns(w_ref, 1)
+      w_ref <- rats(w_ref, xlim = c(5.3, 4), ref = w_ref_ref)
+      w_ref <- mean_dyns(w_ref)
+    }
+  }
+  
   # extract the first dynamic of the water reference data
   # better for Dinesh sLASER where the water peak can shift before and after
   # the metabolite data collection
-  if (w_ref_available) w_ref <- get_dyns(w_ref, 1)
+  # if (w_ref_available) w_ref <- get_dyns(w_ref, 1)
   
   # calculate the water suppression efficiency
   # the ratio of the residual water peak height
@@ -463,7 +503,14 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   # if (is.null(fit_opts_edited)) fit_opts_edited <- abfit_reg_opts()
   
   if (is.null(fit_opts_edited)) {
-    fit_opts_edited <- abfit_reg_opts(auto_bl_flex = FALSE, bl_ed_pppm = 3)
+    if (editing_type == "gsh_4.54") {
+      fit_opts_edited <- abfit_reg_opts(auto_bl_flex = FALSE, bl_ed_pppm = 3,
+                                        ppm_left = 3.5, ppm_right = 1.8,
+                                        pre_align = FALSE)
+    } else {
+      fit_opts_edited <- abfit_reg_opts(auto_bl_flex = FALSE, bl_ed_pppm = 3,
+                                        pre_align = FALSE)
+    }
   }
   
   if (is.null(fit_opts_ed_off)) fit_opts_ed_off <- abfit_reg_opts()
@@ -473,8 +520,13 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   # output_ratio of NA means we only want unscaled values
   if (anyNA(output_ratio)) output_ratio <- NULL
   
-  # align ed_on and ed_off based on the residual water signal
-  ed_on  <- rats(ed_on, mean_dyns(ed_off), xlim = c(4.8, 4.5))
+  if (editing_type %in% c("gaba_1.9", "gaba_1.9_gannet")) {
+    # align ed_on and ed_off based on the residual water signal
+    ed_on  <- rats(ed_on, mean_dyns(ed_off), xlim = c(4.8, 4.5))
+  } else if (editing_type == "gsh_4.54") {
+    # align ed_on and ed_off based on the residual tNAA
+    ed_on  <- rats(ed_on, mean_dyns(ed_off), xlim = c(1.9, 2.1))
+  }
   
   # take the mean rather than just straight subtraction
   edited <- (ed_on - ed_off) / 2
@@ -501,28 +553,62 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   # edit-off fitting
   if (verbose) cat("Starting edit-off fitting.\n")
   fit_res <- fit_mrs(metab = ed_off, basis = basis, opts = fit_opts_ed_off)
+  
   if (verbose) cat("Edit-off fitting complete.\n")
   
-  # edited fitting
-  # NAA is 1.5 (rather than 3) because it is zero in the edited data due to the 
-  # GABA editing pulse
-  mol_list <- list(get_uncoupled_mol("MM09",   0.92, "1H",   1,   12, 1),
-                   get_uncoupled_mol("NAA",    2.01, "1H",  -1.5,  3, 0),
-                   get_uncoupled_mol("Glx_A",  2.31, "1H",   1,    3, 0),
-                   get_uncoupled_mol("Glx_B",  2.40, "1H",   1,    3, 0),
-                   # 2 Gaus model
-                   get_uncoupled_mol("GABA_A", 2.95, "1H",   1.5,   12, 1),
-                   get_uncoupled_mol("GABA_B", 3.04, "1H",   1.5,   12, 1),
-                   # 1 Gaus model
-                   # get_uncoupled_mol("GABA",   3.00, "1H",   3,    22, 1),
-                   get_uncoupled_mol("Glx_C",  3.72, "1H",   1,   2.5, 0),
-                   get_uncoupled_mol("Glx_D",  3.8,  "1H",   1,   2.5, 0))
-
+  # add tCr area
+  fit_res$res_tab <- add_fit_res_tab_amp_sd(fit_res$res_tab, "tCr_area",
+                                            fit_res$res_tab$tCr * 3,
+                                            fit_res$res_tab$tCr.sd * 3)
+  
+  if (editing_type == "gaba_1.9") {
+    # edited fitting
+    # NAA is 1.5 (rather than 3) because it is zero in the edited data due to
+    # the GABA editing pulse
+    mol_list <- list(get_uncoupled_mol("MM09",   0.92, "1H",   1,   12, 1),
+                     get_uncoupled_mol("NAA",    2.01, "1H",  -1,    3, 0),
+                     get_uncoupled_mol("Glx_A",  2.31, "1H",   1,    3, 0),
+                     get_uncoupled_mol("Glx_B",  2.40, "1H",   1,    3, 0),
+                     # 2 Gaus GABA model
+                     get_uncoupled_mol("GABA_A", 2.95, "1H",   1,   12, 1),
+                     get_uncoupled_mol("GABA_B", 3.04, "1H",   1,   12, 1),
+                     get_uncoupled_mol("Glx_C",  3.72, "1H",   1,  2.5, 0),
+                     get_uncoupled_mol("Glx_D",  3.8,  "1H",   1,  2.5, 0))
+  } else if (editing_type == "gaba_1.9_gannet") {
+    mol_list <- list(get_uncoupled_mol("MM09",   0.92, "1H",   1,   12, 1),
+                     get_uncoupled_mol("NAA",    2.01, "1H",  -1,    3, 0),
+                     get_uncoupled_mol("Glx_A",  2.31, "1H",   1,    3, 0),
+                     get_uncoupled_mol("Glx_B",  2.40, "1H",   1,    3, 0),
+                     # 1 Gaus GABA+ model
+                     get_uncoupled_mol("GABAplus", 3.00, "1H",   1,  27, 1),
+                     get_uncoupled_mol("Glx_C",    3.72, "1H",   1, 3.5, 1),
+                     get_uncoupled_mol("Glx_D",    3.8,  "1H",   1, 3.5, 1))
+  } else if (editing_type == "gsh_4.54") {
+    ang <- 1i / 180 * pi
+    damp_adj <- 0.7
+    # mol_list <- list(get_uncoupled_mol("GSH",  2.960, "1H", 1, 9, 0),
+    mol_list <- list(get_uncoupled_mol("GSH",  2.960, "1H", 1, 14, 1),
+                     get_uncoupled_mol("P237", 2.372, "1H", exp(23 * ang),
+                                       4.0 - damp_adj, 0),
+                     get_uncoupled_mol("P246", 2.455, "1H", exp(-5 * ang),
+                                       6.7 - damp_adj, 0),
+                     get_uncoupled_mol("P257", 2.570, "1H", exp(-68 * ang),
+                                       4.8 - damp_adj, 0),
+                     get_uncoupled_mol("P265", 2.649, "1H", exp(76 * ang),
+                                       5.5 - damp_adj, 0),
+                     # get_uncoupled_mol("P275", 2.746, "1H", exp(-12 * ang),
+                     #                   5.8 - damp_adj, 0))
+                     get_uncoupled_mol("P275", 2.746, "1H", exp(-5 * ang),
+                                       5.8 - damp_adj, 0))
+  }
+  
   basis_ed <- sim_basis(mol_list, acq_paras = edited)
   
   if (verbose) cat("Starting edited fitting.\n")
   fit_res_ed <- fit_mrs(metab = edited, basis = basis_ed,
                         opts = fit_opts_edited)
+  
+    
   if (verbose) cat("Edited fitting complete.\n")
     
   phase_offset <- fit_res$res_tab$phase
@@ -706,6 +792,7 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
                   argg = argg,
                   w_ref_available = w_ref_available,
                   w_ref = w_ref,
+                  ed_on = ed_on,
                   output_ratio = output_ratio,
                   res_tab_unscaled = res_tab_unscaled,
                   res_tab_ratio = res_tab_ratio,
@@ -723,15 +810,18 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
                   plot_ppm_xlim = plot_ppm_xlim,
                   mri = mri,
                   mri_seg = mri_seg,
-                  p_vols = p_vols)
+                  p_vols = p_vols,
+                  editing_type = editing_type)
   
   rmd_file <- system.file("rmd", "svs_edited_report.Rmd", package = "spant")
   
   rmd_out_f <- file.path(tools::file_path_as_absolute(output_dir), "report")
   
+  # nb intermediates_dir is needed to avoid collisions when parallel
   if (verbose) cat("Generating html report.\n")
   rmarkdown::render(rmd_file, params = results, output_file = rmd_out_f,
-                    quiet = !verbose)
+                  quiet = !verbose,
+                  intermediates_dir = tools::file_path_as_absolute(output_dir))
   
   saveRDS(results, file = file.path(output_dir,
                                     "spant_fit_svs_edited_data.rds"))
@@ -751,9 +841,181 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   
   if (verbose) cat("fit_svs_edited finished.\n")
   
-  return(list(fit_res_ed, fit_res))
+  if (return_fit) return(list(fit_res_ed, fit_res))
 }
 
+#' Combine edited fitting results for group analysis.
+#' @param search_path path to start recursive search for fitting results.
+#' Cannot be used together with the paths argument.
+#' @param paths a set of paths to spant output files, usually named : 
+#' "spant_fit_svs_edited_data.rds". Cannot be used together with the search_path
+#' argument.
+#' @param output_dir directory path to store group results.
+#' @param verbose verbose, defaults to TRUE.
+#' @export
+fit_svs_edited_group_results <- function(search_path = NULL, paths = NULL,
+                                    output_dir = "fit_svs_edited_group_results",
+                                    verbose = TRUE) {
+  
+  # check inputs
+  e_message <- "Need to specify search_path or paths argument."
+  if (!xor(is.null(search_path), is.null(paths))) stop(e_message)
+  
+  if (!is.null(search_path)) {
+    paths <- list.files(path = search_path,
+                        pattern = "spant_fit_svs_edited_data.rds",
+                        recursive = TRUE, full.names = TRUE)
+    paths <- sort(paths)
+  }
+  
+  if (length(paths) == 0) stop("No result files found.")
+  
+  # create the output dir if it doesn't exist
+  if(!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  } else {
+    warning(paste0("Output directory already exists : ", output_dir))
+  }
+  
+  paths_dir    <- dirname(paths)
+  results_n    <- length(paths)
+  
+  res_tab_unscaled_list <- vector(mode = "list", length = results_n)
+  res_tab_molal_list    <- vector(mode = "list", length = results_n)
+  res_tab_ratio_list    <- vector(mode = "list", length = results_n)
+  res_tab_legacy_list   <- vector(mode = "list", length = results_n)
+  res_tab_ed_unscaled_list <- vector(mode = "list", length = results_n)
+  res_tab_ed_molal_list    <- vector(mode = "list", length = results_n)
+  res_tab_ed_ratio_list    <- vector(mode = "list", length = results_n)
+  res_tab_ed_legacy_list   <- vector(mode = "list", length = results_n)
+  ratio_str_list        <- vector(mode = "list", length = results_n)
+  
+  for (n in 1:results_n) {
+    
+    if (verbose) cat(paste0(n, " of ", results_n, ", reading : ", paths[n], "\n"))
+    
+    results <- readRDS(paths[n])
+    
+    if (n == 1) {
+      unscaled <- ifelse(is.null(results$res_tab_unscaled), FALSE, TRUE)
+      molal    <- ifelse(is.null(results$res_tab_molal),    FALSE, TRUE)
+      ratio    <- ifelse(is.null(results$res_tab_ratio),    FALSE, TRUE)
+      legacy   <- ifelse(is.null(results$res_tab_legacy),   FALSE, TRUE)
+      
+      unscaled_ed <- ifelse(is.null(results$res_tab_ed_unscaled), FALSE, TRUE)
+      molal_ed    <- ifelse(is.null(results$res_tab_ed_molal),    FALSE, TRUE)
+      ratio_ed    <- ifelse(is.null(results$res_tab_ed_ratio),    FALSE, TRUE)
+      legacy_ed   <- ifelse(is.null(results$res_tab_ed_legacy),   FALSE, TRUE)
+    }
+    
+    if (unscaled) {
+      results$res_tab_unscaled <- cbind(path = paths[n],
+                                        results$res_tab_unscaled)
+      res_tab_unscaled_list[[n]] <- results$res_tab_unscaled
+    }
+    
+    if (molal) {
+      results$res_tab_molal   <- cbind(path = paths[n], results$res_tab_molal)
+      res_tab_molal_list[[n]] <- results$res_tab_molal
+    }
+    
+    if (legacy) {
+      results$res_tab_legacy   <- cbind(path = paths[n], results$res_tab_legacy)
+      res_tab_legacy_list[[n]] <- results$res_tab_legacy
+    }
+    
+    if (ratio) {
+      results$res_tab_ratio   <- cbind(path = paths[n], results$res_tab_ratio)
+      res_tab_ratio_list[[n]] <- results$res_tab_ratio
+      ratio_str_list[[n]]     <- results$output_ratio
+    }
+    
+    if (unscaled_ed) {
+      results$res_tab_ed_unscaled <- cbind(path = paths[n],
+                                           results$res_tab_ed_unscaled)
+      res_tab_ed_unscaled_list[[n]] <- results$res_tab_ed_unscaled
+    }
+    
+    if (molal_ed) {
+      results$res_tab_ed_molal   <- cbind(path = paths[n],
+                                          results$res_tab_ed_molal)
+      res_tab_ed_molal_list[[n]] <- results$res_tab_ed_molal
+    }
+    
+    if (legacy_ed) {
+      results$res_tab_ed_legacy   <- cbind(path = paths[n],
+                                           results$res_tab_ed_legacy)
+      res_tab_ed_legacy_list[[n]] <- results$res_tab_ed_legacy
+    }
+    
+    if (ratio_ed) {
+      results$res_tab_ed_ratio   <- cbind(path = paths[n],
+                                          results$res_tab_ed_ratio)
+      res_tab_ed_ratio_list[[n]] <- results$res_tab_ed_ratio
+      ratio_str_list[[n]]     <- results$output_ratio
+    }
+  }
+  
+  if (unscaled) {
+    res_tab_unscaled_df <- do.call("rbind", res_tab_unscaled_list)
+    file_out <- file.path(output_dir,
+                          paste0("fit_res_edit_off_group_unscaled_conc.csv"))
+    utils::write.csv(res_tab_unscaled_df, file_out, row.names = FALSE)
+  }
+  
+  if (molal) {
+    res_tab_molal_df <- do.call("rbind", res_tab_molal_list)
+    file_out <- file.path(output_dir,
+                          paste0("fit_res_edit_off_group_molal_conc.csv"))
+    utils::write.csv(res_tab_molal_df, file_out, row.names = FALSE)
+  }
+  
+  if (ratio) {
+    res_tab_ratio_df <- do.call("rbind", res_tab_ratio_list)
+    res_tab_ratio_df <- cbind(ratio = unlist(ratio_str_list), res_tab_ratio_df)
+    file_out <- file.path(output_dir,
+                          paste0("fit_res_edit_off_group_ratio_conc.csv"))
+    utils::write.csv(res_tab_ratio_df, file_out, row.names = FALSE)
+  }
+  
+  if (legacy) {
+    res_tab_legacy_df <- do.call("rbind", res_tab_legacy_list)
+    file_out <- file.path(output_dir,
+                          paste0("fit_res_edit_off_group_legacy_conc.csv"))
+    utils::write.csv(res_tab_legacy_df, file_out, row.names = FALSE)
+  }
+  
+  if (unscaled_ed) {
+    res_tab_ed_unscaled_df <- do.call("rbind", res_tab_ed_unscaled_list)
+    file_out <- file.path(output_dir,
+                          paste0("fit_res_edited_group_unscaled_conc.csv"))
+    utils::write.csv(res_tab_ed_unscaled_df, file_out, row.names = FALSE)
+  }
+  
+  if (molal_ed) {
+    res_tab_ed_molal_df <- do.call("rbind", res_tab_ed_molal_list)
+    file_out <- file.path(output_dir,
+                          paste0("fit_res_edited_group_molal_conc.csv"))
+    utils::write.csv(res_tab_ed_molal_df, file_out, row.names = FALSE)
+  }
+  
+  if (ratio_ed) {
+    res_tab_ed_ratio_df <- do.call("rbind", res_tab_ed_ratio_list)
+    res_tab_ed_ratio_df <- cbind(ratio = unlist(ratio_str_list),
+                                 res_tab_ed_ratio_df)
+    file_out <- file.path(output_dir,
+                          paste0("fit_res_edited_group_ratio_conc.csv"))
+    utils::write.csv(res_tab_ed_ratio_df, file_out, row.names = FALSE)
+  }
+  
+  if (legacy_ed) {
+    res_tab_ed_legacy_df <- do.call("rbind", res_tab_ed_legacy_list)
+    file_out <- file.path(output_dir,
+                          paste0("fit_res_edited_group_legacy_conc.csv"))
+    utils::write.csv(res_tab_ed_legacy_df, file_out, row.names = FALSE)
+  }
+  
+}
 
 append_mpress_gaba <- function(res_tab) {
   res_tab["GABA"] <- res_tab["GABA_A"] + res_tab["GABA_B"]
