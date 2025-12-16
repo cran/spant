@@ -7,6 +7,7 @@
 #' @param output_dir directory path to output fitting results.
 #' @param mri filepath or nifti object containing anatomical MRI data.
 #' @param mri_seg filepath or nifti object containing segmented MRI data.
+#' @param deface option to apply fsl_deface to the mri input. Defaults to FALSE.
 #' @param segment_t1 segment the t1 weighted mri file with FSL FAST and use the
 #' results to perform partial volume correction. Defaults to FALSE.
 #' @param external_basis precompiled basis set object to use for analysis.
@@ -103,6 +104,8 @@
 #' @param return_fit return a fit object, defaults to FALSE.
 #' @param write_preproc_metab_path path to write the preprocessed metabolite
 #' data in NIfTI format.
+#' @param overwrite overwrite existing fitting result files, defaults to
+#' FALSE.
 #' @examples
 #' metab <- system.file("extdata", "philips_spar_sdat_WS.SDAT",
 #'                      package = "spant")
@@ -114,10 +117,10 @@
 #' }
 #' @export
 fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
-                    mri_seg = NULL, segment_t1 = FALSE, external_basis = NULL,
-                    append_external_basis = FALSE, p_vols = NULL,
-                    format = NULL, pul_seq = NULL, TE = NULL, TR = NULL,
-                    TE1 = NULL, TE2 = NULL, TE3 = NULL, TM = NULL,
+                    mri_seg = NULL, deface = FALSE, segment_t1 = FALSE,
+                    external_basis = NULL, append_external_basis = FALSE,
+                    p_vols = NULL, format = NULL, pul_seq = NULL, TE = NULL,
+                    TR = NULL, TE1 = NULL, TE2 = NULL, TE3 = NULL, TM = NULL,
                     append_basis = NULL, remove_basis = NULL, pre_align = TRUE,
                     dfp_corr = TRUE, dfp_corr_ref_subset = NULL,
                     output_ratio = NULL, ecc = FALSE, hsvd_width = NULL,
@@ -130,7 +133,72 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
                     dyn_basis_lb = NULL, dyn_basis_lg = NULL,
                     lcm_bin_path = NULL, plot_ppm_xlim = NULL,
                     extra_output = FALSE, verbose = FALSE, return_fit = FALSE,
-                    write_preproc_metab_path = NULL) {
+                    write_preproc_metab_path = NULL, overwrite = FALSE) {
+  
+  if (identical(class(input), "character") & (length(input) > 1)) {
+    if (!is.null(output_dir)) {
+      if (length(input) != length(output_dir)) {
+        stop("Missmatch between input length and output_dir length.")
+      }
+    } else {
+      output_dir <- vector(mode = "list", length = length(input))
+    }
+    
+    if (!is.null(w_ref)) {
+      if (length(input) != length(w_ref)) {
+        stop("Missmatch between input length and w_ref length.")
+      }
+    } else {
+      w_ref <- vector(mode = "list", length = length(input))
+    }
+    
+    if (!is.null(mri)) {
+      if (length(input) != length(mri)) {
+        stop("Missmatch between input length and mri length.")
+      }
+    } else {
+      mri <- vector(mode = "list", length = length(input))
+    }
+    
+    if (!is.null(mri_seg)) {
+      if (length(input) != length(mri_seg)) {
+        stop("Missmatch between input length and mri_seg length.")
+      }
+    } else {
+      mri_seg <- vector(mode = "list", length = length(input))
+    }
+    
+    more_args <- list(deface = deface, segment_t1 = segment_t1,
+                      external_basis = external_basis,
+                      append_external_basis = append_external_basis,
+                      p_vols = p_vols, format = format, pul_seq = pul_seq,
+                      TE = TE, TR = TR, TE1 = TE1, TE2 = TE2, TE3 = TE3,
+                      TM = TM, append_basis = append_basis,
+                      remove_basis = remove_basis, pre_align = pre_align,
+                      dfp_corr = dfp_corr,
+                      dfp_corr_ref_subset = dfp_corr_ref_subset,
+                      output_ratio = output_ratio, ecc = ecc,
+                      hsvd_width = hsvd_width, decimate = decimate,
+                      trunc_fid_pts = trunc_fid_pts, fit_method = fit_method,
+                      fit_opts = fit_opts, fit_subset = fit_subset,
+                      w_ref_subset = w_ref_subset, legacy_ws = legacy_ws,
+                      w_att = w_att, w_conc = w_conc,
+                      use_basis_cache = use_basis_cache,
+                      summary_measures = summary_measures,
+                      dyn_av_block_size = dyn_av_block_size,
+                      dyn_av_scheme = dyn_av_scheme,
+                      dyn_av_scheme_file = dyn_av_scheme_file,
+                      dyn_basis_lb = dyn_basis_lb, dyn_basis_lg = dyn_basis_lg,
+                      lcm_bin_path = lcm_bin_path, plot_ppm_xlim = lcm_bin_path,
+                      extra_output = extra_output, verbose = verbose,
+                      return_fit = return_fit,
+                      write_preproc_metab_path = write_preproc_metab_path,
+                      overwrite = overwrite)
+    
+    return(mapply(fit_svs, input = input, output_dir = output_dir,
+                  w_ref = w_ref, mri = mri, mri_seg = mri_seg,
+                  MoreArgs = more_args, SIMPLIFY = FALSE))
+  }
   
   argg  <- c(as.list(environment()))
   
@@ -169,8 +237,8 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     }
   } else {
     metab_path <- metab
-    if (verbose) cat(paste0("Reading MRS input data : ", metab,"\n"))
-    metab      <- read_mrs(metab, format = format)
+    # if (verbose) cat(paste0("Reading MRS input data : ", metab,"\n"))
+    # metab      <- read_mrs(metab, format = format)
     if (is.null(output_dir)) {
       output_dir <- gsub("\\.", "_", basename(metab_path))
       output_dir <- gsub("#", "_", output_dir)
@@ -179,6 +247,33 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   }
   
   if (verbose) cat(paste0("Output directory : ", output_dir, "\n"))
+  
+  # create the output dir if it doesn't exist
+  if(!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  } else {
+    
+    if (!file.exists(file.path(output_dir, "report.html"))) {
+      warning(paste0(file.path(output_dir, "report.html"), " not found."))
+    }
+    
+    if (!file.exists(file.path(output_dir, "spant_fit_svs_data.rds"))) {
+      warning(paste0(file.path(output_dir, "spant_fit_svs_data.rds"),
+                     " not found."))
+    }
+    
+    if (!overwrite) {
+      cat(paste0("Skipping analysis as output directory already exists : ",
+                 output_dir,
+                 "\nSet overwrite option to TRUE to overwrite.\n"))
+      return(invisible(NULL))
+    }
+  }
+  
+  if (class(metab)[[1]] != "mrs_data") {
+    if (verbose) cat(paste0("Reading MRS input data : ", metab,"\n"))
+    metab <- read_mrs(metab, format = format)
+  }
   
   # read the ref data file if not already an mrs_data object
   if (is.def(w_ref) & (class(w_ref)[[1]] != "mrs_data")) {
@@ -207,16 +302,28 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     w_ref_available = TRUE
   }
   
-  # create the output dir if it doesn't exist
-  if(!dir.exists(output_dir)) {
-    dir.create(output_dir, recursive = TRUE)
-  } else {
-    warning(paste0("Output directory already exists : ", output_dir))
-  }
-  
   # check the mri data if specified 
   if (is.def(mri) & (!("niftiImage" %in% class(mri)))) {
-    mri <- readNifti(mri)
+    if (dir.exists(mri)) {
+      datasets <- divest::readDicom(mri, verbosity = -2, interactive = FALSE)    
+      if (length(datasets) == 1) {
+        mri <- datasets[[1]][,,,]
+      } else if (length(datasets == 0)) {
+        stop("DICOM MRI not found.")
+      } else {
+        stop("Multiple DICOM MRI datasets found when only one was expected.")
+      }
+    } else {
+      mri <- readNifti(mri)
+    }
+  }
+  
+  # deface the mri if specified
+  if (is.def(mri) & deface) {
+    dir.create(file.path(output_dir, "mri_deface"), showWarnings = FALSE)
+    deface_path <- file.path(output_dir, "mri_deface", "mri_deface.nii.gz")
+    fslr::fsl_deface(mri, outfile = deface_path, verbose = FALSE)
+    mri <- readNifti(deface_path)
   }
   
   # reorientate mri

@@ -10,6 +10,7 @@ fit_svs_edited(
   output_dir = NULL,
   mri = NULL,
   mri_seg = NULL,
+  deface = FALSE,
   segment_t1 = FALSE,
   external_basis = NULL,
   p_vols = NULL,
@@ -48,7 +49,8 @@ fit_svs_edited(
   plot_ppm_xlim = NULL,
   extra_output = FALSE,
   verbose = FALSE,
-  return_fit = FALSE
+  return_fit = FALSE,
+  overwrite = FALSE
 )
 }
 \arguments{
@@ -61,6 +63,8 @@ fit_svs_edited(
 \item{mri}{filepath or nifti object containing anatomical MRI data.}
 
 \item{mri_seg}{filepath or nifti object containing segmented MRI data.}
+
+\item{deface}{option to apply fsl_deface to the mri input. Defaults to FALSE.}
 
 \item{segment_t1}{segment the t1 weighted mri file with FSL FAST and use the
 results to perform partial volume correction. Defaults to FALSE.}
@@ -189,6 +193,9 @@ Defaults to FALSE.}
 \item{verbose}{output potentially useful information.}
 
 \item{return_fit}{return a fit object, defaults to FALSE.}
+
+\item{overwrite}{overwrite existing fitting result files, defaults to
+FALSE.}
 }
 \description{
 Note this function is still under development and liable to changes.
