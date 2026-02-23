@@ -519,20 +519,38 @@ glm_spec <- function(mrs_data, regressor_df, full_output = FALSE) {
   
   beta_weight <- as.data.frame(t(as.data.frame(sapply(lm_res_list, get_glm_stat,
                                                "Estimate", simplify = FALSE))))
-  #beta_weight <- as.data.frame(t(as.data.frame(sapply(lm_res_list, get_glm_stat,
-  #                                             "t value", simplify = FALSE))))
+  t_value <- as.data.frame(t(as.data.frame(sapply(lm_res_list, get_glm_stat,
+                                           "t value", simplify = FALSE))))
   p_value <- as.data.frame(t(as.data.frame(sapply(lm_res_list, get_glm_stat,
                                            "Pr(>|t|)", simplify = FALSE))))
   
   row.names(beta_weight) <- NULL
+  row.names(t_value)     <- NULL
   row.names(p_value)     <- NULL
   
-  ppm_sc      <-  ppm(mrs_data)
-  beta_weight <-  cbind(ppm = ppm_sc, beta_weight)
-  p_value_log <- -log10(p_value)
+  p_value_bh  <- as.data.frame(apply(p_value, 2, stats::p.adjust,
+                                     method = "BH"))
+  
+  ppm_sc         <-  ppm(mrs_data)
+  beta_weight    <-  cbind(ppm = ppm_sc, beta_weight)
+  
+  R <- 60 # ~ spectral width / FWHM
+  C <- ((4 * log(2)) ^ (1 / 2)) / 2 * pi
+  p_value_rf     <- R * C * exp((-t_value ^ 2) / 2)
+  p_value_rf_log <- -log10(p_value_rf)
+  p_value_rf_log[p_value_rf_log > 300] <- 300
+  p_value_rf     <- cbind(ppm = ppm_sc, p_value_rf)
+  p_value_rf_log <- cbind(ppm = ppm_sc, p_value_rf_log)
+  
+  t_value        <-  cbind(ppm = ppm_sc, t_value)
+  p_value_log    <- -log10(p_value)
   p_value_log[p_value_log > 300] <- 300
-  p_value     <-  cbind(ppm = ppm_sc, p_value)
-  p_value_log <-  cbind(ppm = ppm_sc, p_value_log)
+  p_value_bh_log <- -log10(p_value_bh)
+  p_value_bh_log[p_value_bh_log > 300] <- 300
+  p_value        <-  cbind(ppm = ppm_sc, p_value)
+  p_value_log    <-  cbind(ppm = ppm_sc, p_value_log)
+  p_value_bh     <-  cbind(ppm = ppm_sc, p_value_bh)
+  p_value_bh_log <-  cbind(ppm = ppm_sc, p_value_bh_log)
   
   p_value_log_mrs <- mat2mrs_data(t(p_value_log[, -1]), fs = fs(mrs_data),
                                   ft = mrs_data$ft, ref = mrs_data$ref,
@@ -542,17 +560,44 @@ glm_spec <- function(mrs_data, regressor_df, full_output = FALSE) {
                                   ft = mrs_data$ft, ref = mrs_data$ref,
                                   nuc = mrs_data$nuc, fd = TRUE)
   
+  p_value_bh_log_mrs <- mat2mrs_data(t(p_value_bh_log[, -1]), fs = fs(mrs_data),
+                                  ft = mrs_data$ft, ref = mrs_data$ref,
+                                  nuc = mrs_data$nuc, fd = TRUE)
+  
+  p_value_bh_mrs     <- mat2mrs_data(t(p_value_bh[, -1]), fs = fs(mrs_data),
+                                  ft = mrs_data$ft, ref = mrs_data$ref,
+                                  nuc = mrs_data$nuc, fd = TRUE)
+  
+  p_value_rf_log_mrs <- mat2mrs_data(t(p_value_rf_log[, -1]), fs = fs(mrs_data),
+                                  ft = mrs_data$ft, ref = mrs_data$ref,
+                                  nuc = mrs_data$nuc, fd = TRUE)
+  
+  p_value_rf_mrs     <- mat2mrs_data(t(p_value_rf[, -1]), fs = fs(mrs_data),
+                                  ft = mrs_data$ft, ref = mrs_data$ref,
+                                  nuc = mrs_data$nuc, fd = TRUE)
+  
   beta_weight_mrs <- mat2mrs_data(t(beta_weight[, -1]), fs = fs(mrs_data),
                                   ft = mrs_data$ft, ref = mrs_data$ref,
                                   nuc = mrs_data$nuc, fd = TRUE)
   
-  output_list <- list(beta_weight = beta_weight, p_value = p_value,
-              p_value_log = p_value_log, p_value_log_mrs = p_value_log_mrs,
-              p_value_mrs = p_value_mrs, beta_weight_mrs = beta_weight_mrs,
-              lm_res_list = lm_res_list)
+  t_value_mrs     <- mat2mrs_data(t(t_value[, -1]), fs = fs(mrs_data),
+                                  ft = mrs_data$ft, ref = mrs_data$ref,
+                                  nuc = mrs_data$nuc, fd = TRUE)
+  
+  output_list <- list(beta_weight = beta_weight, t_value = t_value, 
+                      p_value = p_value, p_value_log = p_value_log,
+                      p_value_log_mrs = p_value_log_mrs,
+                      p_value_mrs = p_value_mrs,
+                      p_value_bh = p_value_bh, p_value_bh_log = p_value_bh_log,
+                      p_value_bh_log_mrs = p_value_bh_log_mrs,
+                      p_value_bh_mrs = p_value_bh_mrs,
+                      p_value_rf_log_mrs = p_value_rf_log_mrs,
+                      p_value_rf_mrs = p_value_rf_mrs,
+                      beta_weight_mrs = beta_weight_mrs,
+                      t_value_mrs = t_value_mrs, lm_res_list = lm_res_list)
   
   if (full_output) output_list <- c(output_list, list(mrs_data = mrs_data,
-                                               regressor_df = regressor_df_in))
+                                    regressor_df = regressor_df_in))
   
   return(output_list)
 }
