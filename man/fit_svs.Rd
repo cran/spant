@@ -12,6 +12,7 @@ fit_svs(
   mri_seg = NULL,
   deface = FALSE,
   segment_t1 = FALSE,
+  segment_t1_method = "ants",
   external_basis = NULL,
   append_external_basis = FALSE,
   p_vols = NULL,
@@ -70,10 +71,13 @@ fit_svs(
 
 \item{mri_seg}{filepath or nifti object containing segmented MRI data.}
 
-\item{deface}{option to apply fsl_deface to the mri input. Defaults to FALSE.}
+\item{deface}{option to apply faceoff to the mri input. Defaults to FALSE.}
 
-\item{segment_t1}{segment the t1 weighted mri file with FSL FAST and use the
+\item{segment_t1}{segment the t1 weighted mri file with ANTs and use the
 results to perform partial volume correction. Defaults to FALSE.}
+
+\item{segment_t1_method}{one of : "ants" (default), "rpyants" or
+"fslr".}
 
 \item{external_basis}{precompiled basis set object to use for analysis.}
 
@@ -110,13 +114,14 @@ this will be guessed from the metab data file.}
 \item{TM}{STEAM mixing time parameter in seconds.}
 
 \item{append_basis}{names of extra signals to add to the default basis. Eg
-append_basis = c("peth", "cit"). Cannot be used with precompiled basis sets.}
+append_basis = c("peth", "cit"). Use get_mol_names() function to print all
+available signals. Cannot be used with precompiled basis sets.}
 
 \item{remove_basis}{grep expression to match names of signals to remove from
-the basis. For example: use "*" to remove all signals, "^mm|^lip" to remove
-all macromolecular and lipid signals, "^lac" to remove lactate. This operation
-is performed before signals are added with append_basis. Cannot be used with
-precompiled basis sets.}
+the basis. For example: use "lac|ala" to remove lactate and alanine; "*" to
+remove all signals and "^mm|^lip" to remove all macromolecular and lipid
+signals. This operation is performed before signals are added with
+append_basis. Cannot be used with precompiled basis sets.}
 
 \item{pre_align}{perform simple frequency alignment to known reference peaks.}
 
@@ -222,7 +227,7 @@ data in NIfTI format.}
 FALSE.}
 }
 \description{
-Note this function is still under development and liable to changes.
+Note this function is under active development and liable to changes.
 }
 \examples{
 metab <- system.file("extdata", "philips_spar_sdat_WS.SDAT",

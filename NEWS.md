@@ -1,3 +1,14 @@
+# spant 4.0.0
+* qr.solve reverts to ginv for rats in rare cases where qr.solve fails.
+* fit_svs updated to only accept a single argument for remove_basis.
+* Bug fix for Siemens DICOM reader.
+* Added support for T1 tissue segmentation using binary installation of ANTs : 
+https://github.com/antsx/ants
+* Added support for T1 defacing with the FaceOff method : 
+https://github.com/srikash/FaceOff
+* Added cross-platform support for T1 tissue segmentation using ANTs via the
+rpyANTs package : https://github.com/dipterix/rpyANTs
+
 # spant 3.9.0
 * Added extra pre_align options to fit_svs.
 * Added extra plot to fit_svs html output to help diagnose frequency alignment

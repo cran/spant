@@ -1,15 +1,17 @@
 #' Standard SVS 1H brain analysis pipeline.
 #' 
-#' Note this function is still under development and liable to changes.
+#' Note this function is under active development and liable to changes.
 #' 
 #' @param input path or mrs_data object containing MRS data.
 #' @param w_ref path or mrs_data object containing MRS water reference data.
 #' @param output_dir directory path to output fitting results.
 #' @param mri filepath or nifti object containing anatomical MRI data.
 #' @param mri_seg filepath or nifti object containing segmented MRI data.
-#' @param deface option to apply fsl_deface to the mri input. Defaults to FALSE.
-#' @param segment_t1 segment the t1 weighted mri file with FSL FAST and use the
+#' @param deface option to apply faceoff to the mri input. Defaults to FALSE.
+#' @param segment_t1 segment the t1 weighted mri file with ANTs and use the
 #' results to perform partial volume correction. Defaults to FALSE.
+#' @param segment_t1_method one of : "ants" (default), "rpyants" or 
+#' "fslr".
 #' @param external_basis precompiled basis set object to use for analysis.
 #' @param append_external_basis append the external basis with the internally
 #' generated one. Useful for adding experimentally acquired baseline signals to
@@ -34,12 +36,13 @@
 #' @param TE3 sLASER sequence timing parameter in seconds.
 #' @param TM STEAM mixing time parameter in seconds.
 #' @param append_basis names of extra signals to add to the default basis. Eg 
-#' append_basis = c("peth", "cit"). Cannot be used with precompiled basis sets.
+#' append_basis = c("peth", "cit"). Use get_mol_names() function to print all 
+#' available signals. Cannot be used with precompiled basis sets.
 #' @param remove_basis grep expression to match names of signals to remove from
-#' the basis. For example: use "*" to remove all signals, "^mm|^lip" to remove
-#' all macromolecular and lipid signals, "^lac" to remove lactate. This operation
-#' is performed before signals are added with append_basis. Cannot be used with
-#' precompiled basis sets.
+#' the basis. For example: use "lac|ala" to remove lactate and alanine; "*" to
+#' remove all signals and "^mm|^lip" to remove all macromolecular and lipid
+#' signals. This operation is performed before signals are added with
+#' append_basis. Cannot be used with precompiled basis sets.
 #' @param pre_align perform simple frequency alignment to known reference peaks.
 #' @param pre_align_max_shift maximum allowable shift in Hz. Defaults to 40 Hz.
 #' @param pre_align_ref_freq reference frequency in ppm units. More than one
@@ -123,6 +126,7 @@
 #' @export
 fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
                     mri_seg = NULL, deface = FALSE, segment_t1 = FALSE,
+                    segment_t1_method = "ants",
                     external_basis = NULL, append_external_basis = FALSE,
                     p_vols = NULL, format = NULL, pul_seq = NULL, TE = NULL,
                     TR = NULL, TE1 = NULL, TE2 = NULL, TE3 = NULL, TM = NULL,
@@ -177,6 +181,7 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     }
     
     more_args <- list(deface = deface, segment_t1 = segment_t1,
+                      segment_t1_method = segment_t1_method,
                       external_basis = external_basis,
                       append_external_basis = append_external_basis,
                       p_vols = p_vols, format = format, pul_seq = pul_seq,
@@ -330,7 +335,11 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   if (is.def(mri) & deface) {
     dir.create(file.path(output_dir, "mri_deface"), showWarnings = FALSE)
     deface_path <- file.path(output_dir, "mri_deface", "mri_deface.nii.gz")
-    fslr::fsl_deface(mri, outfile = deface_path, verbose = FALSE)
+    # fslr::fsl_deface(mri, outfile = deface_path, verbose = FALSE)
+    
+    temp_mri_path <- tempfile(fileext = ".nii.gz")
+    RNifti::writeNifti(mri, temp_mri_path)
+    faceoff(temp_mri_path, out_dir = dirname(deface_path))
     mri <- readNifti(deface_path)
   }
   
@@ -348,12 +357,25 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   # segment the mri data assuming it is t1 weighted
   if (segment_t1) {
     if (is.def(mri_seg)) {
-      warning("mri_seg argemnt will be ignored as segment_t1 has been set")
+      warning("mri_seg argument will be ignored as segment_t1 has been set")
     }
     dir.create(file.path(output_dir, "t1_segmentation"), showWarnings = FALSE)
     t1_path <- file.path(output_dir, "t1_segmentation", "t1.nii.gz")
     writeNifti(mri, t1_path)
-    segment_t1_fsl(t1_path, out_dir = file.path(output_dir, "t1_segmentation"))
+    
+    if (segment_t1_method == "rypants") {
+      segment_t1_rpyants(t1_path, out_dir = file.path(output_dir,
+                                                      "t1_segmentation"))
+    } else if (segment_t1_method == "ants") {
+      segment_t1_ants(t1_path, out_dir = file.path(output_dir,
+                                                      "t1_segmentation"))
+    } else if (segment_t1_method == "fslr") {
+      segment_t1_fsl(t1_path, out_dir = file.path(output_dir,
+                                                  "t1_segmentation"))
+    } else {
+      stop("Unrecognised T1 segmentation method.")
+    }
+    
     mri_seg <- readNifti(file.path(output_dir, "t1_segmentation",
                                    "t1_seg.nii.gz"))
     RNifti::orientation(mri_seg) <- "RAS"
@@ -498,12 +520,17 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     
     # option to remove signals
     if (!is.null(remove_basis)) {
-        inds <- grep(remove_basis, mol_list_chars)
-        if (length(inds) == 0) {
-          print(mol_list_chars)
-          stop("No signals (as listed above) matching remove_basis found.")
-        }
-        mol_list_chars <- mol_list_chars[-inds]
+      
+      if (length(remove_basis) > 1) {
+        stop("remove_basis only accepts a single argument, use '|' to match multiple patterns.")
+      }
+      
+      inds <- grep(remove_basis, mol_list_chars)
+      if (length(inds) == 0) {
+        print(mol_list_chars)
+        stop("No signals (as listed above) matching remove_basis found.")
+      }
+      mol_list_chars <- mol_list_chars[-inds]
     }
     
     # option to append signals

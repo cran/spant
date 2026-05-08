@@ -7,9 +7,11 @@
 #' @param output_dir directory path to output fitting results.
 #' @param mri filepath or nifti object containing anatomical MRI data.
 #' @param mri_seg filepath or nifti object containing segmented MRI data.
-#' @param deface option to apply fsl_deface to the mri input. Defaults to FALSE.
-#' @param segment_t1 segment the t1 weighted mri file with FSL FAST and use the
+#' @param deface option to apply faceoff to the mri input. Defaults to FALSE.
+#' @param segment_t1 segment the t1 weighted mri file with ANTs and use the
 #' results to perform partial volume correction. Defaults to FALSE.
+#' @param segment_t1_method one of : "ants" (default), "rpyants" or 
+#' "fslr".
 #' @param external_basis precompiled basis set object to use for analysis.
 #' @param p_vols a numeric vector of partial volumes expressed as percentages.
 #' Defaults to 100% white matter. A voxel containing 100% gray matter tissue
@@ -37,13 +39,14 @@
 #' @param TE3 sLASER sequence timing parameter in seconds.
 #' @param TM STEAM mixing time parameter in seconds.
 #' @param append_basis_ed_off names of extra signals to add to the default
-#' basis. Eg append_basis_ed_off = c("peth", "cit"). Cannot be used with
-#' precompiled basis sets.
+#' basis. Eg append_basis = c("peth", "cit"). Use get_mol_names() function to
+#' print all available signals. Cannot be used with precompiled basis sets.
 #' @param remove_basis_ed_off grep expression to match names of signals to
-#' remove from the basis. For example: use "*" to remove all signals, "^mm|^lip"
-#' to remove all macromolecular and lipid signals, "^lac" to remove lactate.
-#' This operation is performed before signals are added with
-#' append_basis_ed_off. Cannot be used with precompiled basis sets.
+#' remove from the basis. For example: use "lac|ala" to remove lactate and 
+#' alanine; "*" to remove all signals and "^mm|^lip" to remove all
+#' macromolecular and lipid signals. This operation is performed before signals
+#' are added with append_basis_ed_off. Cannot be used with precompiled basis
+#' sets.
 #' @param pre_align perform simple frequency alignment to known reference peaks.
 #' @param dfp_corr perform dynamic frequency and phase correction using the RATS
 #' method.
@@ -111,6 +114,7 @@
 #' @export
 fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
                            mri_seg = NULL, deface = FALSE, segment_t1 = FALSE,
+                           segment_t1_method = "ants",
                            external_basis = NULL, p_vols = NULL,
                            format = NULL, editing_type = "gaba_1.9",
                            editing_scheme = NULL,
@@ -166,6 +170,7 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     }
     
     more_args <- list(deface = deface, segment_t1 = segment_t1, 
+                      segment_t1_method = segment_t1_method,
                       external_basis = external_basis, p_vols = p_vols,
                       format = format, editing_type = editing_type,
                       editing_scheme = editing_scheme,
@@ -318,7 +323,11 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   if (is.def(mri) & deface) {
     dir.create(file.path(output_dir, "mri_deface"), showWarnings = FALSE)
     deface_path <- file.path(output_dir, "mri_deface", "mri_deface.nii.gz")
-    fslr::fsl_deface(mri, outfile = deface_path, verbose = FALSE)
+    # fslr::fsl_deface(mri, outfile = deface_path, verbose = FALSE)
+    
+    temp_mri_path <- tempfile(fileext = ".nii.gz")
+    RNifti::writeNifti(mri, temp_mri_path)
+    faceoff(temp_mri_path, out_dir = dirname(deface_path))
     mri <- readNifti(deface_path)
   }
   
@@ -341,7 +350,20 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     dir.create(file.path(output_dir, "t1_segmentation"), showWarnings = FALSE)
     t1_path <- file.path(output_dir, "t1_segmentation", "t1.nii.gz")
     writeNifti(mri, t1_path)
-    segment_t1_fsl(t1_path, out_dir = file.path(output_dir, "t1_segmentation"))
+    
+    if (segment_t1_method == "rypants") {
+      segment_t1_rpyants(t1_path, out_dir = file.path(output_dir,
+                                                      "t1_segmentation"))
+    } else if (segment_t1_method == "ants") {
+      segment_t1_ants(t1_path, out_dir = file.path(output_dir,
+                                                      "t1_segmentation"))
+    } else if (segment_t1_method == "fslr") {
+      segment_t1_fsl(t1_path, out_dir = file.path(output_dir,
+                                                  "t1_segmentation"))
+    } else {
+      stop("Unrecognised T1 segmentation method.")
+    }
+    
     mri_seg <- readNifti(file.path(output_dir, "t1_segmentation",
                                    "t1_seg.nii.gz"))
     RNifti::orientation(mri_seg) <- "RAS"
@@ -533,12 +555,17 @@ fit_svs_edited <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     
     # option to remove signals
     if (!is.null(remove_basis_ed_off)) {
-        inds <- grep(remove_basis_ed_off, mol_list_chars)
-        if (length(inds) == 0) {
-          print(mol_list_chars)
-          stop("No signals (as listed above) matching remove_basis_ed_off found.")
-        }
-        mol_list_chars <- mol_list_chars[-inds]
+      
+      if (length(remove_basis_ed_off) > 1) {
+        stop("remove_basis_ed_off only accepts a single argument, use '|' to match multiple patterns.")
+      }
+      
+      inds <- grep(remove_basis_ed_off, mol_list_chars)
+      if (length(inds) == 0) {
+        print(mol_list_chars)
+        stop("No signals (as listed above) matching remove_basis_ed_off found.")
+      }
+      mol_list_chars <- mol_list_chars[-inds]
     }
     
     # option to append signals

@@ -852,8 +852,8 @@ add_fit_res_tab_amp_sd <- function(res_tab, name, amp_col, sd_col) {
   return(res_tab_out)
 }
 
-#' Segment T1 weighted MRI data using FSL FAST and write to file. Runs deface
-#' and bet as preprocessing steps by default.
+#' Segment T1 weighted MRI data using FSL FAST and write to file. Runs bet as a 
+#' preprocessing step by default.
 #' 
 #' This function requires a working installation of FSL and uses the fslr 
 #' package. You may need to specify the fsl install directory, eg: 
@@ -883,6 +883,7 @@ segment_t1_fsl <- function(mri_path, out_dir = NULL, deface = FALSE,
                      verbose = FALSE)
     mri_path <- deface_path
   }
+  
   brain_path <- file.path(dir_path, "t1_brain")
   bet_opts <- paste("-B -f", bet_fit)
   fslr::fslbet(mri_path, outfile = brain_path, retimg = FALSE, opts = bet_opts,
