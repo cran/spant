@@ -305,6 +305,29 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   }
   
   #### 4 detailed fit ####
+  
+  # find any signals with names starting with Lip or MM as they may have
+  # different parameter limits
+  broad_indices <- c(grep("^Lip", basis$names), grep("^MM", basis$names))
+  
+  # construct a vector of basis elements to optionally exclude from the
+  # lineshape asymetry adjustment
+  if (opts$broad_asym) {
+    omit_ls_asym <- rep(FALSE, length(basis$names))
+  } else {
+    omit_ls_asym <- rep(FALSE, length(basis$names))
+    omit_ls_asym[broad_indices] <- TRUE
+  }
+  
+  # construct a vector of basis elements to optionally exclude from the
+  # global linewidth adjustment
+  if (opts$broad_glb) {
+    omit_glb <- rep(FALSE, length(basis$names))
+  } else {
+    omit_glb <- rep(FALSE, length(basis$names))
+    omit_glb[broad_indices] <- TRUE
+  }
+  
   if (opts$maxiters > 0) {
     
     # estimate the required spine functions based on the auto bl flex
@@ -331,10 +354,6 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
     par <- c(res$par[1], res$par[2], res$par[3], asym_init, rep(0, Nbasis),
              rep(opts$lb_init, Nbasis))
    
-    # find any signals with names starting with Lip or MM as they may have
-    # different parameter limits
-    broad_indices <- c(grep("^Lip", basis$names), grep("^MM", basis$names))
-    
     max_basis_shifts <- rep(opts$max_basis_shift, Nbasis) * acq_paras$ft * 1e-6
     
     if (!is.null(opts$max_basis_shift_broad)) {
@@ -435,12 +454,18 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
     }
     
     if (is.def(opts$lb_reg)) { 
-      lb_reg_scaled <- noise_scale / opts$lb_reg
-      lb_reg_scaled <- rep(lb_reg_scaled, Nbasis)
-      # lb_reg_scaled <- lb_reg_scaled / basis_scale
+      lb_reg_scaled <- rep(opts$lb_reg, Nbasis)
+      
+      if (!is.null(opts$lb_reg_broad)) {
+        lb_reg_scaled[broad_indices] <- opts$lb_reg_broad
+      }
+      
+      lb_reg_scaled <- noise_scale / lb_reg_scaled
     } else {
       lb_reg_scaled <- NULL
     }
+    
+    # print(lb_reg_scaled)
     
     if (is.def(opts$asym_reg)) { 
       asym_reg_scaled <- noise_scale / opts$asym_reg
@@ -483,7 +508,7 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
                               f, sp_bas_full$inds, sp_bas_full$bl_comps, FALSE,
                               NULL, opts$phi1_optim, opts$ahat_calc_method,
                               freq_reg_scaled, lb_reg_scaled, opts$lb_init,
-                              asym_reg_scaled)
+                              asym_reg_scaled, omit_ls_asym, omit_glb)
     options(warn = oldw)
   } 
   
@@ -547,6 +572,28 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
   
   damp_mat <- matrix(damp_vec, nrow = nrow(raw_metab_basis), 
                      ncol = ncol(raw_metab_basis), byrow = F)
+  
+  # if (any(omit_ls_asym)) {
+  #   # overwrite any specified signals with a symmetric lineshape
+  #   damp_vec_sym <- asy_pvoigt_ls(fs, N, par[2], 1, 0, TRUE)
+  #   damp_mat[,omit_ls_asym] <- matrix(damp_vec_sym,
+  #                              nrow = nrow(raw_metab_basis), 
+  #                              ncol = sum(omit_ls_asym), byrow = F)
+  # }
+  
+  # adjust the damping matrix if any signals should be treated differently
+  if (any(c(omit_ls_asym, omit_glb))) {
+    for (m in 1:length(omit_ls_asym)) {
+      if (omit_ls_asym[m] & omit_glb[m]) {
+        damp_mat[, m] <- 1 + 0i
+      } else if (omit_ls_asym[m] & !omit_glb[m]) {
+        damp_mat[, m] <- asy_pvoigt_ls(fs, N, par[2], 1, 0, TRUE)
+      } else if (!omit_ls_asym[m] & omit_glb[m]) {
+        damp_mat[, m] <- asy_pvoigt_ls(fs, N, 0, 1, par[4], TRUE)
+      }
+    }
+  }
+  
   metab_basis_damped <- raw_metab_basis * damp_mat
   
   # apply shift and lb terms to individual basis signals
@@ -728,7 +775,8 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
                                     bl_basis_final, t, f, sp_bas_final$inds,
                                     sp_bas_final$bl_comps, FALSE, NULL,
                                     opts$phi1_optim, opts$ahat_calc_method,
-                                    NULL, NULL, opts$lb_init, NULL)
+                                    NULL, NULL, opts$lb_init, NULL, 
+                                    omit_ls_asym, omit_glb)
                                     # nb freq_reg, lb_reg, asym_reg not 
                                     # included in the crlb calc
    
@@ -973,7 +1021,12 @@ abfit <- function(y, acq_paras, basis, opts = NULL) {
 #' @param zf_offset offset in number of data points from the end of the FID to 
 #' zero-fill. Default is NULL and will automatically set this to 50 points when
 #' the FID distortion flag is set for the mrs_data.
-#' @return full list of options.
+#' @param broad_asym apply asymmetric lineshape parameter to broad signals
+#' with names starting with Lip or MM.
+#' @param lb_reg_broad individual line broadening parameter for broad (Lip / MM)
+#' signals. If NULL then defaults to lb_reg.
+#' @param broad_glb apply global linewidth parameter to broad signals with names
+#' starting with Lip or MM.
 #' @examples
 #' opts <- abfit_reg_opts(ppm_left = 4.2, noise_region = c(-1, -3))
 #' @export
@@ -1006,7 +1059,8 @@ abfit_reg_opts <- function(init_damping = 5, maxiters = 128,
                            output_all_paras_raw = FALSE, input_paras_raw = NULL,
                            optim_lw_only = FALSE, optim_lw_only_limit = 20,
                            lb_init = "lcm_compat", lb_init_approx_fit = FALSE,
-                           zf_offset = NULL) {
+                           zf_offset = NULL, broad_asym = TRUE,
+                           lb_reg_broad = NULL, broad_glb = TRUE) {
   
   list(init_damping = init_damping, maxiters = maxiters,
        max_shift_pre = max_shift_pre, max_shift_fine = max_shift_fine,
@@ -1040,7 +1094,9 @@ abfit_reg_opts <- function(init_damping = 5, maxiters = 128,
        output_all_paras_raw = output_all_paras_raw,
        input_paras_raw = input_paras_raw, optim_lw_only = optim_lw_only,
        optim_lw_only_limit = optim_lw_only_limit, lb_init = lb_init,
-       lb_init_approx_fit = lb_init_approx_fit, zf_offset = zf_offset)
+       lb_init_approx_fit = lb_init_approx_fit, zf_offset = zf_offset,
+       broad_asym = broad_asym, lb_reg_broad = lb_reg_broad,
+       broad_glb = broad_glb)
 }
 
 #' Return a list of options for an ABfit analysis.
@@ -1135,6 +1191,12 @@ abfit_reg_opts <- function(init_damping = 5, maxiters = 128,
 #' @param zf_offset offset in number of data points from the end of the FID to 
 #' zero-fill. Default is NULL and will automatically set this to 50 points when
 #' the FID distortion flag is set for the mrs_data.
+#' @param broad_asym apply asymmetric lineshape parameter to broad signals
+#' with names starting with Lip or MM.
+#' @param lb_reg_broad individual line broadening parameter for broad (Lip / MM)
+#' signals. If NULL then defaults to lb_reg.
+#' @param broad_glb apply global linewidth parameter to broad signals with names
+#' starting with Lip or MM.
 #' @return full list of options.
 #' @examples
 #' opts <- abfit_opts(ppm_left = 4.2, noise_region = c(-1, -3))
@@ -1166,7 +1228,8 @@ abfit_opts <- function(init_damping = 5, maxiters = 1024, max_shift_pre = 0.078,
                        output_all_paras_raw = FALSE, input_paras_raw = NULL,
                        optim_lw_only = FALSE, optim_lw_only_limit = 20,
                        lb_init = 0.001, lb_init_approx_fit = FALSE,
-                       zf_offset = NULL) {
+                       zf_offset = NULL, broad_asym = TRUE,
+                       lb_reg_broad = NULL, broad_glb = TRUE) {
   
   # TODO append any missing options from abfit_reg_opts - not needed yet
                          
@@ -1202,7 +1265,9 @@ abfit_opts <- function(init_damping = 5, maxiters = 1024, max_shift_pre = 0.078,
        output_all_paras_raw = output_all_paras_raw,
        input_paras_raw = input_paras_raw, optim_lw_only = optim_lw_only,
        optim_lw_only_limit = optim_lw_only_limit, lb_init = lb_init,
-       lb_init_approx_fit = lb_init_approx_fit, zf_offset = zf_offset)
+       lb_init_approx_fit = lb_init_approx_fit, zf_offset = zf_offset,
+       broad_asym = broad_asym, lb_reg_broad = lb_reg_broad,
+       broad_glb = broad_glb)
 }
 
 #' Return a list of options for an ABfit analysis to maintain comparability with
@@ -1219,7 +1284,7 @@ abfit_opts_v1_9_0 <- function(...) {
 abfit_full_obj <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
                            bl_comps, sum_sq, basis_paras, phi1_optim,
                            ahat_calc_method, freq_reg, lb_reg, lb_init,
-                           asym_reg) {
+                           asym_reg, omit_ls_asym, omit_glb) {
   
   if (!is.null(basis_paras)) par <- c(par, basis_paras)
   
@@ -1240,6 +1305,28 @@ abfit_full_obj <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
   
   damp_mat <- matrix(damp_vec, nrow = nrow(raw_metab_basis), 
                      ncol = ncol(raw_metab_basis), byrow = F)
+  
+  # if (any(omit_ls_asym)) {
+  #   # overwrite any specified signals with a symmetric lineshape
+  #   damp_vec_sym <- asy_pvoigt_ls(fs, N, par[2], 1, 0, TRUE)
+  #   damp_mat[,omit_ls_asym] <- matrix(damp_vec_sym,
+  #                              nrow = nrow(raw_metab_basis), 
+  #                              ncol = sum(omit_ls_asym), byrow = F)
+  # }
+  
+  # adjust the damping matrix if any signals should be treated differently
+  if (any(c(omit_ls_asym, omit_glb))) {
+    for (m in 1:length(omit_ls_asym)) {
+      if (omit_ls_asym[m] & omit_glb[m]) {
+        damp_mat[, m] <- 1 + 0i
+      } else if (omit_ls_asym[m] & !omit_glb[m]) {
+        damp_mat[, m] <- asy_pvoigt_ls(fs, N, par[2], 1, 0, TRUE)
+      } else if (!omit_ls_asym[m] & omit_glb[m]) {
+        damp_mat[, m] <- asy_pvoigt_ls(fs, N, 0, 1, par[4], TRUE)
+      }
+    }
+  }
+  
   raw_metab_basis <- raw_metab_basis * damp_mat
   
   # apply shift and lb terms to individual basis signals
@@ -1300,7 +1387,7 @@ abfit_full_obj <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
 abfit_full_num_jac <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
                                bl_comps, sum_sq, basis_paras, phi1_optim,
                                ahat_calc_method, freq_reg, lb_reg, lb_init,
-                               asym_reg) {
+                               asym_reg, omit_ls_asym, omit_glb) {
   
   numDeriv::jacobian(func = abfit_full_obj, x = par, method = "simple",
                      y = y, raw_metab_basis = raw_metab_basis,
@@ -1308,13 +1395,14 @@ abfit_full_num_jac <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
                      bl_comps = bl_comps, sum_sq = sum_sq, basis_paras = NULL,
                      phi1_optim = phi1_optim,
                      ahat_calc_method = ahat_calc_method, freq_reg = freq_reg,
-                     lb_reg = lb_reg, lb_init = lb_init, asym_reg = asym_reg)
+                     lb_reg = lb_reg, lb_init = lb_init, asym_reg = asym_reg,
+                     omit_ls_asym = omit_ls_asym, omit_glb = omit_glb)
 }
 
 abfit_partial_num_jac <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
                                   bl_comps, sum_sq, basis_paras, phi1_optim,
                                   ahat_calc_method, freq_reg, lb_reg, lb_init,
-                                  asym_reg) {
+                                  asym_reg, omit_ls_asym, omit_glb) {
   
   if (phi1_optim) {
     global_paras <- par[1:5]
@@ -1330,7 +1418,8 @@ abfit_partial_num_jac <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
                      bl_comps = bl_comps, sum_sq = sum_sq,
                      basis_paras = basis_paras_fixed, phi1_optim = phi1_optim,
                      ahat_calc_method = ahat_calc_method, freq_reg = freq_reg,
-                     lb_reg = lb_reg, lb_init = lb_init, asym_reg = asym_reg)
+                     lb_reg = lb_reg, lb_init = lb_init, asym_reg = asym_reg,
+                     omit_ls_asym = omit_ls_asym, omit_glb = omit_glb)
 }
 
 # attempt to calc approx Jacobian for some of the global parameters
@@ -1338,14 +1427,16 @@ abfit_partial_num_jac <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
 abfit_full_anal_jac_test <- function(par, y, raw_metab_basis, bl_basis, t,
                                      f, inds, bl_comps, sum_sq, basis_paras,
                                      phi1_optim, ahat_calc_method, freq_reg,
-                                     lb_reg, lb_init, asym_reg) {
+                                     lb_reg, lb_init, asym_reg, omit_ls_asym,
+                                     omit_glb) {
   
   # calculate the first 4 paras numerically
   global_paras_jac <- abfit_partial_num_jac(par, y, raw_metab_basis, bl_basis,
                                             t, f, inds, bl_comps, sum_sq,
                                             basis_paras, phi1_optim,
                                             ahat_calc_method, freq_reg, lb_reg,
-                                            lb_init, asym_reg)
+                                            lb_init, asym_reg, omit_ls_asym,
+                                            omit_glb)
   
   # apply phase parameter to data
   y <- y * exp(1i * par[1])
@@ -1361,6 +1452,28 @@ abfit_full_anal_jac_test <- function(par, y, raw_metab_basis, bl_basis, t,
   
   damp_mat <- matrix(damp_vec, nrow = nrow(raw_metab_basis), 
                      ncol = ncol(raw_metab_basis), byrow = F)
+  
+  # if (any(omit_ls_asym)) {
+  #   # overwrite any specified signals with a symmetric lineshape
+  #   damp_vec_sym <- asy_pvoigt_ls(fs, N, par[2], 1, 0, TRUE)
+  #   damp_mat[,omit_ls_asym] <- matrix(damp_vec_sym,
+  #                              nrow = nrow(raw_metab_basis), 
+  #                              ncol = sum(omit_ls_asym), byrow = F)
+  # }
+  
+  # adjust the damping matrix if any signals should be treated differently
+  if (any(c(omit_ls_asym, omit_glb))) {
+    for (m in 1:length(omit_ls_asym)) {
+      if (omit_ls_asym[m] & omit_glb[m]) {
+        damp_mat[, m] <- 1 + 0i
+      } else if (omit_ls_asym[m] & !omit_glb[m]) {
+        damp_mat[, m] <- asy_pvoigt_ls(fs, N, par[2], 1, 0, TRUE)
+      } else if (!omit_ls_asym[m] & omit_glb[m]) {
+        damp_mat[, m] <- asy_pvoigt_ls(fs, N, 0, 1, par[4], TRUE)
+      }
+    }
+  }
+  
   raw_metab_basis <- raw_metab_basis * damp_mat
   raw_metab_basis_orig <- raw_metab_basis
   
@@ -1429,14 +1542,15 @@ abfit_full_anal_jac_test <- function(par, y, raw_metab_basis, bl_basis, t,
 abfit_full_anal_jac <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
                                 bl_comps, sum_sq, basis_paras, phi1_optim,
                                 ahat_calc_method, freq_reg, lb_reg, lb_init,
-                                asym_reg) {
+                                asym_reg, omit_ls_asym, omit_glb) {
   
   # calculate the first 4 paras numerically
   global_paras_jac <- abfit_partial_num_jac(par, y, raw_metab_basis, bl_basis,
                                             t, f, inds, bl_comps, sum_sq,
                                             basis_paras, phi1_optim,
                                             ahat_calc_method, freq_reg, lb_reg,
-                                            lb_init, asym_reg)
+                                            lb_init, asym_reg, omit_ls_asym,
+                                            omit_glb)
   
   # apply phase parameter to data
   y <- y * exp(1i * par[1])
@@ -1455,6 +1569,28 @@ abfit_full_anal_jac <- function(par, y, raw_metab_basis, bl_basis, t, f, inds,
   
   damp_mat <- matrix(damp_vec, nrow = nrow(raw_metab_basis), 
                      ncol = ncol(raw_metab_basis), byrow = F)
+  
+  # if (any(omit_ls_asym)) {
+  #   # overwrite any specified signals with a symmetric lineshape
+  #   damp_vec_sym <- asy_pvoigt_ls(fs, N, par[2], 1, 0, TRUE)
+  #   damp_mat[,omit_ls_asym] <- matrix(damp_vec_sym,
+  #                              nrow = nrow(raw_metab_basis), 
+  #                              ncol = sum(omit_ls_asym), byrow = F)
+  # }
+  
+  # adjust the damping matrix if any signals should be treated differently
+  if (any(c(omit_ls_asym, omit_glb))) {
+    for (m in 1:length(omit_ls_asym)) {
+      if (omit_ls_asym[m] & omit_glb[m]) {
+        damp_mat[, m] <- 1 + 0i
+      } else if (omit_ls_asym[m] & !omit_glb[m]) {
+        damp_mat[, m] <- asy_pvoigt_ls(fs, N, par[2], 1, 0, TRUE)
+      } else if (!omit_ls_asym[m] & omit_glb[m]) {
+        damp_mat[, m] <- asy_pvoigt_ls(fs, N, 0, 1, par[4], TRUE)
+      }
+    }
+  }
+  
   raw_metab_basis <- raw_metab_basis * damp_mat
   raw_metab_basis_orig <- raw_metab_basis
   

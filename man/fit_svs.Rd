@@ -26,6 +26,7 @@ fit_svs(
   TM = NULL,
   append_basis = NULL,
   remove_basis = NULL,
+  remove_external_basis = NULL,
   pre_align = TRUE,
   pre_align_max_shift = 40,
   pre_align_ref_freq = c(2.01, 3.03, 3.22),
@@ -33,7 +34,7 @@ fit_svs(
   dfp_corr = TRUE,
   dfp_corr_ref_subset = NULL,
   output_ratio = NULL,
-  ecc = FALSE,
+  ecc = NULL,
   hsvd_width = NULL,
   decimate = FALSE,
   trunc_fid_pts = NULL,
@@ -118,10 +119,15 @@ append_basis = c("peth", "cit"). Use get_mol_names() function to print all
 available signals. Cannot be used with precompiled basis sets.}
 
 \item{remove_basis}{grep expression to match names of signals to remove from
-the basis. For example: use "lac|ala" to remove lactate and alanine; "*" to
+the basis. For example: use "^lac$|^ala$" to remove lactate and alanine; "*" to
 remove all signals and "^mm|^lip" to remove all macromolecular and lipid
 signals. This operation is performed before signals are added with
-append_basis. Cannot be used with precompiled basis sets.}
+append_basis. Cannot be used with precompiled/exernal basis sets.}
+
+\item{remove_external_basis}{grep expression to match names of signals to
+remove from the external basis. For example: use "^Lac$|^Ala$" to remove
+lactateand alanine and "^MM|^Lip" to remove all macromolecular and lipid
+signals.}
 
 \item{pre_align}{perform simple frequency alignment to known reference peaks.}
 
@@ -145,7 +151,7 @@ Defaults to "tCr". Multiple metabolites may be specified for multiple
 outputs. Set to NA to omit.}
 
 \item{ecc}{option to perform water reference based eddy current correction,
-defaults to FALSE.}
+default is to not apply unless the is GE format.}
 
 \item{hsvd_width}{set the width of the HSVD filter in Hz. Note the applied
 width is between -width and +width Hz, with 0 Hz being defined at the centre

@@ -57,7 +57,10 @@ abfit_opts(
   optim_lw_only_limit = 20,
   lb_init = 0.001,
   lb_init_approx_fit = FALSE,
-  zf_offset = NULL
+  zf_offset = NULL,
+  broad_asym = TRUE,
+  lb_reg_broad = NULL,
+  broad_glb = TRUE
 )
 }
 \arguments{
@@ -203,6 +206,15 @@ iterative fit.}
 \item{zf_offset}{offset in number of data points from the end of the FID to
 zero-fill. Default is NULL and will automatically set this to 50 points when
 the FID distortion flag is set for the mrs_data.}
+
+\item{broad_asym}{apply asymmetric lineshape parameter to broad signals
+with names starting with Lip or MM.}
+
+\item{lb_reg_broad}{individual line broadening parameter for broad (Lip / MM)
+signals. If NULL then defaults to lb_reg.}
+
+\item{broad_glb}{apply global linewidth parameter to broad signals with names
+starting with Lip or MM.}
 }
 \value{
 full list of options.
