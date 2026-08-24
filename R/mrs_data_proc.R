@@ -849,7 +849,8 @@ lb.list <- function(x, lb, lg = 1) {
 #' @export
 lb.mrs_data <- function(x, lb, lg = 1) {
   if (lg > 1 | lg < 0) {
-    cat("Error, lg values not between 0 and 1.")  
+    cat("Error, lg values not between 0 and 1.") 
+    print(lg)
     stop()
   }
   
@@ -886,6 +887,8 @@ lb.basis_set <- function(x, lb, lg = 1) {
 }
 
 match_ls_optim_fn <- function(par, mrs_data, ref, xlim) {
+  if (par[2] > 1) par[2] <- 1
+  if (par[2] < 0) par[2] <- 0
   if (length(par) == 2) {
     resid_mrs <- ref - td2fd(lb(mrs_data, par[1], par[2]))
   } else {
@@ -922,6 +925,31 @@ match_lineshape <- function(mrs_data, ref, xlim, init_lb = 0.2, init_lg = 0.5,
   
   if (!is_fd(ref)) ref <- td2fd(ref)
   
+  if (Ndyns(mrs_data) > 1) {
+    mrs_data_list <- mrs_data2list(mrs_data)
+    
+    res <- lapply(mrs_data_list, match_lineshape, ref = ref, xlim = xlim,
+                  init_lb = init_lb, init_lg = init_lg, init_amp = init_amp,
+                  min_lb = min_lb, max_lb = max_lb, min_lg = min_lg,
+                  max_lg = max_lg, min_amp = min_amp, max_amp = max_amp,
+                  amp_optim = amp_optim)
+    
+    
+    matched       <- append_dyns(lapply(res, \(x) x$matched))
+    diff          <- append_dyns(lapply(res, \(x) x$diff))
+    diff_no_match <- append_dyns(lapply(res, \(x) x$diff_no_match))
+    lb            <- sapply(res, \(x) x$lb)
+    lg            <- sapply(res, \(x) x$lg)
+    amp           <- sapply(res, \(x) x$amp)
+    optim_res     <- lapply(res, \(x) x$optim_res)
+    
+    res_out <- list(matched = matched, diff = diff,
+                    diff_no_match = diff_no_match, lb = lb, lg = lg, amp = amp,
+                    optim_res = optim_res)
+    
+    return(res_out)
+  }
+  
   if (amp_optim) {
     # init broadening in Hz, LG factor
     start_vals <- c(init_lb, init_lg, init_amp)
@@ -931,8 +959,13 @@ match_lineshape <- function(mrs_data, ref, xlim, init_lb = 0.2, init_lg = 0.5,
                         lower = c(min_lb, min_lg, min_amp),
                         upper = c(max_lb, max_lg, max_amp))
     
+    if (res$par[2] > 1) res$par[2] <- 1
+    if (res$par[2] < 0) res$par[2] <- 0
+    
     matched <- td2fd(lb(mrs_data, res$par[1], res$par[2]))
     diff    <- scale_mrs_amp(matched, res$par[3]) - ref
+    
+    matched <- scale_mrs_amp(matched, res$par[3])
     
     if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
     diff_no_match <- mrs_data - ref
@@ -948,6 +981,9 @@ match_lineshape <- function(mrs_data, ref, xlim, init_lb = 0.2, init_lg = 0.5,
                         ref = ref, xlim = xlim, method = "L-BFGS-B",
                         lower = c(min_lb, min_lg), upper = c(max_lb, max_lg))
     
+    if (res$par[2] > 1) res$par[2] <- 1
+    if (res$par[2] < 0) res$par[2] <- 0
+    
     matched <- td2fd(lb(mrs_data, res$par[1], res$par[2]))
     diff    <- matched - ref
     
@@ -955,7 +991,7 @@ match_lineshape <- function(mrs_data, ref, xlim, init_lb = 0.2, init_lg = 0.5,
     diff_no_match <- mrs_data - ref
     
     return(list(matched = matched, diff = diff, diff_no_match = diff_no_match,
-                lb = res$par[1], lg = res$par[2], optim_res = res))
+                lb = res$par[1], lg = res$par[2], amp = 1, optim_res = res))
   }
 }
 
@@ -5553,6 +5589,69 @@ lb_renoise <- function(mrs_data, lb, lg = NULL, sig_region = c(4, 0.5),
     
     # overwrite original
     mrs_data <- assign_dyns(mrs_data, n, mrs_data_n)
+  }
+  
+  return(mrs_data)
+}
+
+#' Set all spectral data points below a given percentage of the maximum to zero.
+#' @param mrs_data data to be processed.
+#' @param percent_max spectral data points smaller than this percentage value
+#' will be set to zero.
+#' @return mrs_data object with zeroed spectral data points.
+#' @export
+zero_spec_threshold <- function(mrs_data, percent_max) {
+  
+  # frequency domain operation
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  mrs_data_out <- apply_mrs(mrs_data, 7, zero_spec_threshold_vec, percent_max)
+  
+  return(mrs_data_out)
+  
+}
+
+zero_spec_threshold_vec <- function(vec, percent_max) {
+  
+  re_vec <- Re(vec)
+  im_vec <- Im(vec)
+  
+  re_max_val <- max(Mod(re_vec))
+  re_vec[re_vec < (re_max_val * percent_max / 100)] <- 0
+  im_max_val <- max(Mod(im_vec))
+  im_vec[im_vec < (im_max_val * percent_max / 100)] <- 0
+  
+  vec <- re_vec + 1i * im_vec
+  
+  return(vec)
+}
+
+#' Set spectral data points to a given value.
+#' @param mrs_data data to be processed.
+#' @param xlim spectral region (in ppm) of data points to set. If NULL (default)
+#' all spectral points will be set.
+#' @param value value to set the spectral region. Defaults to zero.
+#' @param invert set all spectral points *outside* the spectral region to the
+#' given value.
+#' @return mrs_data object with modified spectral data points.
+#' @export
+set_spec_values <- function(mrs_data, xlim = NULL, value = 0, invert = FALSE) {
+  
+  # frequency domain operation
+  if (!is_fd(mrs_data)) mrs_data <- td2fd(mrs_data)
+  
+  if (is.null(xlim)) {
+    if (invert) stop("inverting without a spectral range doesn't make sense")
+    mrs_data$data[,,,,,,] <- value
+  } else {
+    scale <- ppm(mrs_data)
+    inds <- get_seg_ind(scale, xlim[1], xlim[2])
+    
+    if (invert) {
+      mrs_data$data[,,,,,,-inds] <- value
+    } else {
+      mrs_data$data[,,,,,,inds] <- value
+    }
   }
   
   return(mrs_data)
