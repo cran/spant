@@ -5,7 +5,7 @@ if (ver != utils::packageVersion("spant")) {
   warning("c/l script and spant version missmatch. Reinstall the c/l scripts with : sudo Rscript -e \"spant::install_cli()\"")
 }
 
-parser <- OptionParser(prog = "spant_fit_svs", description = "Command-line interface for the fit_svs function in the spant R package",
+parser <- OptionParser(prog = "spant_fit_svs_edited", description = "Command-line interface for the fit_svs_edited function in the spant R package",
                        formatter = IndentedHelpFormatter)
 
 parser <- add_option(parser, c("-i", "--input"), action = "store", type = "character",
@@ -22,10 +22,10 @@ parser <- add_option(parser, c("--mri"), action = "store", type = "character",
 
 parser <- add_option(parser, c("--mri_seg"), action = "store", type = "character",
                      help="Filepath containing segmented MRI data.")
-                     
+
 parser <- add_option(parser, c("--deface"), action = "store", default = FALSE,
                      help="Apply fsl_deface to the mri input. Defaults to FALSE.")
-                     
+
 parser <- add_option(parser, c("--segment_t1"), action = "store", default = FALSE,
                      help="Segment the t1 weighted mri file with ANTs and use the\n\t\tresults to perform partial volume correction. Defaults to FALSE.")
 
@@ -36,14 +36,24 @@ parser <- add_option(parser, c("--segment_t1_method"), action = "store", type = 
 parser <- add_option(parser, c("-b", "--external_basis"), action = "store", type = "character",
                      help="Precompiled basis set to use for analysis.")
 
-parser <- add_option(parser, c("--append_external_basis"), action = "store", default = FALSE,
-                     help="Append the external basis with the internally generated one.\n\t\tUseful for adding experimentally acquired baseline signals to\n\t\tinternally simulated basis sets. Defaults to FALSE - meaning\n\t\tonly signals from the external basis will be used in analysis.")
-
 parser <- add_option(parser, c("-p", "--p_vols"), action = "store", type = "character",
                      help="A numeric vector of partial volumes expressed as percentages.\n\t\tDefaults to 100% white matter. A voxel containing 100% gray\n\t\tmatter tissue would use : p_vols = c(WM = 0, GM = 100, CSF = 0).")
 
 parser <- add_option(parser, c("--format"), action = "store", type = "character",
                      help="String describing the data format. Must be one of the\n\t\tfollowing : \"spar_sdat\", \"rda\", \"dicom\", \"twix\", \"pfile\",\n\t\t\"list_data\", \"paravis\", \"dpt\", \"lcm_raw\", \"rds\", \"nifti\",\n\t\t\"varian\", \"jmrui_txt\". If not specified, the format will be\n\t\tguessed from the filename extension, or will be assumed to be a\n\t\tSiemens ima dynamic data if the path is a directory.")
+
+parser <- add_option(parser, c("--editing_type"), action = "store", type = "character",
+                     default = "gaba_1.9",
+                     help="Can be one of : \"gaba_1.9\", \"gaba_1.9_gannet\" or\n\t\t\"gsh_4.54\". Defaults to \"gaba_1.9\".")
+
+parser <- add_option(parser, c("--editing_scheme"), action = "store", type = "character",
+                     help="Describes the dynamic data ordering. Can be one of:\n\t\t'on-off-blocks', 'on-off-interleaved', 'off-on-blocks' or\n\t\t'off-on-interleaved'. Defaults to 'off-on-interleaved'.")
+
+parser <- add_option(parser, c("--invert_edit_on"), action = "store", default = FALSE,
+                     help="Invert the edit-on sub-spectra. Defaults to FALSE.")
+
+parser <- add_option(parser, c("--invert_edit_off"), action = "store", default = FALSE,
+                     help="Invert the edit-off sub-spectra. Defaults to FALSE.")
 
 parser <- add_option(parser, c("-s", "--pul_seq"), action = "store", type = "character",
                      help="Pulse sequence type for simulating the basis set. Can be one\n\t\tof : 'press', 'press_ideal', 'press_shaped', 'steam' or\n\t\t'slaser'.")
@@ -66,36 +76,18 @@ parser <- add_option(parser, c("--TE3"), action = "store", type = "double",
 parser <- add_option(parser, c("--TM"), action = "store", type = "double",
                      help="STEAM mixing time parameter in seconds.")
 
-parser <- add_option(parser, c("-a", "--append_basis"), action = "store", type = "character",
-                     help="Names of extra signals to add to the default basis. Eg\n\t\tappend_basis = c(\"peth\", \"cit\"). Cannot be used with precompiled\n\t\tbasis sets.")
+parser <- add_option(parser, c("-a", "--append_basis_ed_off"), action = "store", type = "character",
+                     help="Names of extra signals to add to the default basis. Eg\n\t\tappend_basis_ed_off = c(\"peth\", \"cit\"). Cannot be used with\n\t\tprecompiled basis sets.")
 
-parser <- add_option(parser, c("-r", "--remove_basis"), action = "store", type = "character",
-                     help="Grep expression to match names of signals to remove from the\n\t\tbasis. For example: use \"lac|ala\" to remove lactate and alanine;\n\t\t\"*\" to remove all signals and \"^mm|^lip\" to remove all\n\t\tmacromolecular and lipid signals. This operation is performed\n\t\tbefore signals are added with append_basis. Cannot be used with\n\t\tprecompiled basis sets.")
-
-parser <- add_option(parser, c("--remove_external_basis"), action = "store", type = "character",
-                     help="Grep expression to match names of signals to remove from the\n\t\texternal basis. For example: use \"^Lac$|^Ala$\" to remove lactate\n\t\tand alanine and \"^MM|^Lip\" to remove all macromolecular and\n\t\tlipid signals.")
+parser <- add_option(parser, c("-r", "--remove_basis_ed_off"), action = "store", type = "character",
+                     help="Grep expression to match names of signals to remove from the\n\t\tbasis. For example: use \"lac|ala\" to remove lactate and alanine;\n\t\t\"*\" to remove all signals and \"^mm|^lip\" to remove all\n\t\tmacromolecular and lipid signals. This operation is performed\n\t\tbefore signals are added with append_basis_ed_off. Cannot be used\n\t\twith precompiled basis sets.")
 
 parser <- add_option(parser, c("--pre_align"), action = "store", default = TRUE,
                      help="Perform simple frequency alignment to known reference peaks.")
 
-parser <- add_option(parser, c("--pre_align_max_shift"), action = "store", type = "double",
-                     default = 40,
-                     help="Maximum allowable shift in Hz for pre_align. Defaults to 40 Hz.")
-
-parser <- add_option(parser, c("--pre_align_ref_freq"), action = "store", type = "character",
-                     default = "c(2.01, 3.03, 3.22)",
-                     help="Reference frequency in ppm units for pre_align. More than one\n\t\tfrequency may be specified. Defaults to : c(2.01, 3.03, 3.22).")
-
-parser <- add_option(parser, c("--pre_align_ref_amp"), action = "store", type = "character",
-                     default = "1",
-                     help="Reference frequency relative amplitudes for pre_align. Defaults\n\t\tto 1, corresponding to equal amplitudes.")
-
 parser <- add_option(parser, c("--dfp_corr"), action = "store", default = TRUE,
                      help="Perform dynamic frequency and phase correction using the RATS\n\t\tmethod.")
 
-parser <- add_option(parser, c("--dfp_corr_ref_subset"), action = "store", type = "character",
-                     help="Specify a subset of dynamics to use as reference scans for\n\t\tdynamic frequency and phase correction. For example, 1:16 would\n\t\tuse the mean of the first 16 dynamic scans as a reference\n\t\tspectrum.")
-                     
 parser <- add_option(parser, c("--output-ratio"), action = "store", type = "character",
                      help="String to specify a metabolite ratio to output. Defaults to\n\t\t\"tCr\". Multiple metabolites may be specified for multiple\n\t\toutputs. Set to NA to omit.")
 
@@ -111,17 +103,14 @@ parser <- add_option(parser, c("--decimate"), action = "store", default = FALSE,
 parser <- add_option(parser, c("--trunc_fid_pts"), action = "store", type = "integer",
                      help="Number of points to truncate the input data by in the\n\t\ttime-domain. E.g. setting to 1024 will ensure data with more\n\t\ttime-domain points will be truncated to a length of 1024.\n\t\tDefaults to NULL, where truncation is not performed.")
 
-parser <- add_option(parser, c("-f", "--fit_method"), action = "store", type = "character",
-                     help="Fitting method, can be 'ABFIT-REG' or 'LCMODEL'. Defaults to\n\t\t'ABFIT-REG'.")
+parser <- add_option(parser, c("--fit_opts_edited"), action = "store", type = "character",
+                     help="Options to pass to the fitting method for the edited spectrum.")
 
-parser <- add_option(parser, c("--fit_opts"), action = "store", type = "character",
-                     help="Options to pass to the fitting method.")
+parser <- add_option(parser, c("--fit_opts_ed_off"), action = "store", type = "character",
+                     help="Options to pass to the fitting method for the edit-off spectrum.")
 
 parser <- add_option(parser, c("--fit_subset"), action = "store", type = "character",
                      help="Specify a subset of dynamics to analyse, for example 1:16 would\n\t\tonly fit the first 16 dynamic scans.")
-
-parser <- add_option(parser, c("--w_ref_subset"), action = "store", type = "character",
-                     help="specify a subset of dynamics to use as water reference following\n\t\trats alignment and averaging. For example c(1, 2) would only use\n\t\tthe average of the first two dynamic water reference scans.\n\t\tDefault value of NULL uses all available water reference scans.")
 
 parser <- add_option(parser, c("--legacy_ws"), action = "store", default = FALSE,
                      help="Perform and output legacy water scaling compatible with default\n\t\tLCModel and TARQUIN behaviour. See w_att and w_conc arguments\n\t\tto change the default assumptions. Default value is FALSE.")
@@ -146,15 +135,6 @@ parser <- add_option(parser, c("--dyn_av_scheme"), action = "store", type = "cha
 
 parser <- add_option(parser, c("--dyn_av_scheme_file"), action = "store", type = "character",
                        help="A file path containing a single column of sequential integers\n\t\t(starting at 1) with the same length as the number of dynamic\n\t\tscans in the metabolite data. File may be formatted as .xlsx,\n\t\t.xls, text or csv format.")
-                       
-parser <- add_option(parser, c("--dyn_basis_lb"), action = "store", type = "character",
-                     help="Dynamic basis line-broadening to apply in Hz.")
-
-parser <- add_option(parser, c("--dyn_basis_lg"), action = "store", type = "character",
-                     help="Dynamic basis Lorentz-Gauss lineshape factor between 0 and 1.\n\t\tDefaults to 0, pure Lorentzian.")
-
-parser <- add_option(parser, c("--lcm_bin_path"), action = "store", type = "character",
-                     help="Set the path to LCModel binary.")
 
 parser <- add_option(parser, c("--plot_ppm_xlim"), action = "store", type = "character",
                      help="Plotting ppm axis limits in the html results.")
@@ -164,13 +144,10 @@ parser <- add_option(parser, c("--extra_output"), action = "store", default = FA
 
 parser <- add_option(parser, c("-v", "--verbose"), action = "store", default = FALSE,
                      help="Output potentially useful information.")
-                     
-parser <- add_option(parser, c("--write_preproc_metab_path"), action = "store", type = "character",
-                     help="Path to write the preprocessed metabolite data in NIfTI format.")
-                     
+
 parser <- add_option(parser, c("--overwrite"), action = "store", default = FALSE,
                      help="Overwrite existing fitting result files, defaults to FALSE.")
-                     
+
 opt <- parse_args(parser)
 
 if (is.null(opt[["input"]])) {
@@ -200,27 +177,7 @@ if (!is.null(opt[["plot_ppm_xlim"]])) {
   opt[["plot_ppm_xlim"]] <- eval(parse(text = opt[["plot_ppm_xlim"]]))
 }
 
-# convert pre_align_ref_freq to numeric vector
-if (!is.null(opt[["pre_align_ref_freq"]])) {
-  opt[["pre_align_ref_freq"]] <- eval(parse(text = opt[["pre_align_ref_freq"]]))
-}
-
-# convert pre_align_ref_amp to numeric vector
-if (!is.null(opt[["pre_align_ref_amp"]])) {
-  opt[["pre_align_ref_amp"]] <- eval(parse(text = opt[["pre_align_ref_amp"]]))
-}
-
-# convert dyn_basis_lb to numeric vector
-if (!is.null(opt[["dyn_basis_lb"]])) {
-  opt[["dyn_basis_lb"]] <- eval(parse(text = opt[["dyn_basis_lb"]]))
-}
-
-# convert dyn_basis_lg to numeric vector
-if (!is.null(opt[["dyn_basis_lg"]])) {
-  opt[["dyn_basis_lg"]] <- eval(parse(text = opt[["dyn_basis_lg"]]))
-}
-
-fit_res <- fit_svs(input = opt[["input"]],
+fit_res <- fit_svs_edited(input = opt[["input"]],
                    w_ref = opt[["w_ref"]],
                    output_dir = opt[["output_dir"]],
                    mri = opt[["mri"]],
@@ -229,9 +186,12 @@ fit_res <- fit_svs(input = opt[["input"]],
                    segment_t1 = opt[["segment_t1"]],
                    segment_t1_method = opt[["segment_t1_method"]],
                    external_basis = opt[["external_basis"]],
-                   append_external_basis = opt[["append_external_basis"]],
                    p_vols = opt[["p_vols"]],
                    format = opt[["format"]],
+                   editing_type = opt[["editing_type"]],
+                   editing_scheme = opt[["editing_scheme"]],
+                   invert_edit_on = opt[["invert_edit_on"]],
+                   invert_edit_off = opt[["invert_edit_off"]],
                    pul_seq = opt[["pul_seq"]],
                    TE = opt[["TE"]],
                    TR = opt[["TR"]],
@@ -239,24 +199,18 @@ fit_res <- fit_svs(input = opt[["input"]],
                    TE2 = opt[["TE2"]],
                    TE3 = opt[["TE3"]],
                    TM = opt[["TM"]],
-                   append_basis = opt[["append_basis"]],
-                   remove_basis = opt[["remove_basis"]],
-                   remove_external_basis = opt[["remove_external_basis"]],
+                   append_basis_ed_off = opt[["append_basis_ed_off"]],
+                   remove_basis_ed_off = opt[["remove_basis_ed_off"]],
                    pre_align = opt[["pre_align"]],
-                   pre_align_max_shift = opt[["pre_align_max_shift"]],
-                   pre_align_ref_freq = opt[["pre_align_ref_freq"]],
-                   pre_align_ref_amp = opt[["pre_align_ref_amp"]],
                    dfp_corr = opt[["dfp_corr"]],
-                   dfp_corr_ref_subset = opt[["dfp_corr_ref_subset"]],
                    output_ratio = opt[["output_ratio"]],
                    ecc = opt[["ecc"]],
                    hsvd_width = opt[["hsvd_width"]],
                    decimate = opt[["decimate"]],
                    trunc_fid_pts = opt[["trunc_fid_pts"]],
-                   fit_method = opt[["fit_method"]],
-                   fit_opts = opt[["fit_opts"]],
+                   fit_opts_edited = opt[["fit_opts_edited"]],
+                   fit_opts_ed_off = opt[["fit_opts_ed_off"]],
                    fit_subset = opt[["fit_subset"]],
-                   w_ref_subset = opt[["w_ref_subset"]],
                    legacy_ws = opt[["legacy_ws"]],
                    w_att = opt[["w_att"]],
                    w_conc = opt[["w_conc"]],
@@ -265,11 +219,7 @@ fit_res <- fit_svs(input = opt[["input"]],
                    dyn_av_block_size = opt[["dyn_av_block_size"]],
                    dyn_av_scheme = opt[["dyn_av_scheme"]],
                    dyn_av_scheme_file = opt[["dyn_av_scheme_file"]],
-                   dyn_basis_lb = opt[["dyn_basis_lb"]],
-                   dyn_basis_lg = opt[["dyn_basis_lg"]],
-                   lcm_bin_path = opt[["lcm_bin_path"]],
                    plot_ppm_xlim = opt[["plot_ppm_xlim"]],
                    extra_output = opt[["extra_output"]],
                    verbose = opt[["verbose"]],
-                   write_preproc_metab_path = opt[["write_preproc_metab_path"]],
                    overwrite = opt[["overwrite"]])

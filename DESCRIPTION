@@ -1,8 +1,8 @@
 Package: spant
 Type: Package
 Title: MR Spectroscopy Analysis Tools
-Version: 4.4.0
-Date: 2026-08-24
+Version: 4.5.0
+Date: 2026-10-02
 Authors@R: c(
     person("Martin", "Wilson", email = "martin.wilson111@gmail.com",
            role = c("cre", "aut"), comment = c(ORCID = "0000-0002-2089-3956")),
@@ -12,7 +12,7 @@ Description: Tools for reading, visualising and processing Magnetic Resonance
     Spectroscopy data. The package includes methods for spectral fitting: Wilson
     (2021) <DOI:10.1002/mrm.28385>, Wilson (2025) <DOI:10.1002/mrm.30462> and
     spectral alignment: Wilson (2018) <DOI:10.1002/mrm.27605>. 
-BugReports: https://github.com/martin3141/spant/issues/
+BugReports: https://github.com/martin3141/spant/issues
 License: GPL-3
 NeedsCompilation: yes
 Depends: R (>= 4.1.0)
@@ -27,13 +27,13 @@ Encoding: UTF-8
 Language: en-GB
 URL: https://spantdoc.wilsonlab.co.uk/,
         https://martin3141.github.io/spant/,
-        https://github.com/martin3141/spant/
+        https://github.com/martin3141/spant
 Config/roxygen2/version: 8.0.0
-Packaged: 2026-08-24 13:58:15 UTC; martin
+Packaged: 2026-10-02 12:28:56 UTC; martin
 Author: Martin Wilson [cre, aut] (ORCID:
     <https://orcid.org/0000-0002-2089-3956>),
   Yong Wang [ctb],
   John Muschelli [ctb]
 Maintainer: Martin Wilson <martin.wilson111@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-08-24 16:20:02 UTC
+Date/Publication: 2026-10-02 13:00:02 UTC

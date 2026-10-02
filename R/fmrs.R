@@ -28,6 +28,8 @@ gen_trap_reg <- function(onset, duration, trial_type = NULL, mrs_data = NULL,
   res <- check_dyn_input(mrs_data, tr, Ndyns, Ntrans)  
   
   if (is.null(trial_type)) trial_type <- rep("stim", length(onset))
+
+  if ("time" %in% trial_type) stop("trial_type cannot be \"time\"")
   
   # check everything is the right length 
   input_lengths <- c(length(onset), length(duration), length(trial_type))
@@ -113,7 +115,7 @@ gen_trap_reg <- function(onset, duration, trial_type = NULL, mrs_data = NULL,
     
     if (normalise) stim_acq <- stim_acq / max(stim_acq)
    
-    # correct for missmatch between n_trans and n_dyns due to temporal averaging 
+    # correct for mismatch between n_trans and n_dyns due to temporal averaging 
     if (n_trans != n_dyns) {
       if (n_trans%%n_dyns != 0) stop("Dynamics and transients do not match")
       
@@ -164,6 +166,8 @@ gen_bold_reg <- function(onset, duration = NULL, trial_type = NULL,
   duration[duration < min_dur] <- min_dur
   
   if (is.null(trial_type)) trial_type <- rep("stim_bold", length(onset))
+
+  if ("time" %in% trial_type) stop("trial_type cannot be \"time\"")
   
   # check everything is the right length 
   input_lengths <- c(length(onset), length(duration), length(trial_type))
@@ -274,6 +278,8 @@ gen_conv_reg <- function(onset, duration = NULL, trial_type = NULL,
   duration[duration < min_dur] <- min_dur
   
   if (is.null(trial_type)) trial_type <- rep("stim_conv", length(onset))
+
+  if ("time" %in% trial_type) stop("trial_type cannot be \"time\"")
   
   # check everything is the right length 
   input_lengths <- c(length(onset), length(duration), length(trial_type))
@@ -370,6 +376,8 @@ gen_impulse_reg <- function(onset, trial_type = NULL, mrs_data = NULL,
   time <- dyn_acq_times(mrs_data, tr, Ndyns, Ntrans)
   
   if (is.null(trial_type)) trial_type <- rep("stim_imp", length(onset))
+
+  if ("time" %in% trial_type) stop("trial_type cannot be \"time\"")
   
   trial_types  <- unique(trial_type)
   trial_type_n <- length(trial_types)
@@ -424,10 +432,17 @@ gen_baseline_reg <- function(mrs_data = NULL, tr = NULL, Ndyns = NULL,
 #' @param Ndyns number of dynamic scans stored, potentially less than Ntrans
 #' if block averaging has been performed.
 #' @param Ntrans number of dynamic scans acquired.
-#' @return a single baseline regressor with value of 1.
+#' @return a data frame with a time column and a single regressor column
+#' named according to the name argument.
 #' @export
 gen_numeric_reg <- function(in_vec, name, mrs_data = NULL, tr = NULL,
                             Ndyns = NULL, Ntrans = NULL) {
+  
+  if (missing(name) || !is.character(name) || length(name) != 1) {
+    stop("name must be a single character string")
+  }
+  
+  if (name == "time") stop("name cannot be \"time\"")
     
   time <- dyn_acq_times(mrs_data, tr, Ndyns, Ntrans)
   
@@ -559,7 +574,7 @@ glm_spec <- function(mrs_data, regressor_df, full_output = FALSE) {
   beta_weight    <-  cbind(ppm = ppm_sc, beta_weight)
   
   R <- 60 # ~ spectral width / FWHM
-  C <- ((4 * log(2)) ^ (1 / 2)) / 2 * pi
+  C <- ((4 * log(2)) ^ (1 / 2)) / (2 * pi)
   p_value_rf     <- R * C * exp((-t_value ^ 2) / 2)
   p_value_rf_log <- -log10(p_value_rf)
   p_value_rf_log[p_value_rf_log > 300] <- 300
@@ -1847,7 +1862,7 @@ preproc_svs_dataset <- function(paths, labels = NULL,
 #' @param labels labels to describe each data set.
 #' @param xlim spectral range to include in the analysis.
 #' @param vline vertical lines to add to the plot.
-#' @param lb linebroading to add in Hz before GLM analysis.
+#' @param lb linebroadening to add in Hz before GLM analysis.
 #' @param return_results function will return key outputs, defaults to FALSE.
 #' @export
 glm_spec_fmrs_fl <- function(regressor_df, analysis_dir = "spant_analysis",

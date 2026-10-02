@@ -42,10 +42,10 @@
 #' the basis. For example: use "^lac$|^ala$" to remove lactate and alanine; "*" to
 #' remove all signals and "^mm|^lip" to remove all macromolecular and lipid
 #' signals. This operation is performed before signals are added with
-#' append_basis. Cannot be used with precompiled/exernal basis sets.
+#' append_basis. Cannot be used with precompiled/external basis sets.
 #' @param remove_external_basis grep expression to match names of signals to
 #' remove from the external basis. For example: use "^Lac$|^Ala$" to remove
-#' lactateand alanine and "^MM|^Lip" to remove all macromolecular and lipid
+#' lactate and alanine and "^MM|^Lip" to remove all macromolecular and lipid
 #' signals.
 #' @param pre_align perform simple frequency alignment to known reference peaks.
 #' @param pre_align_max_shift maximum allowable shift in Hz. Defaults to 40 Hz.
@@ -155,7 +155,7 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   if (identical(class(input), "character") & (length(input) > 1)) {
     if (!is.null(output_dir)) {
       if (length(input) != length(output_dir)) {
-        stop("Missmatch between input length and output_dir length.")
+        stop("Mismatch between input length and output_dir length.")
       }
     } else {
       output_dir <- vector(mode = "list", length = length(input))
@@ -163,7 +163,7 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     
     if (!is.null(w_ref)) {
       if (length(input) != length(w_ref)) {
-        stop("Missmatch between input length and w_ref length.")
+        stop("Mismatch between input length and w_ref length.")
       }
     } else {
       w_ref <- vector(mode = "list", length = length(input))
@@ -171,7 +171,7 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     
     if (!is.null(mri)) {
       if (length(input) != length(mri)) {
-        stop("Missmatch between input length and mri length.")
+        stop("Mismatch between input length and mri length.")
       }
     } else {
       mri <- vector(mode = "list", length = length(input))
@@ -179,7 +179,7 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
     
     if (!is.null(mri_seg)) {
       if (length(input) != length(mri_seg)) {
-        stop("Missmatch between input length and mri_seg length.")
+        stop("Mismatch between input length and mri_seg length.")
       }
     } else {
       mri_seg <- vector(mode = "list", length = length(input))
@@ -393,8 +393,8 @@ fit_svs <- function(input, w_ref = NULL, output_dir = NULL, mri = NULL,
   
   # check we have what's needed for standard water concentration scaling
   if (w_ref_available) {
-    if (is.null(TR)) stop("Please provide seqeuence TR argument for water concentration scaling.")
-    if (is.null(TE)) stop("Please provide seqeuence TE argument for water concentration scaling.")
+    if (is.null(TR)) stop("Please provide sequence TR argument for water concentration scaling.")
+    if (is.null(TE)) stop("Please provide sequence TE argument for water concentration scaling.")
   }
   
   # combine coils if needed
@@ -1171,134 +1171,178 @@ fit_svs_btrg_v1 <- function(append_basis = c("peth", "cit", "gly"),
     
 }
 
-#' GUI interface for the standard SVS 1H brain analysis pipeline, this is a 
+#' GUI interface for the standard SVS 1H brain analysis pipeline, this is a
 #' work in progress, and not ready for serious use.
-fit_svs_gui <-function() {
-  
-  run_fit <- function() {
-    pb <- tcltk::tkProgressBar("running analysis...")
-    tcltk::setTkProgressBar(pb, 0)
-    
-    print(tcltk::tkget(wsup_path))
-    
-    fname <- system.file("extdata", "philips_spar_sdat_WS.SDAT",
-                         package = "spant")
-    svs <- read_mrs(fname)
-    basis <- sim_basis_1h_brain_press(svs)
-    fit_result <- fit_mrs(svs, basis)
-    tcltk::setTkProgressBar(pb, 100)
-    close(pb)
-    response <- tcltk::tk_messageBox("yesno", "Analysis completed, run another?")
-    if (response == "no") tcltk::tkdestroy(tt) 
+#' @export
+fit_svs_gui <- function() {
+
+  browser_opt <- getOption("browser")
+  resolved_browser <- if (is.null(browser_opt) || !nzchar(browser_opt)) {
+    "xdg-open"
+  } else {
+    browser_opt
   }
-  
-  wsup_file_chooser <- function() {
-    wsup_path_str <- tcltk::tk_choose.files()
-    
-    if (!identical(wsup_path_str, character())) {
-      tcltk::tkconfigure(wsup_path, textvariable = tcltk::tclVar(wsup_path_str))
-      
-      # change output dir if not set
-      if (identical(as.character(tcltk::tkget(output_path)), character())) {
-        tcltk::tkconfigure(output_path,
-                           textvariable = tcltk::tclVar(dirname(wsup_path_str)))
+
+  ui <- miniUI::miniPage(
+    miniUI::gadgetTitleBar("spant: SVS analysis"),
+    miniUI::miniContentPanel(
+      shiny::tags$style(shiny::HTML("
+        .spant-field { margin-bottom: 20px; }
+        .spant-field label { font-weight: 600; }
+      ")),
+      scrollable = TRUE,
+
+      shiny::div(class = "spant-field",
+        shinyFiles::shinyFilesButton("wsup_btn", "Water-suppressed file",
+                                      "Select data file", multiple = FALSE),
+        shiny::verbatimTextOutput("wsup_path", placeholder = TRUE)
+      ),
+      shiny::div(class = "spant-field",
+        shinyFiles::shinyFilesButton("wref_btn", "Water reference file",
+                                      "Select w_ref file (optional)",
+                                      multiple = FALSE),
+        shiny::verbatimTextOutput("wref_path", placeholder = TRUE)
+      ),
+      shiny::div(class = "spant-field",
+        shinyFiles::shinyDirButton(
+          "out_btn", "Browse / create output folder...",
+          "Select or create an output directory (use 'New folder' inside the dialog)"
+        ),
+        shiny::tags$div(style = "margin-top: 6px; color: #666;",
+                         "Or type/paste a path directly:"),
+        shiny::textInput("out_path_txt", NULL, value = "",
+                          placeholder = "/path/to/output (created if it doesn't exist)",
+                          width = "100%")
+      ),
+
+      shiny::div(class = "spant-field",
+        shiny::selectInput("pul_seq", "Pulse sequence",
+                            c("auto" = "", "press", "steam", "slaser"))
+      ),
+
+      shiny::div(class = "spant-field",
+        shiny::checkboxInput("return_fit", "Preview fit after running", TRUE),
+        shiny::actionButton("run", "Run fit_svs", icon = shiny::icon("play"),
+                             class = "btn-primary")
+      ),
+
+      shiny::plotOutput("fit_plot", height = "350px")
+    )
+  )
+
+  server <- function(input, output, session) {
+    wd <- getwd()
+    wd_root <- wd
+    names(wd_root) <- wd
+    volumes <- c(wd_root, Home = path.expand("~"), shinyFiles::getVolumes()())
+
+    # express a target directory as {root, path} using the *broadest*
+    # available root that contains it (e.g. the filesystem root "/" on
+    # Linux/macOS, or a drive root on Windows) rather than the narrowest
+    # (e.g. the launch directory itself). Anchoring at the broadest root
+    # means the picker still opens at the target directory, but the "up"
+    # navigation button isn't capped there -- shinyFiles refuses to
+    # navigate above whichever root it's given.
+    rel_within_root <- function(dir, root) {
+      if (identical(dir, root)) return("")
+      prefix <- if (identical(root, "/")) "/" else paste0(root, "/")
+      if (startsWith(dir, prefix)) return(substring(dir, nchar(prefix) + 1))
+      NULL
+    }
+
+    broadest_root_for <- function(dir) {
+      best_root <- NULL
+      best_path <- ""
+      for (nm in names(volumes)) {
+        rel <- rel_within_root(dir, volumes[[nm]])
+        if (!is.null(rel) &&
+            (is.null(best_root) ||
+             nchar(volumes[[nm]]) < nchar(volumes[[best_root]]))) {
+          best_root <- nm
+          best_path <- rel
+        }
       }
+      list(root = best_root, path = best_path)
     }
-  }
-  
-  wsup_dir_chooser <- function() {
-    wsup_path_str <- tcltk::tk_choose.dir()
-    
-    if (!identical(wsup_path_str, character())) {
-      tcltk::tkconfigure(wsup_path, textvariable = tcltk::tclVar(wsup_path_str))
-      
-      # change output dir if not set
-      if (identical(as.character(tcltk::tkget(output_path)), character())) {
-        tcltk::tkconfigure(output_path,
-                           textvariable = tcltk::tclVar(wsup_path_str))
+
+    wd_default <- broadest_root_for(wd)
+    shinyFiles::shinyFileChoose(input, "wsup_btn", roots = volumes, session = session,
+                                 defaultRoot = wd_default$root,
+                                 defaultPath = wd_default$path)
+    shinyFiles::shinyDirChoose(input, "out_btn", roots = volumes, session = session,
+                                allowDirCreate = TRUE)
+
+    wsup_path <- shiny::reactive(shinyFiles::parseFilePaths(volumes, input$wsup_btn)$datapath)
+    out_path  <- shiny::reactive(trimws(input$out_path_txt))
+
+    output$wsup_path <- shiny::renderText(if (length(wsup_path())) wsup_path() else "")
+
+    # once a water-suppressed file is picked, open the water reference
+    # chooser in the same directory by default. Registered only once, the
+    # first time the button is clicked, so the defaults below are based on
+    # whatever water-suppressed file (if any) has been picked by then;
+    # re-registering on every wsup_path() change would stack duplicate
+    # observers on the same input and race each other.
+    shiny::observeEvent(input$wref_btn, {
+      target <- if (length(wsup_path()) > 0) dirname(wsup_path()) else wd
+      default <- broadest_root_for(target)
+
+      shinyFiles::shinyFileChoose(
+        input, "wref_btn", session = session, roots = volumes,
+        defaultRoot = default$root, defaultPath = default$path
+      )
+    }, once = TRUE, ignoreInit = TRUE)
+
+    wref_path <- shiny::reactive(shinyFiles::parseFilePaths(volumes, input$wref_btn)$datapath)
+    output$wref_path <- shiny::renderText(if (length(wref_path())) wref_path() else "")
+
+    shiny::observeEvent(input$out_btn, {
+      dir_sel <- shinyFiles::parseDirPath(volumes, input$out_btn)
+      if (length(dir_sel)) {
+        shiny::updateTextInput(session, "out_path_txt", value = dir_sel)
       }
-    }
+    })
+
+    shiny::observeEvent(input$run, {
+      shiny::req(length(wsup_path()) > 0, nzchar(out_path()))
+
+      fit_res <- NULL
+
+      shiny::withProgress(message = "Running fit_svs...", value = 0.3, {
+        fit_res <- tryCatch({
+          fit_svs(
+            input        = wsup_path(),
+            w_ref        = if (length(wref_path())) wref_path() else NULL,
+            output_dir   = out_path(),
+            pul_seq      = if (nzchar(input$pul_seq)) input$pul_seq else NULL,
+            return_fit   = input$return_fit,
+            overwrite    = TRUE
+          )
+        }, error = function(e) {
+          shiny::showNotification(paste("Fit failed:", conditionMessage(e)),
+                                   type = "error", duration = NULL)
+          NULL
+        })
+        shiny::incProgress(0.7)
+      })
+
+      report <- file.path(out_path(), "report.html")
+      if (file.exists(report)) utils::browseURL(report, browser = resolved_browser)
+
+      if (!is.null(fit_res) && input$return_fit) {
+        output$fit_plot <- shiny::renderPlot(plot(fit_res))
+      }
+    })
+
+    shiny::observeEvent(input$done, shiny::stopApp())
   }
-  
-  wref_file_chooser <- function() {
-    wref_path_str <- tcltk::tk_choose.files()
-    
-    if (!identical(wref_path_str, character())) {
-      tcltk::tkconfigure(wref_path, textvariable = tcltk::tclVar(wref_path_str))
-    }
+
+  viewer <- if (!is.null(getOption("viewer"))) {
+    shiny::dialogViewer("spant: fit_svs", width = 900, height = 700)
+  } else {
+    shiny::browserViewer(resolved_browser)
   }
-  
-  wref_dir_chooser <- function() {
-    wref_path_str <- tcltk::tk_choose.dir()
-    
-    if (!identical(wref_path_str, character())) {
-      tcltk::tkconfigure(wref_path, textvariable = tcltk::tclVar(wref_path_str))
-    }
-  }
-  
-  output_dir_chooser <- function() {
-    output_path_str <- tcltk::tk_choose.dir()
-    
-    if (!identical(output_path_str, character())) {
-      tcltk::tkconfigure(output_path,
-                         textvariable = tcltk::tclVar(output_path_str))
-    }
-  }
-  
-  clear <- function() {
-    tcltk::tkconfigure(wsup_path,   textvariable = tcltk::tclVar(""))
-    tcltk::tkconfigure(wref_path,   textvariable = tcltk::tclVar(""))
-    tcltk::tkconfigure(output_path, textvariable = tcltk::tclVar(""))
-  }
-  
-  tt <- tcltk::tktoplevel()
-  tcltk::tktitle(tt) <- "spant GUI"
-  
-  heading <- tcltk::tklabel(tt, text = "spant SVS MRS analysis")
- 
-  wsup_lab          <- tcltk::tklabel(tt, text = "Water supressed data")
-  wsup_file_button  <- tcltk::tkbutton(tt, text = "choose file",
-                                       command = wsup_file_chooser)
-  
-  wsup_dir_button   <- tcltk::tkbutton(tt, text = "choose dir",
-                                       command = wsup_dir_chooser)
-  
-  wsup_path         <- tcltk::tkentry(tt, width = 60)
-  
-  wref_lab          <- tcltk::tklabel(tt, text = "Water reference data")
-  wref_file_button  <- tcltk::tkbutton(tt, text = "choose file",
-                                       command = wref_file_chooser)
-  
-  wref_dir_button   <- tcltk::tkbutton(tt, text = "choose dir",
-                                       command = wref_dir_chooser)
-  
-  wref_path         <- tcltk::tkentry(tt, width = 60)
-  
-  output_lab        <- tcltk::tklabel(tt, text = "Output directory")
-  output_path       <- tcltk::tkentry(tt, width = 60)
-  
-  output_dir_button <- tcltk::tkbutton(tt, text = "choose dir",
-                                       command = output_dir_chooser)
-  
-  run_button <- tcltk::tkbutton(tt, text = "run analysis", width = 20,
-                                height = 2, command = run_fit)
-  
-  exit_button <- tcltk::tkbutton(tt, text = "exit",
-                                 command = function() tcltk::tkdestroy(tt))
-  
-  clear_button <- tcltk::tkbutton(tt, text = "clear paths", command = clear)
-  
-  dummy_lab    <- tcltk::tklabel(tt, text = "")
-  
-  tcltk::tkgrid(heading, columnspan = 4, pady = 10)
-  tcltk::tkgrid(wsup_lab, wsup_path, wsup_file_button, wsup_dir_button)
-  tcltk::tkgrid(wref_lab, wref_path, wref_file_button, wref_dir_button)
-  tcltk::tkgrid(output_lab, output_path, dummy_lab, output_dir_button)
-  tcltk::tkgrid(run_button, columnspan = 3, pady = 10)
-  tcltk::tkgrid(clear_button, exit_button, columnspan = 3, pady = 20)
-  
-  tcltk::tkgrid.configure(wsup_lab, wref_lab, output_lab, sticky = "e")
-  tcltk::tkgrid.configure(clear_button, exit_button, sticky = "e")
-  
+
+  shiny::runGadget(ui, server, viewer = viewer)
 }
 
